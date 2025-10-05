@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VR Post‑Test Launcher</title>
+  <meta name="description" content="Landing page for VR post-test on GitHub Pages" />
+  <style>
+    body { background:#fafafa; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    .wrap { max-width:760px; margin:10vh auto; background:#fff; border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.06); padding:24px; }
+    h1 { margin-top:0; font-size:24px; }
+    code { background:#f2f2f2; padding:2px 6px; border-radius:6px; }
+    ul { margin-top:12px; }
+    a.btn { display:inline-block; padding:10px 14px; margin:6px 8px 0 0; border:1px solid #ddd; border-radius:10px; text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>VR Post‑Test</h1>
+    <p>Launch the experiment directly, or share the <code>post.html</code> link with the appropriate parameters.</p>
+
+    <h3>Quick links</h3>
+    <p>
+      <a class="btn" href="./post.html?pid=S01&imgver=1&audver=1">Immediate (set 1)</a>
+      <a class="btn" href="./post.html?pid=S01&imgver=2&audver=2&delayed=1">Delayed (set 2)</a>
+    </p>
+
+    <h3>Direct URL pattern</h3>
+    <p><code>.../post.html?pid=S01&imgver=1&audver=1</code></p>
+    <ul>
+      <li>Use <code>imgver</code> for image version (1,2,3…)</li>
+      <li>Use <code>audver</code> for audio version (1,2,3…)</li>
+      <li>If your images are JPEGs, add <code>&imgext=jpg</code></li>
+    </ul>
+
+    <p><small>If this page appears instead of the experiment, ensure <code>post.html</code> and <code>posttest.js</code> are in the repo root and that GitHub Pages is set to deploy from the <b>main</b> branch (root).</small></p>
+  </div>
+</body>
+</html>
