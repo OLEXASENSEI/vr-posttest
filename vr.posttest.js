@@ -296,3 +296,5 @@ jsPsych.data.addProperties({
 });
 
 jsPsych.run(timeline);
+
+>>>>>>> 73b111e3f8e104138df942cd32089f31820d5300
