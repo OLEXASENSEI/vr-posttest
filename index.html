@@ -6,34 +6,114 @@
   <title>VR Post‑Test Launcher</title>
   <meta name="description" content="Landing page for VR post-test on GitHub Pages" />
   <style>
-    body { background:#fafafa; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-    .wrap { max-width:760px; margin:10vh auto; background:#fff; border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.06); padding:24px; }
-    h1 { margin-top:0; font-size:24px; }
+    :root { --bg:#fafafa; --card:#fff; --line:#e5e5e5; --muted:#666; }
+    body { background:var(--bg); font: 16px/1.55 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    .wrap { max-width:760px; margin:8vh auto; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.06); padding:24px; }
+    h1 { margin: 0 0 6px; font-size:24px; }
     code { background:#f2f2f2; padding:2px 6px; border-radius:6px; }
-    ul { margin-top:12px; }
-    a.btn { display:inline-block; padding:10px 14px; margin:6px 8px 0 0; border:1px solid #ddd; border-radius:10px; text-decoration:none; }
+    .row { display:flex; flex-wrap:wrap; gap:10px; }
+    label { display:block; font-size:14px; color:#222; margin:6px 0 2px; }
+    input[type=text], input[type=number], select { width: 180px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; }
+    .btn { display:inline-block; padding:10px 14px; margin:8px 8px 0 0; border:1px solid var(--line); border-radius:10px; text-decoration:none; background:#fff; }
+    .hint { color:var(--muted); font-size:13px; }
+    details { margin-top:10px; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>VR Post‑Test</h1>
-    <p>Launch the experiment directly, or share the <code>post.html</code> link with the appropriate parameters.</p>
+    <p class="hint">Launch the experiment with your preferred parameters. Defaults match your setup: <code>PNG</code> images like <code>pan_01.png</code> and <code>MP3</code> audio like <code>crack_1.mp3</code>.</p>
 
-    <h3>Quick links</h3>
-    <p>
-      <a class="btn" href="./post.html?pid=S01&imgver=1&audver=1">Immediate (set 1)</a>
-      <a class="btn" href="./post.html?pid=S01&imgver=2&audver=2&delayed=1">Delayed (set 2)</a>
-    </p>
+    <form id="launch">
+      <div class="row">
+        <div>
+          <label for="pid">Participant ID</label>
+          <input id="pid" name="pid" type="text" value="S01" required>
+        </div>
+        <div>
+          <label for="imgver">Image version</label>
+          <input id="imgver" name="imgver" type="number" min="1" step="1" value="1">
+        </div>
+        <div>
+          <label for="audver">Audio version</label>
+          <input id="audver" name="audver" type="number" min="1" step="1" value="1">
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:8px">
+          <label>&nbsp;</label>
+          <label style="display:flex;align-items:center;gap:6px"><input id="delayed" type="checkbox"> Delayed (short)</label>
+        </div>
+      </div>
 
-    <h3>Direct URL pattern</h3>
-    <p><code>.../post.html?pid=S01&imgver=1&audver=1</code></p>
-    <ul>
-      <li>Use <code>imgver</code> for image version (1,2,3…)</li>
-      <li>Use <code>audver</code> for audio version (1,2,3…)</li>
-      <li>If your images are JPEGs, add <code>&imgext=jpg</code></li>
-    </ul>
+      <details>
+        <summary>Advanced options</summary>
+        <div class="row" style="margin-top:6px">
+          <div>
+            <label for="imgext">Image extension</label>
+            <select id="imgext">
+              <option value="png" selected>png</option>
+              <option value="jpg">jpg</option>
+              <option value="jpeg">jpeg</option>
+            </select>
+          </div>
+          <div>
+            <label for="audioext">Audio extension</label>
+            <select id="audioext">
+              <option value="mp3" selected>mp3</option>
+              <option value="wav">wav</option>
+              <option value="ogg">ogg</option>
+            </select>
+          </div>
+          <div>
+            <label for="pad2img">Zero‑pad images (01)</label>
+            <select id="pad2img">
+              <option value="1" selected>Yes</option>
+              <option value="0">No</option>
+            </select>
+          </div>
+          <div>
+            <label for="pad2audio">Zero‑pad audio (01)</label>
+            <select id="pad2audio">
+              <option value="0" selected>No</option>
+              <option value="1">Yes</option>
+            </select>
+          </div>
+        </div>
+      </details>
 
-    <p><small>If this page appears instead of the experiment, ensure <code>post.html</code> and <code>posttest.js</code> are in the repo root and that GitHub Pages is set to deploy from the <b>main</b> branch (root).</small></p>
+      <p>
+        <button class="btn" type="submit">Launch</button>
+        <a class="btn" href="./post.html?pid=S01&imgver=1&audver=1">Quick: Immediate (1/1)</a>
+        <a class="btn" href="./post.html?pid=S01&imgver=2&audver=2&delayed=1">Quick: Delayed (2/2)</a>
+      </p>
+    </form>
+
+    <p class="hint">Direct URL pattern: <code>./post.html?pid=S01&imgver=1&audver=1</code></p>
   </div>
+
+  <script>
+    document.getElementById('launch').addEventListener('submit', function(ev){
+      ev.preventDefault();
+      const pid = document.getElementById('pid').value.trim() || `P_${Date.now()}`;
+      const imgver = document.getElementById('imgver').value || '1';
+      const audver = document.getElementById('audver').value || '1';
+      const delayed = document.getElementById('delayed').checked;
+      const imgext = document.getElementById('imgext').value;
+      const audioext = document.getElementById('audioext').value;
+      const pad2img = document.getElementById('pad2img').value;
+      const pad2audio = document.getElementById('pad2audio').value;
+
+      const p = new URLSearchParams();
+      p.set('pid', pid);
+      p.set('imgver', imgver);
+      p.set('audver', audver);
+      if (delayed) p.set('delayed', '1');
+      if (imgext !== 'png') p.set('imgext', imgext);
+      if (audioext !== 'mp3') p.set('audioext', audioext);
+      if (pad2img !== '1') p.set('pad2img', pad2img);
+      if (pad2audio !== '0') p.set('pad2audio', pad2audio);
+
+      window.location.href = `./post.html?${p.toString()}`;
+    });
+  </script>
 </body>
 </html>
