@@ -2,144 +2,144 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>VR Post‑Test — One Page</title>
-  <meta name="description" content="Immediate vs Delayed post-test (single page)" />
-  
-  <!-- jsPsych CSS (pinned) -->
-  <link href="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/css/jspsych.css" rel="stylesheet">
-  
-  <!-- jsPsych UMD core + required plugins (pinned, explicit UMD bundles) -->
-  <script src="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/dist/jspsych.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-preload@1.1.3/dist/index.browser.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-html-button-response@1.1.3/dist/index.browser.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-survey-text@1.1.3/dist/index.browser.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-survey-html-form@1.1.3/dist/index.browser.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-audio-button-response@1.1.3/dist/index.browser.js"></script>
-  
-  <style>
-    :root { --bg:#fafafa; --card:#fff; --line:#e5e5e5; --muted:#666; }
-    body { background:var(--bg); font: 16px/1.55 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-    .wrap { max-width:760px; margin:10vh auto; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.06); padding:24px; }
-    h1 { margin: 0 0 6px; font-size:24px; }
-    .hint { color:var(--muted); font-size:13px; }
-    .btn { display:inline-block; padding:12px 16px; margin:8px 8px 0 0; border:1px solid var(--line); border-radius:10px; background:#fff; cursor:pointer; }
-    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    input[type=text] { padding:8px 10px; border:1px solid var(--line); border-radius:8px; width: 160px; }
-  </style>
-</head>
-<body>
-  <!-- Minimal mode picker -->
-  <div class="wrap" id="picker">
-    <h1>VR Post‑Test</h1>
-    <p class="hint">Pick <b>Immediate</b> or <b>Delayed</b>. This page runs the entire study—no other files needed.</p>
-    <div class="row" style="margin:10px 0 16px">
-      <label for="pid">Participant ID:</label>
-      <input id="pid" type="text" value="S01" />
-    </div>
-    <p>
-      <button class="btn" id="btn-immediate">Start: Immediate</button>
-      <button class="btn" id="btn-delayed">Start: Delayed</button>
-    </p>
-    <p class="hint" style="margin-top:10px">(Immediate: 4 tasks · Delayed: shorter, 3 tasks. Details below.)</p>
-  </div>
-
-  <div class="wrap" id="explain" style="margin-top:20px">
-    <h2 style="margin:0 0 8px; font-size:18px">What’s the difference?</h2>
-    <ul style="margin-top:6px">
-      <li><b>Immediate</b> (after training):
-        <ul>
-          <li>4‑choice picture match (word → picture)</li>
-          <li>Productive naming (type the word)</li>
-          <li>Foley → meaning (audio iconicity)</li>
-          <li>Order‑of‑operations (sequence)</li>
-        </ul>
-      </li>
-      <li><b>Delayed</b> (e.g., +7 days):
-        <ul>
-          <li>4‑choice picture match (fewer items)</li>
-          <li>Productive naming (fewer items)</li>
-          <li>Foley → meaning (fewer items)</li>
-          <li><i>No</i> sequence task to keep it short</li>
-        </ul>
-      </li>
-    </ul>
-  </div>
-
-  <noscript><div class="wrap"><p>Please enable JavaScript to run this study.</p></div></noscript>
-
-  <script>
-    // --------- Small helpers ---------
-    const q = (k,f=null) => (new URLSearchParams(location.search)).get(k) ?? f;
-    const pad = (n, p2=true) => p2 ? String(n).padStart(2,'0') : String(n);
-
-    // Defaults (URL can override):
-    const DEFAULTS = {
-      IMG_VER: parseInt(q('imgver')||'1',10), // allows ?imgver=2 override
-      AUD_VER: parseInt(q('audver')||'1',10),
-      IMG_EXT: (q('imgext')||'png').replace('.',''),
-      AUD_EXT: (q('audioext')||'mp3').replace('.',''),
-      PAD_IMG: (q('pad2img')??'1')==='1',
-      PAD_AUD: (q('pad2audio')??'0')==='1',
-    };
-
-    // Stim bases
-    const TARGETS = [
-      { word: 'bowl', base: 'bowl' }, { word: 'egg', base: 'egg' }, { word: 'flour', base: 'flour' }, { word: 'milk', base: 'milk' }, { word: 'sugar', base: 'sugar' },
-      { word: 'whisk', base: 'whisk' }, { word: 'spatula', base: 'spatula' }, { word: 'pan', base: 'pan' }, { word: 'butter', base: 'butter' }, { word: 'pancake', base: 'pancake' }
-    ];
-    const FOLEY = [
-      { label: 'sizzle (cooking on pan)', base: 'sizzle' }, { label: 'whisk (mixing in bowl)', base: 'whisk' }, { label: 'pour (liquid into bowl)', base: 'pour' },
-      { label: 'crack (egg cracking)', base: 'crack' }, { label: 'flip (spatula flip)', base: 'flip' }, { label: 'spread (butter on pan)', base: 'spread' }
-    ];
-    const PROCEDURE_STEPS = ['crack egg','add flour & milk','whisk batter','pour on pan','flip & serve'];
-
-    // Util
-    const shuffle = (A) => A.map(x=>[Math.random(),x]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
-    const sample = (A,n) => shuffle(A).slice(0, Math.min(n, A.length));
-    const imgSrc = (base) => `img/${base}_` + pad(DEFAULTS.IMG_VER, DEFAULTS.PAD_IMG) + `.${DEFAULTS.IMG_EXT}`;
-    const audSrc = (base) => `sounds/${base}_` + pad(DEFAULTS.AUD_VER, DEFAULTS.PAD_AUD) + `.${DEFAULTS.AUD_EXT}`;
-
-    function runExperiment({ delayed=false, pid }){
-      // Hide pickers
-      const pick = document.getElementById('picker'); if (pick) pick.style.display='none';
-      const info = document.getElementById('explain'); if (info) info.style.display='none';
-
-      // Trial counts
-      const COUNTS = delayed ? { afc: 6, naming: 6, foley: 6, procedure: false } : { afc: TARGETS.length, naming: TARGETS.length, foley: FOLEY.length, procedure: true };
-
-      // Build subsets
-      const targetsAFC = sample(TARGETS, COUNTS.afc);
-      const targetsName = sample(TARGETS, COUNTS.naming);
-      const foleyItems = sample(FOLEY, COUNTS.foley);
-
-      // Preload lists
-      const preload = { images: targetsAFC.concat(targetsName).map(t => imgSrc(t.base)), audio: foleyItems.map(f => audSrc(f.base)) };
-
-      // Init jsPsych
-      const jsPsych = initJsPsych({ show_progress_bar: true, on_finish: () => { jsPsych.data.get().localSave('json', `post_${pid}.json`); } });
-      const timeline = [];
-
-      if (typeof jsPsychPreload !== 'undefined') {
-        timeline.push({ type: jsPsychPreload, images: preload.images, audio: preload.audio, message: '<p>Loading…</p>' });
-      }
-
-      // Welcome
-      timeline.push({ type: jsPsychHtmlButtonResponse, stimulus: `<div style=\"max-width:760px;margin:0 auto;text-align:left\"><h2>VR Study — Post‑Test ${delayed ? '(Delayed)' : '(Immediate)'}</h2><p>This short test checks your learning of the cooking vocabulary you practiced. Work quickly but accurately.</p></div>`, choices: ['Begin'] });
-
-      // 4AFC receptive
-      targetsAFC.forEach((t, idx) => {
-        const foils = sample(TARGETS.filter(x => x.word !== t.word), 3);
-        const choices = shuffle([t, ...foils]).map(x => ({ word: x.word, img: imgSrc(x.base) }));
-        const strip = choices.map(c => `<div style=\"display:inline-block;margin:8px\"><img src=\"${c.img}\" alt=\"${c.word}\" style=\"height:140px;border:1px solid #ccc;padding:6px;border-radius:8px\"></div>`).join('');
-        timeline.push({ type: jsPsychHtmlButtonResponse, stimulus: `<div style=\"text-align:center\"><h3>Which picture matches: <em>${t.word}</em>?</h3><div>${strip}</div></div>`, choices: choices.map(c => c.word), data: { task:'4afc', word:t.word, item_index:idx }, on_finish: (d)=>{ d.correct = (d.response === choices.findIndex(c=>c.word===t.word)); } });
-      });
-
-      // Naming
-      targetsName.forEach((t, idx) => {
-        timeline.push({ type: jsPsychSurveyText, preamble: `<div style=\"text-align:center\"><img src=\"${imgSrc(t.base)}\" alt=\"${t.word}\" style=\"height:160px;border:1px solid #ccc;padding:6px;border-radius:8px\"></div>`, questions: [{ prompt: 'Type the English word for this item:', required:true }], data:{ task:'naming', word:t.word, item_index:idx }, on_finish:(d)=>{ try{ const r = JSON.parse(d.responses)['Q0']?.trim().toLowerCase(); d.response_text = r; d.correct = (r === t.word.toLowerCase()); }catch(e){} } });
-      });
-
-      // Foley → meaning
-      foleyItems.forEach((f, idx) => {
-        const foils = samp
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>VR Post‑Test — One Page</title>
+        <meta name="description" content="Immediate vs Delayed post-test (single page)" />
+          
+            <!-- jsPsych CSS (pinned) -->
+              <link href="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/css/jspsych.css" rel="stylesheet">
+                
+                  <!-- jsPsych UMD core + required plugins (pinned, explicit UMD bundles) -->
+                    <script src="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/dist/jspsych.js"></script>
+                      <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-preload@1.1.3/dist/index.browser.js"></script>
+                        <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-html-button-response@1.1.3/dist/index.browser.js"></script>
+                          <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-survey-text@1.1.3/dist/index.browser.js"></script>
+                            <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-survey-html-form@1.1.3/dist/index.browser.js"></script>
+                              <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-audio-button-response@1.1.3/dist/index.browser.js"></script>
+                                
+                                  <style>
+                                      :root { --bg:#fafafa; --card:#fff; --line:#e5e5e5; --muted:#666; }
+                                          body { background:var(--bg); font: 16px/1.55 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+                                              .wrap { max-width:760px; margin:10vh auto; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.06); padding:24px; }
+                                                  h1 { margin: 0 0 6px; font-size:24px; }
+                                                      .hint { color:var(--muted); font-size:13px; }
+                                                          .btn { display:inline-block; padding:12px 16px; margin:8px 8px 0 0; border:1px solid var(--line); border-radius:10px; background:#fff; cursor:pointer; }
+                                                              .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+                                                                  input[type=text] { padding:8px 10px; border:1px solid var(--line); border-radius:8px; width: 160px; }
+                                                                    </style>
+                                                                    </head>
+                                                                    <body>
+                                                                      <!-- Minimal mode picker -->
+                                                                        <div class="wrap" id="picker">
+                                                                            <h1>VR Post‑Test</h1>
+                                                                                <p class="hint">Pick <b>Immediate</b> or <b>Delayed</b>. This page runs the entire study—no other files needed.</p>
+                                                                                    <div class="row" style="margin:10px 0 16px">
+                                                                                          <label for="pid">Participant ID:</label>
+                                                                                                <input id="pid" type="text" value="S01" />
+                                                                                                    </div>
+                                                                                                        <p>
+                                                                                                              <button class="btn" id="btn-immediate">Start: Immediate</button>
+                                                                                                                    <button class="btn" id="btn-delayed">Start: Delayed</button>
+                                                                                                                        </p>
+                                                                                                                            <p class="hint" style="margin-top:10px">(Immediate: 4 tasks · Delayed: shorter, 3 tasks. Details below.)</p>
+                                                                                                                              </div>
+                                                                                                                              
+                                                                                                                                <div class="wrap" id="explain" style="margin-top:20px">
+                                                                                                                                    <h2 style="margin:0 0 8px; font-size:18px">What’s the difference?</h2>
+                                                                                                                                        <ul style="margin-top:6px">
+                                                                                                                                              <li><b>Immediate</b> (after training):
+                                                                                                                                                      <ul>
+                                                                                                                                                                <li>4‑choice picture match (word → picture)</li>
+                                                                                                                                                                          <li>Productive naming (type the word)</li>
+                                                                                                                                                                                    <li>Foley → meaning (audio iconicity)</li>
+                                                                                                                                                                                              <li>Order‑of‑operations (sequence)</li>
+                                                                                                                                                                                                      </ul>
+                                                                                                                                                                                                            </li>
+                                                                                                                                                                                                                  <li><b>Delayed</b> (e.g., +7 days):
+                                                                                                                                                                                                                          <ul>
+                                                                                                                                                                                                                                    <li>4‑choice picture match (fewer items)</li>
+                                                                                                                                                                                                                                              <li>Productive naming (fewer items)</li>
+                                                                                                                                                                                                                                                        <li>Foley → meaning (fewer items)</li>
+                                                                                                                                                                                                                                                                  <li><i>No</i> sequence task to keep it short</li>
+                                                                                                                                                                                                                                                                          </ul>
+                                                                                                                                                                                                                                                                                </li>
+                                                                                                                                                                                                                                                                                    </ul>
+                                                                                                                                                                                                                                                                                      </div>
+                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                        <noscript><div class="wrap"><p>Please enable JavaScript to run this study.</p></div></noscript>
+                                                                                                                                                                                                                                                                                        
+                                                                                                                                                                                                                                                                                          <script>
+                                                                                                                                                                                                                                                                                              // --------- Small helpers ---------
+                                                                                                                                                                                                                                                                                                  const q = (k,f=null) => (new URLSearchParams(location.search)).get(k) ?? f;
+                                                                                                                                                                                                                                                                                                      const pad = (n, p2=true) => p2 ? String(n).padStart(2,'0') : String(n);
+                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                          // Defaults (URL can override):
+                                                                                                                                                                                                                                                                                                              const DEFAULTS = {
+                                                                                                                                                                                                                                                                                                                    IMG_VER: parseInt(q('imgver')||'1',10), // allows ?imgver=2 override
+                                                                                                                                                                                                                                                                                                                          AUD_VER: parseInt(q('audver')||'1',10),
+                                                                                                                                                                                                                                                                                                                                IMG_EXT: (q('imgext')||'png').replace('.',''),
+                                                                                                                                                                                                                                                                                                                                      AUD_EXT: (q('audioext')||'mp3').replace('.',''),
+                                                                                                                                                                                                                                                                                                                                            PAD_IMG: (q('pad2img')??'1')==='1',
+                                                                                                                                                                                                                                                                                                                                                  PAD_AUD: (q('pad2audio')??'0')==='1',
+                                                                                                                                                                                                                                                                                                                                                      };
+                                                                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                          // Stim bases
+                                                                                                                                                                                                                                                                                                                                                              const TARGETS = [
+                                                                                                                                                                                                                                                                                                                                                                    { word: 'bowl', base: 'bowl' }, { word: 'egg', base: 'egg' }, { word: 'flour', base: 'flour' }, { word: 'milk', base: 'milk' }, { word: 'sugar', base: 'sugar' },
+                                                                                                                                                                                                                                                                                                                                                                          { word: 'whisk', base: 'whisk' }, { word: 'spatula', base: 'spatula' }, { word: 'pan', base: 'pan' }, { word: 'butter', base: 'butter' }, { word: 'pancake', base: 'pancake' }
+                                                                                                                                                                                                                                                                                                                                                                              ];
+                                                                                                                                                                                                                                                                                                                                                                                  const FOLEY = [
+                                                                                                                                                                                                                                                                                                                                                                                        { label: 'sizzle (cooking on pan)', base: 'sizzle' }, { label: 'whisk (mixing in bowl)', base: 'whisk' }, { label: 'pour (liquid into bowl)', base: 'pour' },
+                                                                                                                                                                                                                                                                                                                                                                                              { label: 'crack (egg cracking)', base: 'crack' }, { label: 'flip (spatula flip)', base: 'flip' }, { label: 'spread (butter on pan)', base: 'spread' }
+                                                                                                                                                                                                                                                                                                                                                                                                  ];
+                                                                                                                                                                                                                                                                                                                                                                                                      const PROCEDURE_STEPS = ['crack egg','add flour & milk','whisk batter','pour on pan','flip & serve'];
+                                                                                                                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                                                          // Util
+                                                                                                                                                                                                                                                                                                                                                                                                              const shuffle = (A) => A.map(x=>[Math.random(),x]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
+                                                                                                                                                                                                                                                                                                                                                                                                                  const sample = (A,n) => shuffle(A).slice(0, Math.min(n, A.length));
+                                                                                                                                                                                                                                                                                                                                                                                                                      const imgSrc = (base) => `img/${base}_` + pad(DEFAULTS.IMG_VER, DEFAULTS.PAD_IMG) + `.${DEFAULTS.IMG_EXT}`;
+                                                                                                                                                                                                                                                                                                                                                                                                                          const audSrc = (base) => `sounds/${base}_` + pad(DEFAULTS.AUD_VER, DEFAULTS.PAD_AUD) + `.${DEFAULTS.AUD_EXT}`;
+                                                                                                                                                                                                                                                                                                                                                                                                                          
+                                                                                                                                                                                                                                                                                                                                                                                                                              function runExperiment({ delayed=false, pid }){
+                                                                                                                                                                                                                                                                                                                                                                                                                                    // Hide pickers
+                                                                                                                                                                                                                                                                                                                                                                                                                                          const pick = document.getElementById('picker'); if (pick) pick.style.display='none';
+                                                                                                                                                                                                                                                                                                                                                                                                                                                const info = document.getElementById('explain'); if (info) info.style.display='none';
+                                                                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                                                                      // Trial counts
+                                                                                                                                                                                                                                                                                                                                                                                                                                                            const COUNTS = delayed ? { afc: 6, naming: 6, foley: 6, procedure: false } : { afc: TARGETS.length, naming: TARGETS.length, foley: FOLEY.length, procedure: true };
+                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                  // Build subsets
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        const targetsAFC = sample(TARGETS, COUNTS.afc);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                              const targetsName = sample(TARGETS, COUNTS.naming);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    const foleyItems = sample(FOLEY, COUNTS.foley);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          // Preload lists
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                const preload = { images: targetsAFC.concat(targetsName).map(t => imgSrc(t.base)), audio: foleyItems.map(f => audSrc(f.base)) };
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      // Init jsPsych
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            const jsPsych = initJsPsych({ show_progress_bar: true, on_finish: () => { jsPsych.data.get().localSave('json', `post_${pid}.json`); } });
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  const timeline = [];
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        if (typeof jsPsychPreload !== 'undefined') {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                timeline.push({ type: jsPsychPreload, images: preload.images, audio: preload.audio, message: '<p>Loading…</p>' });
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            // Welcome
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  timeline.push({ type: jsPsychHtmlButtonResponse, stimulus: `<div style=\"max-width:760px;margin:0 auto;text-align:left\"><h2>VR Study — Post‑Test ${delayed ? '(Delayed)' : '(Immediate)'}</h2><p>This short test checks your learning of the cooking vocabulary you practiced. Work quickly but accurately.</p></div>`, choices: ['Begin'] });
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        // 4AFC receptive
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              targetsAFC.forEach((t, idx) => {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      const foils = sample(TARGETS.filter(x => x.word !== t.word), 3);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              const choices = shuffle([t, ...foils]).map(x => ({ word: x.word, img: imgSrc(x.base) }));
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      const strip = choices.map(c => `<div style=\"display:inline-block;margin:8px\"><img src=\"${c.img}\" alt=\"${c.word}\" style=\"height:140px;border:1px solid #ccc;padding:6px;border-radius:8px\"></div>`).join('');
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              timeline.push({ type: jsPsychHtmlButtonResponse, stimulus: `<div style=\"text-align:center\"><h3>Which picture matches: <em>${t.word}</em>?</h3><div>${strip}</div></div>`, choices: choices.map(c => c.word), data: { task:'4afc', word:t.word, item_index:idx }, on_finish: (d)=>{ d.correct = (d.response === choices.findIndex(c=>c.word===t.word)); } });
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    });
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          // Naming
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                targetsName.forEach((t, idx) => {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        timeline.push({ type: jsPsychSurveyText, preamble: `<div style=\"text-align:center\"><img src=\"${imgSrc(t.base)}\" alt=\"${t.word}\" style=\"height:160px;border:1px solid #ccc;padding:6px;border-radius:8px\"></div>`, questions: [{ prompt: 'Type the English word for this item:', required:true }], data:{ task:'naming', word:t.word, item_index:idx }, on_finish:(d)=>{ try{ const r = JSON.parse(d.responses)['Q0']?.trim().toLowerCase(); d.response_text = r; d.correct = (r === t.word.toLowerCase()); }catch(e){} } });
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              });
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    // Foley → meaning
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          foleyItems.forEach((f, idx) => {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  const foils = samp>
