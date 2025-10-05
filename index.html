@@ -7,15 +7,15 @@
   <meta name="description" content="Immediate vs Delayed post-test (single page)" />
   
   <!-- jsPsych CSS (pinned) -->
-  <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/css/jspsych.css" rel="stylesheet">
   
-  <!-- jsPsych UMD core + required plugins (pinned) -->
-  <script src="https://unpkg.com/jspsych@7.3.4"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.3"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.3"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.3"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.1.3"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-audio-button-response@1.1.3"></script>
+  <!-- jsPsych UMD core + required plugins (pinned, explicit UMD bundles) -->
+  <script src="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/dist/jspsych.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-preload@1.1.3/dist/index.browser.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-html-button-response@1.1.3/dist/index.browser.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-survey-text@1.1.3/dist/index.browser.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-survey-html-form@1.1.3/dist/index.browser.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-audio-button-response@1.1.3/dist/index.browser.js"></script>
   
   <style>
     :root { --bg:#fafafa; --card:#fff; --line:#e5e5e5; --muted:#666; }
@@ -73,7 +73,7 @@
     const q = (k,f=null) => (new URLSearchParams(location.search)).get(k) ?? f;
     const pad = (n, p2=true) => p2 ? String(n).padStart(2,'0') : String(n);
 
-    // Defaults (you can override via URL if needed):
+    // Defaults (URL can override):
     const DEFAULTS = {
       IMG_VER: parseInt(q('imgver')||'1',10), // allows ?imgver=2 override
       AUD_VER: parseInt(q('audver')||'1',10),
@@ -83,7 +83,7 @@
       PAD_AUD: (q('pad2audio')??'0')==='1',
     };
 
-    // Stim bases (filenames are base + _NN or _N)
+    // Stim bases
     const TARGETS = [
       { word: 'bowl', base: 'bowl' }, { word: 'egg', base: 'egg' }, { word: 'flour', base: 'flour' }, { word: 'milk', base: 'milk' }, { word: 'sugar', base: 'sugar' },
       { word: 'whisk', base: 'whisk' }, { word: 'spatula', base: 'spatula' }, { word: 'pan', base: 'pan' }, { word: 'butter', base: 'butter' }, { word: 'pancake', base: 'pancake' }
@@ -100,7 +100,6 @@
     const imgSrc = (base) => `img/${base}_` + pad(DEFAULTS.IMG_VER, DEFAULTS.PAD_IMG) + `.${DEFAULTS.IMG_EXT}`;
     const audSrc = (base) => `sounds/${base}_` + pad(DEFAULTS.AUD_VER, DEFAULTS.PAD_AUD) + `.${DEFAULTS.AUD_EXT}`;
 
-    // Main runner
     function runExperiment({ delayed=false, pid }){
       // Hide pickers
       const pick = document.getElementById('picker'); if (pick) pick.style.display='none';
@@ -115,17 +114,10 @@
       const foleyItems = sample(FOLEY, COUNTS.foley);
 
       // Preload lists
-      const preload = {
-        images: targetsAFC.concat(targetsName).map(t => imgSrc(t.base)),
-        audio: foleyItems.map(f => audSrc(f.base)),
-      };
+      const preload = { images: targetsAFC.concat(targetsName).map(t => imgSrc(t.base)), audio: foleyItems.map(f => audSrc(f.base)) };
 
       // Init jsPsych
-      const jsPsych = initJsPsych({
-        show_progress_bar: true,
-        on_finish: () => { jsPsych.data.get().localSave('json', `post_${pid}.json`); }
-      });
-
+      const jsPsych = initJsPsych({ show_progress_bar: true, on_finish: () => { jsPsych.data.get().localSave('json', `post_${pid}.json`); } });
       const timeline = [];
 
       if (typeof jsPsychPreload !== 'undefined') {
@@ -133,14 +125,7 @@
       }
 
       // Welcome
-      timeline.push({
-        type: jsPsychHtmlButtonResponse,
-        stimulus: `<div style="max-width:760px;margin:0 auto;text-align:left">
-          <h2>VR Study — Post‑Test ${delayed ? '(Delayed)' : '(Immediate)'}</h2>
-          <p>This short test checks your learning of the cooking vocabulary you practiced. Work quickly but accurately.</p>
-        </div>`,
-        choices: ['Begin']
-      });
+      timeline.push({ type: jsPsychHtmlButtonResponse, stimulus: `<div style=\"max-width:760px;margin:0 auto;text-align:left\"><h2>VR Study — Post‑Test ${delayed ? '(Delayed)' : '(Immediate)'}</h2><p>This short test checks your learning of the cooking vocabulary you practiced. Work quickly but accurately.</p></div>`, choices: ['Begin'] });
 
       // 4AFC receptive
       targetsAFC.forEach((t, idx) => {
@@ -157,34 +142,4 @@
 
       // Foley → meaning
       foleyItems.forEach((f, idx) => {
-        const foils = sample(FOLEY.filter(x => x.label !== f.label), 3);
-        const labels = shuffle([f.label, ...foils.map(x => x.label)]);
-        timeline.push({ type: jsPsychAudioButtonResponse, stimulus: audSrc(f.base), choices: labels, prompt:'<p>Listen, then choose the best meaning.</p>', data:{ task:'foley', item_index:idx }, on_finish:(d)=>{ d.correct = (labels[d.response] === f.label); } });
-      });
-
-      // Sequence (immediate only)
-      if (COUNTS.procedure) {
-        const shuffled = shuffle(PROCEDURE_STEPS.map((s,i)=>({s,i})));
-        const form = shuffled.map((obj,k)=>`<div style=\"margin:8px 0;padding:8px;border:1px solid #ddd;border-radius:8px\"><b>${obj.s}</b><br><label>Step number: <input type=\"number\" name=\"ord_${k}\" min=\"1\" max=\"${PROCEDURE_STEPS.length}\" required></label></div>`).join('');
-        timeline.push({ type: jsPsychSurveyHtmlForm, preamble:'<h3>Put the steps in order</h3><p>Assign a step number (1–5) to each action.</p>', html:`<div style=\"text-align:left;max-width:720px;margin:0 auto\">${form}</div>`, data:{ task:'procedure' }, on_finish:(d)=>{ const resp = JSON.parse(d.responses||'{}'); const chosen = Object.keys(resp).filter(k=>k.startsWith('ord_')).sort((a,b)=>parseInt(a.split('_')[1])-parseInt(b.split('_')[1])).map(k=>parseInt(resp[k],10)); d.positions = chosen; const reordered = shuffled.map(o=>o.s); let ok=0; chosen.forEach((pos,i)=>{ const shouldBe = PROCEDURE_STEPS.indexOf(reordered[i])+1; if (pos===shouldBe) ok++; }); d.percent_correct = Math.round((ok/PROCEDURE_STEPS.length)*100); } });
-      }
-
-      // Goodbye
-      timeline.push({ type: jsPsychHtmlButtonResponse, stimulus: `<div style=\"max-width:720px;margin:0 auto;text-align:left\"><h3>All done!</h3><p>Thank you. Your responses have been recorded.</p><p style=\"font-size:.9em;color:#666\">Participant: <code>${pid}</code> · Mode: <code>${delayed ? 'Delayed' : 'Immediate'}</code></p><p>A JSON file will download automatically.</p></div>`, choices:['Finish'] });
-
-      jsPsych.data.addProperties({ pid, phase: delayed ? 'post_delayed' : 'post_immediate', img_ver: DEFAULTS.IMG_VER, aud_ver: DEFAULTS.AUD_VER });
-      jsPsych.run(timeline);
-    }
-
-    // Wire buttons
-    document.getElementById('btn-immediate').addEventListener('click', () => {
-      const pid = document.getElementById('pid').value.trim() || `P_${Date.now()}`;
-      runExperiment({ delayed:false, pid });
-    });
-    document.getElementById('btn-delayed').addEventListener('click', () => {
-      const pid = document.getElementById('pid').value.trim() || `P_${Date.now()}`;
-      runExperiment({ delayed:true, pid });
-    });
-  </script>
-</body>
-</html>
+        const foils = samp
