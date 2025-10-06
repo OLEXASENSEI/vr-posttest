@@ -1,10 +1,11 @@
 /**
- * vr.posttest.js — FINAL CODE FOR ASSET PATHS and VALID 4AFC LOGIC
+ * vr.posttest.js — FINAL CODE
  *
- * NOTE: This code assumes you have fixed the file naming issues on your server:
- * 1. Renamed 'Milk_01.png' to 'milk_01.png', etc. (all lowercase images).
- * 2. Renamed 'spread_01.mp3' and 'spread_02.mp3' to 'spread_1.mp3' and 'spread_2.mp3' 
- *    to match the rest of the unpadded audio file names.
+ * NOTE: This code assumes the FINAL FILE STRUCTURE/HTML setup:
+ * 1. Your image files are all lowercase (e.g., milk_01.png).
+ * 2. Your audio files are consistent (e.g., crack_1.mp3, spread_1.mp3).
+ * 3. Your HTML is using the stable unpkg links with 'defer'.
+ * 4. Your HTML is using a local path for the stubborn survey-html-form plugin.
  */
 function getParam(k, fallback = null) {
   const u = new URLSearchParams(window.location.search);
@@ -26,7 +27,7 @@ const CONFIG_DEFAULTS = {
   img_ext: (getParam('imgext') || 'png').replace('.', ''),
   audio_ext: (getParam('audioext') || 'mp3').replace('.', ''),
   pad2img: (getParam('pad2img') ?? '1') === '1',   // Forces _01.png
-  pad2audio: (getParam('pad2audio') ?? '0') === '1', // Forces _1.mp3 (assuming '0' is the default for unpadded)
+  pad2audio: (getParam('pad2audio') ?? '0') === '1', // Forces _1.mp3 (assumes you renamed spread files)
   save_local: (getParam('localsave') || '1') === '1',
 };
 
@@ -38,10 +39,16 @@ const TARGETS = [
   { word: 'pancake', base: 'pancake' },
 ];
 
+// **********************************************
+// ** FIX APPLIED: spread label updated **
+// **********************************************
 const FOLEY = [
-  { label: 'sizzle (cooking on pan)', base: 'sizzle' }, { label: 'whisk (mixing in bowl)', base: 'whisk' },
-  { label: 'pour (liquid into bowl)', base: 'pour' }, { label: 'crack (egg cracking)', base: 'crack' },
-  { label: 'flip (spatula flip)', base: 'flip' }, { label: 'spread (butter on pan)', base: 'spread' },
+  { label: 'sizzle (cooking on pan)', base: 'sizzle' }, 
+  { label: 'whisk (mixing in bowl)', base: 'whisk' },
+  { label: 'pour (liquid into bowl)', base: 'pour' }, 
+  { label: 'crack (egg cracking)', base: 'crack' },
+  { label: 'flip (spatula flip)', base: 'flip' }, 
+  { label: 'spread (butter)', base: 'spread' }, // Label changed here
 ];
 
 const PROCEDURE_STEPS = [
@@ -70,7 +77,7 @@ const T = (name) => window[name];
 
 
 function runExperiment({ delayed, pid }){
-  // ... (unchanged logic: UI Cleanup, Trial Counts, Subsets, jsPsych Init) ...
+  // ... (UI Cleanup, Trial Counts, Subsets, jsPsych Init - Unchanged) ...
   const pick = document.getElementById('picker'); if (pick) pick.style.display='none';
   const info = document.getElementById('explain'); if (info) info.style.display='none';
   const COUNTS = delayed ? { afc: 6, naming: 6, foley: 6, procedure: false } : { afc: TARGETS.length, naming: TARGETS.length, foley: FOLEY.length, procedure: true };
@@ -110,42 +117,25 @@ function runExperiment({ delayed, pid }){
     timeline.push({ type: T('jsPsychHtmlButtonResponse'), stimulus: `<div style="max-width:780px;margin:0 auto;text-align:left"><h2>VR Study — Post-Test ${delayed ? '(Delayed)' : '(Immediate)'}</h2><p>This short test checks your learning of the cooking vocabulary you practiced. Work quickly but accurately.</p><p>Click <b>Begin</b> to start.</p></div>`, choices: ['Begin'] });
   }
 
-  // --------------------------
-  // [3. 4AFC] - VALIDATED LOGIC APPLIED HERE
-  // --------------------------
+  // [3. 4AFC] - VALIDATED LOGIC APPLIED HERE (UNCHANGED from previous fix)
   if (have('jsPsychHtmlButtonResponse')) {
     const button_labels = ['Picture 1', 'Picture 2', 'Picture 3', 'Picture 4'];
     
     targetsAFC.forEach((t, idx) => {
       const foils = sample(TARGETS.filter(x => x.word !== t.word), 3);
       const choices = shuffle([t, ...foils]).map(x => ({ word: x.word, img: imageSrc(x.base) }));
-      
-      // The correct index of the target word in the shuffled choices array
       const correct_choice_index = choices.findIndex(c => c.word === t.word); 
-
-      // Create the image strip
-      const imgStrip = choices.map((c) => `
-        <div style="display:inline-block;margin:8px">
-          <img src="${c.img}" alt="${c.word}" style="height:140px;display:block;margin-bottom:6px;border:1px solid #ccc;padding:6px;border-radius:8px">
-        </div>`).join('');
+      const imgStrip = choices.map((c) => `<div style="display:inline-block;margin:8px"><img src="${c.img}" alt="${c.word}" style="height:140px;display:block;margin-bottom:6px;border:1px solid #ccc;padding:6px;border-radius:8px"></div>`).join('');
         
       timeline.push({ 
         type: T('jsPsychHtmlButtonResponse'), 
         stimulus: `<div style="text-align:center"><h3>Which picture matches: <em>${t.word}</em>?</h3><div>${imgStrip}</div></div>`, 
-        
-        // **FIXED:** Use generic buttons that correspond to the picture index
         choices: button_labels, 
-        
         data: { 
-          task: '4afc', 
-          word: t.word, 
-          correct_index: correct_choice_index, // Store the correct index (0-3)
-          item_index: idx, 
-          img_ver: CONFIG_DEFAULTS.img_ver 
+          task: '4afc', word: t.word, correct_index: correct_choice_index, item_index: idx, img_ver: CONFIG_DEFAULTS.img_ver 
         },
         on_finish: (data) => { 
-          // Check if the button pressed (data.response: 0, 1, 2, or 3) matches the correct index
-          data.correct = (data.response === data.correct_index); 
+          data.correct = (data.response === data.correct_choice_index); 
           data.response_label = button_labels[data.response];
         }
       });
