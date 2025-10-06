@@ -1,9 +1,10 @@
 /**
- * vr.posttest.js — FINAL CODE FOR ASSET PATHS
- * Assumes:
- * 1. Image files are named like item_01.png (padded).
- * 2. Audio files are named like sound_1.mp3 (NOT padded).
- *    (Requires renaming spread_01.mp3 and spread_02.mp3 to spread_1.mp3 and spread_2.mp3)
+ * vr.posttest.js — FINAL CODE FOR ASSET PATHS and VALID 4AFC LOGIC
+ *
+ * NOTE: This code assumes you have fixed the file naming issues on your server:
+ * 1. Renamed 'Milk_01.png' to 'milk_01.png', etc. (all lowercase images).
+ * 2. Renamed 'spread_01.mp3' and 'spread_02.mp3' to 'spread_1.mp3' and 'spread_2.mp3' 
+ *    to match the rest of the unpadded audio file names.
  */
 function getParam(k, fallback = null) {
   const u = new URLSearchParams(window.location.search);
@@ -30,7 +31,6 @@ const CONFIG_DEFAULTS = {
 };
 
 const PATHS = { img: 'img/', audio: 'sounds/' };
-// ... (rest of the constants like TARGETS, FOLEY, PROCEDURE_STEPS are unchanged) ...
 const TARGETS = [
   { word: 'bowl', base: 'bowl' }, { word: 'egg', base: 'egg' }, { word: 'flour', base: 'flour' },
   { word: 'milk', base: 'milk' }, { word: 'sugar', base: 'sugar' }, { word: 'whisk', base: 'whisk' },
@@ -47,7 +47,6 @@ const FOLEY = [
 const PROCEDURE_STEPS = [
   'crack egg', 'add flour & milk', 'whisk batter', 'pour on pan', 'flip & serve'
 ];
-// ... (rest of the utility functions are unchanged) ...
 function shuffle(arr) { return arr.map(v => [Math.random(), v]).sort((a,b)=>a[0]-b[0]).map(p=>p[1]); }
 function sample(arr, n) { return shuffle(arr).slice(0, Math.min(n, arr.length)); }
 
@@ -69,7 +68,6 @@ function preloadPaths(targets, foley) {
 const have = (name) => typeof window[name] !== 'undefined';
 const T = (name) => window[name];
 
-// ... (runExperiment and wiring functions are unchanged) ...
 
 function runExperiment({ delayed, pid }){
   // ... (unchanged logic: UI Cleanup, Trial Counts, Subsets, jsPsych Init) ...
@@ -104,9 +102,6 @@ function runExperiment({ delayed, pid }){
   const timeline = [];
   const toPreload = preloadPaths(targetsAFC.concat(targetsName), foleyItems);
   
-  // ... (All trial creation logic is unchanged) ...
-  // (pre-load, welcome, 4afc, naming, foley, procedure, goodbye)
-  
   // [1. Preload]
   if (have('jsPsychPreload')) { timeline.push({ type: T('jsPsychPreload'), images: toPreload.images, audio: toPreload.audio, message: '<p>Loading post-test…</p>' }); }
   
@@ -115,15 +110,48 @@ function runExperiment({ delayed, pid }){
     timeline.push({ type: T('jsPsychHtmlButtonResponse'), stimulus: `<div style="max-width:780px;margin:0 auto;text-align:left"><h2>VR Study — Post-Test ${delayed ? '(Delayed)' : '(Immediate)'}</h2><p>This short test checks your learning of the cooking vocabulary you practiced. Work quickly but accurately.</p><p>Click <b>Begin</b> to start.</p></div>`, choices: ['Begin'] });
   }
 
-  // [3. 4AFC]
+  // --------------------------
+  // [3. 4AFC] - VALIDATED LOGIC APPLIED HERE
+  // --------------------------
   if (have('jsPsychHtmlButtonResponse')) {
+    const button_labels = ['Picture 1', 'Picture 2', 'Picture 3', 'Picture 4'];
+    
     targetsAFC.forEach((t, idx) => {
       const foils = sample(TARGETS.filter(x => x.word !== t.word), 3);
       const choices = shuffle([t, ...foils]).map(x => ({ word: x.word, img: imageSrc(x.base) }));
-      const correct_index = choices.findIndex(c => c.word === t.word);
-      const imgStrip = choices.map((c) => `<div style="display:inline-block;margin:8px"><img src="${c.img}" alt="${c.word}" style="height:140px;display:block;margin-bottom:6px;border:1px solid #ccc;padding:6px;border-radius:8px"></div>`).join('');
-      timeline.push({ type: T('jsPsychHtmlButtonResponse'), stimulus: `<div style="text-align:center"><h3>Which picture matches: <em>${t.word}</em>?</h3><div>${imgStrip}</div></div>`, choices: choices.map(c => c.word), data: { task: '4afc', word: t.word, correct_index, item_index: idx, img_ver: CONFIG_DEFAULTS.img_ver }, on_finish: (data) => { data.correct = (data.response === correct_index); } });
+      
+      // The correct index of the target word in the shuffled choices array
+      const correct_choice_index = choices.findIndex(c => c.word === t.word); 
+
+      // Create the image strip
+      const imgStrip = choices.map((c) => `
+        <div style="display:inline-block;margin:8px">
+          <img src="${c.img}" alt="${c.word}" style="height:140px;display:block;margin-bottom:6px;border:1px solid #ccc;padding:6px;border-radius:8px">
+        </div>`).join('');
+        
+      timeline.push({ 
+        type: T('jsPsychHtmlButtonResponse'), 
+        stimulus: `<div style="text-align:center"><h3>Which picture matches: <em>${t.word}</em>?</h3><div>${imgStrip}</div></div>`, 
+        
+        // **FIXED:** Use generic buttons that correspond to the picture index
+        choices: button_labels, 
+        
+        data: { 
+          task: '4afc', 
+          word: t.word, 
+          correct_index: correct_choice_index, // Store the correct index (0-3)
+          item_index: idx, 
+          img_ver: CONFIG_DEFAULTS.img_ver 
+        },
+        on_finish: (data) => { 
+          // Check if the button pressed (data.response: 0, 1, 2, or 3) matches the correct index
+          data.correct = (data.response === data.correct_index); 
+          data.response_label = button_labels[data.response];
+        }
+      });
     });
+  } else {
+    console.warn('Missing @jspsych/plugin-html-button-response; skipping 4AFC.');
   }
 
   // [4. Naming]
