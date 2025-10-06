@@ -1,33 +1,37 @@
 /**
- * posttest.js — single-folder, CDN-friendly version.
- * This version is refactored to be initiated by the "Immediate" or "Delayed" buttons
- * present in the companion HTML file.
+ * vr-posttest.js — CDN-friendly version
+ * This version is initiated by the "Immediate" or "Delayed" buttons
+ * in the companion HTML file.
  */
 
 // --------------------------
-// URL helpers & config (Used for default/override parameters)
+// URL helpers & config
 // --------------------------
 function getParam(k, fallback = null) {
   const u = new URLSearchParams(window.location.search);
   return u.get(k) ?? fallback;
 }
+
 function ABto12(v, def = 1) {
-  if (!v) return def; const s = String(v).toUpperCase();
+  if (!v) return def;
+  const s = String(v).toUpperCase();
   return s === 'A' ? 1 : s === 'B' ? 2 : (parseInt(s, 10) || def);
 }
+
 function verSuffix(v, pad2 = true) {
-  const n = parseInt(v, 10) || 1; return pad2 ? String(n).padStart(2, '0') : String(n);
+  const n = parseInt(v, 10) || 1;
+  return pad2 ? String(n).padStart(2, '0') : String(n);
 }
 
-// Config defaults. Note: participant_id and is_delayed are now set by the buttons.
+// Config defaults
 const CONFIG_DEFAULTS = {
   condition: getParam('cond') || 'VR',
   img_ver: ABto12(getParam('imgver') ?? getParam('iset') ?? 1, 1),
   aud_ver: ABto12(getParam('audver') ?? getParam('atok') ?? 1, 1),
   img_ext: (getParam('imgext') || 'png').replace('.', ''),
   audio_ext: (getParam('audioext') || 'mp3').replace('.', ''),
-  pad2img: (getParam('pad2img') ?? '1') === '1',  // images default to 01/02
-  pad2audio: (getParam('pad2audio') ?? '0') === '1', // audio default to 1/2
+  pad2img: (getParam('pad2img') ?? '1') === '1',
+  pad2audio: (getParam('pad2audio') ?? '0') === '1',
   save_local: (getParam('localsave') || '1') === '1',
 };
 
@@ -65,13 +69,19 @@ const PROCEDURE_STEPS = [
 // --------------------------
 // Utilities
 // --------------------------
-function shuffle(arr) { return arr.map(v => [Math.random(), v]).sort((a,b)=>a[0]-b[0]).map(p=>p[1]); }
-function sample(arr, n) { return shuffle(arr).slice(0, Math.min(n, arr.length)); }
+function shuffle(arr) {
+  return arr.map(v => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(p => p[1]);
+}
+
+function sample(arr, n) {
+  return shuffle(arr).slice(0, Math.min(n, arr.length));
+}
 
 function imageSrc(base) {
   const suff = verSuffix(CONFIG_DEFAULTS.img_ver, CONFIG_DEFAULTS.pad2img);
   return `${PATHS.img}${base}_${suff}.${CONFIG_DEFAULTS.img_ext}`;
 }
+
 function audioSrc(base) {
   const suff = verSuffix(CONFIG_DEFAULTS.aud_ver, CONFIG_DEFAULTS.pad2audio);
   return `${PATHS.audio}${base}_${suff}.${CONFIG_DEFAULTS.audio_ext}`;
@@ -84,19 +94,17 @@ function preloadPaths(targets, foley) {
 }
 
 // --------------------------
-// Experiment Logic Wrapper
+// Experiment Logic
 // --------------------------
-
-function runExperiment({ delayed, pid }){
+function runExperiment({ delayed, pid }) {
   
   // Hide pickers
-  const pick = document.getElementById('picker'); 
-  if (pick) pick.style.display='none';
-  const info = document.getElementById('explain'); 
-  if (info) info.style.display='none';
+  const pick = document.getElementById('picker');
+  if (pick) pick.style.display = 'none';
+  const info = document.getElementById('explain');
+  if (info) info.style.display = 'none';
 
   // --- TRIAL COUNTS ---
-  // If delayed, only sample 6 items for the first three tasks, and skip the procedure task
   const COUNTS = delayed 
     ? { afc: 6, naming: 6, foley: 6, procedure: false } 
     : { afc: TARGETS.length, naming: TARGETS.length, foley: FOLEY.length, procedure: true };
@@ -122,31 +130,27 @@ function runExperiment({ delayed, pid }){
   // --------------------------
   // Preload
   // --------------------------
-  if (typeof jsPsychPreload !== 'undefined') {
-    timeline.push({
-      type: jsPsychPreload,
-      images: toPreload.images,
-      audio: toPreload.audio,
-      message: '<p>Loading post-test…</p>'
-    });
-  }
+  timeline.push({
+    type: jsPsychPreload,
+    images: toPreload.images,
+    audio: toPreload.audio,
+    message: '<p>Loading post-test…</p>'
+  });
 
   // --------------------------
   // Welcome
   // --------------------------
-  if (typeof jsPsychHtmlButtonResponse !== 'undefined') {
-    timeline.push({
-      type: jsPsychHtmlButtonResponse,
-      stimulus: `
-        <div style="max-width:780px;margin:0 auto;text-align:left">
-          <h2>VR Study — Post-Test ${delayed ? '(Delayed)' : '(Immediate)'}</h2>
-          <p>This short test checks your learning of the cooking vocabulary you practiced. Work quickly but accurately.</p>
-          <p>Click <b>Begin</b> to start.</p>
-        </div>
-      `,
-      choices: ['Begin']
-    });
-  }
+  timeline.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `
+      <div style="max-width:780px;margin:0 auto;text-align:left">
+        <h2>VR Study — Post-Test ${delayed ? '(Delayed)' : '(Immediate)'}</h2>
+        <p>This short test checks your learning of the cooking vocabulary you practiced. Work quickly but accurately.</p>
+        <p>Click <b>Begin</b> to start.</p>
+      </div>
+    `,
+    choices: ['Begin']
+  });
 
   // --------------------------
   // 4AFC receptive (word → picture)
@@ -163,7 +167,7 @@ function runExperiment({ delayed, pid }){
       
     timeline.push({
       type: jsPsychHtmlButtonResponse,
-      stimulus: `<div style=\"text-align:center\"><h3>Which picture matches: <em>${t.word}</em>?</h3><div>${imgStrip}</div></div>`,
+      stimulus: `<div style="text-align:center"><h3>Which picture matches: <em>${t.word}</em>?</h3><div>${imgStrip}</div></div>`,
       choices: choices.map(c => c.word),
       data: { task: '4afc', word: t.word, correct_index, item_index: idx, img_ver: CONFIG_DEFAULTS.img_ver },
       on_finish: (data) => { data.correct = (data.response === correct_index); }
@@ -174,20 +178,19 @@ function runExperiment({ delayed, pid }){
   // Productive naming (text input)
   // --------------------------
   targetsName.forEach((t, idx) => {
-    if (typeof jsPsychSurveyText !== 'undefined') {
-      timeline.push({
-        type: jsPsychSurveyText,
-        preamble: `<div style=\"text-align:center\"><img src=\"${imageSrc(t.base)}\" alt=\"${t.word}\" style=\"height:160px;border:1px solid #ccc;padding:6px;border-radius:8px\"></div>`,
-        questions: [{ prompt: 'Type the English word for this item:', placeholder: 'e.g., bowl', required: true }],
-        data: { task: 'naming', word: t.word, item_index: idx, img_ver: CONFIG_DEFAULTS.img_ver },
-        on_finish: (data) => {
-          try {
-            const resp = JSON.parse(data.responses)['Q0']?.trim().toLowerCase();
-            data.response_text = resp; data.correct = resp === t.word.toLowerCase();
-          } catch (e) {}
-        }
-      });
-    }
+    timeline.push({
+      type: jsPsychSurveyText,
+      preamble: `<div style="text-align:center"><img src="${imageSrc(t.base)}" alt="${t.word}" style="height:160px;border:1px solid #ccc;padding:6px;border-radius:8px"></div>`,
+      questions: [{ prompt: 'Type the English word for this item:', placeholder: 'e.g., bowl', required: true }],
+      data: { task: 'naming', word: t.word, item_index: idx, img_ver: CONFIG_DEFAULTS.img_ver },
+      on_finish: (data) => {
+        try {
+          const resp = JSON.parse(data.responses)['Q0']?.trim().toLowerCase();
+          data.response_text = resp;
+          data.correct = resp === t.word.toLowerCase();
+        } catch (e) {}
+      }
+    });
   });
 
   // --------------------------
@@ -241,7 +244,7 @@ function runExperiment({ delayed, pid }){
         
         let correctCount = 0;
         chosenPositions.forEach(item => {
-            const shouldBe = PROCEDURE_STEPS.indexOf(item.label) + 1; // 1-based
+            const shouldBe = PROCEDURE_STEPS.indexOf(item.label) + 1;
             if (item.chosen_position === shouldBe) correctCount++;
         });
         data.percent_correct = Math.round((correctCount / PROCEDURE_STEPS.length) * 100);
@@ -252,17 +255,15 @@ function runExperiment({ delayed, pid }){
   // --------------------------
   // Goodbye
   // --------------------------
-  if (typeof jsPsychHtmlButtonResponse !== 'undefined') {
-    timeline.push({
-      type: jsPsychHtmlButtonResponse,
-      stimulus: `<div style=\"max-width:720px;margin:0 auto;text-align:left\"><h3>All done!</h3><p>Thank you. Your responses have been recorded.</p><p style=\"font-size:.9em;color:#666\">Participant: <code>${pid}</code> · Test: <code>${delayed ? 'Delayed' : 'Immediate'}</code></p>${CONFIG_DEFAULTS.save_local ? '<p>If the data did not auto-download, use the button below.</p>' : ''}</div>`,
-      choices: CONFIG_DEFAULTS.save_local ? ['Download data again'] : ['Finish'],
-      on_finish: () => { if (CONFIG_DEFAULTS.save_local) jsPsych.data.get().localSave('json', `post_${pid}.json`); }
-    });
-  }
+  timeline.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `<div style="max-width:720px;margin:0 auto;text-align:left"><h3>All done!</h3><p>Thank you. Your responses have been recorded.</p><p style="font-size:.9em;color:#666">Participant: <code>${pid}</code> · Test: <code>${delayed ? 'Delayed' : 'Immediate'}</code></p>${CONFIG_DEFAULTS.save_local ? '<p>If the data did not auto-download, use the button below.</p>' : ''}</div>`,
+    choices: CONFIG_DEFAULTS.save_local ? ['Download data again'] : ['Finish'],
+    on_finish: () => { if (CONFIG_DEFAULTS.save_local) jsPsych.data.get().localSave('json', `post_${pid}.json`); }
+  });
 
   // --------------------------
-  // Start
+  // Add properties and run
   // --------------------------
   jsPsych.data.addProperties({
     pid: pid,
@@ -276,28 +277,24 @@ function runExperiment({ delayed, pid }){
 }
 
 // --------------------------
-// DOM Initialization (Wires the HTML buttons to the experiment)
+// DOM Initialization (Wires the HTML buttons)
 // --------------------------
-
 document.addEventListener('DOMContentLoaded', () => {
-    const pidInput = document.getElementById('pid');
-    
-    // Function to get PID safely
-    const getPid = () => pidInput ? (pidInput.value || `P_${Date.now()}`) : `P_${Date.now()}`;
+  const pidInput = document.getElementById('pid');
+  
+  const getPid = () => pidInput ? (pidInput.value || `P_${Date.now()}`) : `P_${Date.now()}`;
 
-    // Wire up Immediate button
-    const btnImmediate = document.getElementById('btn-immediate');
-    if (btnImmediate) {
-        btnImmediate.addEventListener('click', () => {
-            runExperiment({ delayed: false, pid: getPid() });
-        });
-    }
+  const btnImmediate = document.getElementById('btn-immediate');
+  if (btnImmediate) {
+    btnImmediate.addEventListener('click', () => {
+      runExperiment({ delayed: false, pid: getPid() });
+    });
+  }
 
-    // Wire up Delayed button
-    const btnDelayed = document.getElementById('btn-delayed');
-    if (btnDelayed) {
-        btnDelayed.addEventListener('click', () => {
-            runExperiment({ delayed: true, pid: getPid() });
-        });
-    }
+  const btnDelayed = document.getElementById('btn-delayed');
+  if (btnDelayed) {
+    btnDelayed.addEventListener('click', () => {
+      runExperiment({ delayed: true, pid: getPid() });
+    });
+  }
 });
