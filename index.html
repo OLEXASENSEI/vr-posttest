@@ -7,29 +7,29 @@
   <meta name="description" content="Immediate vs Delayed post-test" />
   <link rel="icon" href="data:,">
 
-  <!-- jsPsych CSS -->
+  <!-- jsPsych CSS (no defer needed) -->
   <link href="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/css/jspsych.css" rel="stylesheet">
 
-  <!-- jsPsych Core (MUST be first) -->
-  <script src="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/dist/jspsych.js"></script>
-  
-  <!-- jsPsych Plugins: FIX APPLIED HERE. Using the standard UMD file (.js) -->
-  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-preload@1.1.3/preload.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-html-button-response@1.1.3/html-button-response.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-survey-text@1.1.3/survey-text.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-survey-html-form@1.1.3/survey-html-form.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-audio-button-response@1.1.3/audio-button-response.js"></script>
+  <!-- ================================================================= -->
+  <!-- 1) Load jsPsych core + plugins as deferred UMD scripts (in order)  -->
+  <!-- ================================================================= -->
+  <script defer src="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/dist/jspsych.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-preload@1.1.3/preload.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-html-button-response@1.1.3/html-button-response.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-survey-text@1.1.3/survey-text.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-survey-html-form@1.1.3/survey-html-form.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@jspsych/plugin-audio-button-response@1.1.3/audio-button-response.js"></script>
 
   <style>
     :root { --bg:#fafafa; --card:#fff; --line:#e5e5e5; --muted:#666; }
-    body { background:var(--bg); font: 16px/1.55 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin:0; padding:0; }
+    body { background:var(--bg); font:16px/1.55 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin:0; padding:0; }
     .wrap { max-width:760px; margin:10vh auto; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.06); padding:24px; }
-    h1 { margin: 0 0 6px; font-size:24px; }
+    h1 { margin:0 0 6px; font-size:24px; }
     .hint { color:var(--muted); font-size:13px; }
     .btn { display:inline-block; padding:12px 16px; margin:8px 8px 0 0; border:1px solid var(--line); border-radius:10px; background:#fff; cursor:pointer; font-size:14px; }
     .btn:hover { background:#f5f5f5; }
     .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:10px 0 16px; }
-    input[type=text] { padding:8px 10px; border:1px solid var(--line); border-radius:8px; width: 160px; font-size:14px; }
+    input[type=text] { padding:8px 10px; border:1px solid var(--line); border-radius:8px; width:160px; font-size:14px; }
   </style>
 </head>
 <body>
@@ -48,7 +48,7 @@
     <p class="hint" style="margin-top:10px">(Immediate: 4 tasks · Delayed: shorter, 3 tasks)</p>
   </div>
 
-  <!-- Explanation section (optional) -->
+  <!-- (Optional) Explanation panel -->
   <div class="wrap" id="explain" style="display:none;">
     <p>Study information can go here if needed.</p>
   </div>
@@ -57,7 +57,9 @@
     <div class="wrap"><p>Please enable JavaScript to run this study.</p></div>
   </noscript>
 
-  <!-- Load experiment script AFTER jsPsych -->
-  <script src="vr.posttest.js"></script>
+  <!-- ======================================================== -->
+  <!-- 2) Load your experiment logic last, also with defer       -->
+  <!-- ======================================================== -->
+  <script defer src="vr.posttest.js"></script>
 </body>
 </html>
