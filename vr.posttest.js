@@ -1,5 +1,5 @@
 /**
- * vr-posttest.js — Single-file experiment logic for VR Post-Test (guarded)
+ * vr.posttest.js — Single-file experiment logic for VR Post-Test (guarded)
  *
  * This script assumes jsPsych core + plugins are loaded via CDN BEFORE this file.
  * All plugin references are guarded to avoid "X is not defined" errors.
