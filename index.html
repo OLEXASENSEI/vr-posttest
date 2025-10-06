@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>VR Post-Test</title>
   <meta name="description" content="Immediate vs Delayed post-test"/>
-  <link rel="icon" href="data:,"> <!-- silence favicon 404 -->
+  <link rel="icon" href="data:,">
 
-  <!-- jsPsych CSS -->
   <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet">
 
   <!-- jsPsych core (UMD globals) -->
@@ -33,7 +32,6 @@
   </style>
 </head>
 <body>
-  <!-- Picker UI -->
   <div class="wrap" id="picker">
     <h1>VR Post-Test</h1>
     <p class="hint">Pick <b>Immediate</b> or <b>Delayed</b>. This page runs the entire study—no other files needed.</p>
@@ -48,7 +46,6 @@
     <p class="hint">(Immediate: 4 tasks · Delayed: 3 tasks)</p>
   </div>
 
-  <!-- Explanation (optional) -->
   <div class="wrap" id="explain" style="display:none">
     <p>Study details…</p>
   </div>
@@ -57,7 +54,7 @@
     <div class="wrap"><p>Please enable JavaScript to run this study.</p></div>
   </noscript>
 
-  <!-- Your post-test logic (this file wires the buttons in DOMContentLoaded) -->
+  <!-- Your post-test logic (it wires the buttons internally) -->
   <script defer src="./vr.posttest.js"></script>
 </body>
 </html>
