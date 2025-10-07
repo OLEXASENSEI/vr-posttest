@@ -1,5 +1,7 @@
 /**
- * posttest.js — jsPsych v7 post-test (Final Fix for Syntax and Launcher Errors)
+ * posttest.js — FINAL CODE (Guards and Dependencies Cleaned)
+ * - Removed the incorrect dependency check on jsPsychSurveyHtmlForm.
+ * - Assumes the syntax error is now fixed (from the previous step's ABto12 function).
  */
 
 (function(){
@@ -28,7 +30,7 @@
   }
 
   function verSuffix(v, pad2=true){ const n = parseInt(v,10)||1; return pad2? String(n).padStart(2,'0') : String(n); }
-  function ABto12(v, def=1){ if(!v) return def; const s=String(v).toUpperCase(); return s==='A'?1:s='B'?2:(parseInt(s,10)||def); }
+  function ABto12(v, def=1){ if(!v) return def; const s=String(v).toUpperCase(); return s==='A'?1:s==='B'?2:(parseInt(s,10)||def); }
 
   const CONFIG = {
     img_ver: ABto12(getParam('imgver') ?? getParam('iset') ?? 1, 1),
@@ -104,7 +106,6 @@
   }, { once:true });
 
   /* ---------- Preload ---------- */
-  // ... (Preload logic is unchanged and correct) ...
   if (!have('jsPsychPreload')) {
     console.warn('Preload plugin not found. Skipping preload phase.');
     var preload = { type:'html-keyboard-response', stimulus:'<p>Loading skipped.</p>', trial_duration: 1 };
@@ -131,7 +132,6 @@
 
   /* ---------- Trials (Guarded) ---------- */
 
-  // All variable declarations must be VAR to avoid scope issues in IIFE/conditionals
   var welcome = null;
   var afc_trials = [];
   var naming_intro_block = null;
@@ -164,7 +164,7 @@
     const targetsAFC = sample(TARGETS, TARGETS.length);
     targetsAFC.forEach((t, idx) => {
       const foils = sample(TARGETS.filter(x => x.word !== t.word), 3);
-      const choices = shuffle([t, ...foils]).map(x => ({ word:t.word, img:imageSrc(x.base) }));
+      const choices = shuffle([t, ...foils]).map(x => ({ word:x.word, img:imageSrc(x.base) }));
       const correct_choice_index = choices.findIndex(c => c.word === t.word);
       const strip = choices.map(c => `<div style="display:inline-block;margin:8px"><img src="${asset(c.img)}" alt="${c.word}" style="height:140px;display:block;margin-bottom:6px;border:1px solid #ccc;padding:6px;border-radius:8px"></div>`).join('');
       afc_trials.push({
@@ -254,7 +254,7 @@
                 pos[step_info.s] = Number.isFinite(v) ? v : null;
             });
             let tot=0, ok=0, violations=[]; PROC_CONSTRAINTS.forEach(([a,b]) => { if (pos[a] !== null && pos[b] !== null) { tot++; if (pos[a] < pos[b]) ok++; else violations.push(`${a} → ${b}`); } });
-            data.responses_positions   = pos; data.constraints_total     = tot; data.constraints_satisfied = ok; data.partial_order_score   = (tot>0) ? ok/tot : null; data.violations = violations;
+            data.responses_positions = pos; data.constraints_total = tot; data.constraints_satisfied = ok; data.partial_order_score = (tot>0) ? ok/tot : null; data.violations = violations;
           }
         };
       })();
@@ -310,11 +310,23 @@
     
     // 4. Filter timeline based on 'is_delayed' flag
     const final_timeline = timeline.filter(trial => {
+      // Logic for removing the procedure task for the delayed condition
       if (is_delayed && trial === procedural_instructions) return false;
       if (is_delayed && trial === procedural_test) return false;
+      
+      // Also remove all Naming tasks (mic init, intro, check, and loop) if they exist
+      // Since mic tasks are already guarded by mic_plugins_available, we can remove them explicitly
+      if (is_delayed && mic_plugins_available) {
+        if (trial === mic_request) return false;
+        if (trial === naming_intro_block) return false;
+        if (trial === naming_mic_check) return false;
+        // Skip the naming task loop block (it's the only other entry that starts with timeline)
+        if (Array.isArray(trial.timeline) && trial.timeline[0] === naming_prepare) return false;
+      }
+
       return true;
     });
-
+    
     // 5. Run the experiment
     jsPsych.data.addProperties({ 
         pid: currentPID(), 
