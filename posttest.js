@@ -1,5 +1,5 @@
 // VR Post-Test Battery
-// Version 1.0
+// Version 1.1 (fixed JSON parsing + timelineVariable usage)
 
 /* ========== GLOBAL STATE ========== */
 let jsPsych = null;
@@ -17,6 +17,15 @@ const asset = (p) => {
   return clean + (clean.includes("?") ? "&" : "?") + "v=" + ASSET_BUST;
 };
 
+// Safe object/JSON reader
+function asObject(x) {
+  if (!x) return {};
+  if (typeof x === 'string') {
+    try { return JSON.parse(x); } catch { return {}; }
+  }
+  return (typeof x === 'object') ? x : {};
+}
+
 /* ========== STIMULI DEFINITIONS ========== */
 // Picture naming stimuli (same as pre-test)
 const picture_naming_stimuli = [
@@ -29,7 +38,7 @@ const picture_naming_stimuli = [
 // Procedure steps for testing
 const PROCEDURE_STEPS = [
   'Crack eggs',
-  'Add flour', 
+  'Add flour',
   'Whisk mixture',
   'Heat pan',
   'Pour batter'
@@ -53,18 +62,19 @@ const transfer_words = [
 window.__START_POSTTEST = function(pid, isDelayed) {
   currentPID = pid || 'unknown';
   testCondition = isDelayed ? 'delayed' : 'immediate';
-  
+
   console.log(`Starting ${testCondition} post-test for participant ${currentPID}`);
-  
+
   // Hide picker UI
-  document.getElementById('picker').style.display = 'none';
-  
+  const picker = document.getElementById('picker');
+  if (picker) picker.style.display = 'none';
+
   // Initialize jsPsych
   if (!have('initJsPsych')) {
     alert('jsPsych not loaded. Please refresh and try again.');
     return;
   }
-  
+
   jsPsych = T('initJsPsych')({
     display_element: 'jspsych-target',
     show_progress_bar: true,
@@ -74,7 +84,7 @@ window.__START_POSTTEST = function(pid, isDelayed) {
       showCompletion();
     }
   });
-  
+
   // Build and run timeline
   const timeline = buildTimeline(isDelayed);
   jsPsych.run(timeline);
@@ -83,7 +93,7 @@ window.__START_POSTTEST = function(pid, isDelayed) {
 /* ========== TIMELINE BUILDER ========== */
 function buildTimeline(isDelayed) {
   const timeline = [];
-  
+
   // Welcome
   timeline.push({
     type: T('jsPsychHtmlButtonResponse'),
@@ -94,10 +104,10 @@ function buildTimeline(isDelayed) {
     `,
     choices: ['Begin']
   });
-  
+
   // Task 1: Procedural Knowledge Test
   timeline.push(buildProceduralTask());
-  
+
   // Task 2: Picture Naming (with microphone)
   if (have('jsPsychInitializeMicrophone') && have('jsPsychHtmlAudioResponse')) {
     timeline.push(...buildPictureNamingTask());
@@ -109,15 +119,15 @@ function buildTimeline(isDelayed) {
       choices: ['Continue']
     });
   }
-  
+
   // Task 3: Transfer/Recognition Test (IMMEDIATE ONLY)
   if (!isDelayed) {
     timeline.push(buildTransferTask());
   }
-  
-  // Task 4: Vocabulary Size Test  
+
+  // Task 4: Vocabulary Size Test
   timeline.push(buildVocabularyTask());
-  
+
   // End screen
   timeline.push({
     type: T('jsPsychHtmlButtonResponse'),
@@ -128,7 +138,7 @@ function buildTimeline(isDelayed) {
     `,
     choices: ['Finish']
   });
-  
+
   return timeline;
 }
 
@@ -149,30 +159,34 @@ function buildProceduralTask() {
       required: true
     })),
     button_label: 'Submit',
-    data: { 
+    data: {
       task: 'procedural_knowledge_post',
       condition: testCondition,
       pid: currentPID
     },
     on_finish: (data) => {
-      // Parse responses and calculate score
-      const responses = JSON.parse(data.response || '{}');
+      // Accept object or JSON-string formats from jsPsychSurveyText
+      const responses = asObject(data.response ?? data.responses);
       const positions = {};
       let score = 0;
-      
+
       PROCEDURE_STEPS.forEach((step, i) => {
         const val = parseInt(responses[`step_${i}`], 10);
-        positions[step] = val;
+        positions[step] = Number.isFinite(val) ? val : null;
       });
-      
-      // Simple scoring: check key constraints
-      if (positions['Crack eggs'] < positions['Whisk mixture']) score++;
-      if (positions['Add flour'] < positions['Whisk mixture']) score++;
-      if (positions['Whisk mixture'] < positions['Pour batter']) score++;
-      if (positions['Heat pan'] < positions['Pour batter']) score++;
-      
-      data.procedure_score = score / 4; // Normalize to 0-1
-      data.step_positions = positions;
+
+      // Simple scoring: check key constraints (with null checks)
+      if (positions['Crack eggs']    != null && positions['Whisk mixture'] != null &&
+          positions['Crack eggs']    <        positions['Whisk mixture']) score++;
+      if (positions['Add flour']     != null && positions['Whisk mixture'] != null &&
+          positions['Add flour']     <        positions['Whisk mixture']) score++;
+      if (positions['Whisk mixture'] != null && positions['Pour batter']   != null &&
+          positions['Whisk mixture'] <        positions['Pour batter'])    score++;
+      if (positions['Heat pan']      != null && positions['Pour batter']   != null &&
+          positions['Heat pan']      <        positions['Pour batter'])    score++;
+
+      data.procedure_score = score / 4; // 0–1
+      data.step_positions  = positions;
     }
   };
 }
@@ -180,13 +194,13 @@ function buildProceduralTask() {
 // Task 2: Picture Naming
 function buildPictureNamingTask() {
   const tasks = [];
-  
+
   // Initialize microphone
   tasks.push({
     type: T('jsPsychInitializeMicrophone'),
     data: { task: 'mic_init' }
   });
-  
+
   // Instructions
   tasks.push({
     type: T('jsPsychHtmlButtonResponse'),
@@ -198,7 +212,7 @@ function buildPictureNamingTask() {
     `,
     choices: ['Start']
   });
-  
+
   // Naming trials
   picture_naming_stimuli.forEach((stim, idx) => {
     // Show picture
@@ -206,7 +220,7 @@ function buildPictureNamingTask() {
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `
         <div style="text-align:center;">
-          <img src="${asset(stim.image)}" style="width:300px; height:auto;" 
+          <img src="${asset(stim.image)}" style="width:300px; height:auto;"
                onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22200%22><rect fill=%22%23ddd%22 width=%22300%22 height=%22200%22/><text x=%2250%%22 y=%2250%%22 text-anchor=%22middle%22>Image not found</text></svg>'">
           <p>Name this object in English</p>
         </div>
@@ -218,7 +232,7 @@ function buildPictureNamingTask() {
         trial_num: idx + 1
       }
     });
-    
+
     // Record response
     tasks.push({
       type: T('jsPsychHtmlAudioResponse'),
@@ -241,7 +255,7 @@ function buildPictureNamingTask() {
       }
     });
   });
-  
+
   return tasks;
 }
 
@@ -262,20 +276,21 @@ function buildTransferTask() {
     choices: ['YES', 'NO'],
     timeline_variables: transfer_words,
     randomize_order: true,
-    data: {
+    // IMPORTANT: data must be a function when using timelineVariable
+    data: () => ({
       task: 'transfer_test',
       word: jsPsych.timelineVariable('word'),
       correct_answer: jsPsych.timelineVariable('trained'),
       word_type: jsPsych.timelineVariable('type'),
       condition: testCondition,
       pid: currentPID
-    },
+    }),
     on_finish: (data) => {
       // Score the response
-      const said_yes = (data.response === 0); // YES button
+      const said_yes = (data.response === 0); // YES button index
       data.response_label = said_yes ? 'yes' : 'no';
       data.correct = (said_yes === data.correct_answer);
-      
+
       // Signal detection metrics
       if (data.correct_answer === true) {
         data.signal_type = said_yes ? 'hit' : 'miss';
@@ -297,7 +312,7 @@ function buildVocabularyTask() {
     { word: 'UBIQUITOUS', real: true },
     { word: 'MOXILATE', real: false },
   ];
-  
+
   return {
     type: T('jsPsychHtmlButtonResponse'),
     stimulus: () => {
@@ -313,13 +328,14 @@ function buildVocabularyTask() {
     choices: ['Real Word', 'Not a Word'],
     timeline_variables: vocab_items,
     randomize_order: true,
-    data: {
+    // IMPORTANT: data must be a function when using timelineVariable
+    data: () => ({
       task: 'vocabulary_test',
       word: jsPsych.timelineVariable('word'),
       correct_answer: jsPsych.timelineVariable('real'),
       condition: testCondition,
       pid: currentPID
-    },
+    }),
     on_finish: (data) => {
       const said_real = (data.response === 0);
       data.response_label = said_real ? 'real' : 'fake';
@@ -333,7 +349,7 @@ function saveData() {
   const data = jsPsych.data.get().values();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `posttest_${testCondition}_${currentPID}_${timestamp}.json`;
-  
+
   // Save to localStorage
   localStorage.setItem('posttest_latest', JSON.stringify({
     filename: filename,
@@ -342,7 +358,7 @@ function saveData() {
     timestamp: timestamp,
     data: data
   }));
-  
+
   // Download as file
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
@@ -352,13 +368,14 @@ function saveData() {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-  
+
   console.log(`Data saved: ${filename}`);
 }
 
 /* ========== COMPLETION SCREEN ========== */
 function showCompletion() {
   const target = document.getElementById('jspsych-target');
+  if (!target) return;
   target.innerHTML = `
     <div style="max-width:600px; margin:50px auto; text-align:center; padding:40px; 
                 background:white; border-radius:12px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
