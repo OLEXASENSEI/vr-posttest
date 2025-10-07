@@ -1,14 +1,13 @@
 /**
- * posttest.js — jsPsych v7 post-test
- * - Spoken picture naming (model -> 4s record), filenames tagged with phase=post
- * - 4AFC image choice, Foley audio choice
- * - Procedure ordering with partial-order scoring (no strict single sequence)
- * - Uses only v7-compatible plugins (no survey-html-form)
+ * posttest.js — jsPsych v7 post-test (FIXED)
+ * - Naming/Recording, 4AFC, Foley, Custom Procedure Task
+ * - Custom procedure task fixed to capture form inputs via JS/DOM manipulation.
  */
 
 (function(){
   /* ---------- Helpers & config ---------- */
-  const ASSET_BUST = Math.floor(Date.now() / 3600000);
+  // Use a random value for asset busting to prevent aggressive caching
+  const ASSET_BUST = Math.floor(Math.random() * 100000);
   const asset = (p) => `${p.replace(/^(\.\/|\/)/,'')}${p.includes('?')?'&':'?'}v=${ASSET_BUST}`;
 
   const have = (name) => typeof window[name] !== 'undefined';
@@ -80,9 +79,15 @@
   function shuffle(arr){ return arr.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(p=>p[1]); }
   function sample(arr,n){ return shuffle(arr).slice(0, Math.min(n, arr.length)); }
 
-  /* ---------- Init jsPsych ---------- */
+  /* ---------- Init jsPsych (Guarded and using provided global functions) ---------- */
+  if (!have('initJsPsych')) {
+    console.error('jsPsych core (initJsPsych) is not loaded. Cannot initialize experiment.');
+    return;
+  }
+  
   const jsPsych = T('initJsPsych')({
-    display_element: 'jspsych-target',
+    // Use the div ID for display
+    display_element: document.getElementById('jspsych-target'), 
     use_webaudio: true,
     show_progress_bar: true,
     message_progress_bar: 'Progress',
@@ -104,9 +109,7 @@
 
   /* ---------- Preload ---------- */
   const PRELOAD_AUDIO = [
-    // 4AFC images don’t need audio; Foley audio:
     ...FOLEY.map(f => asset(audioSrc(f.base))),
-    // Optional: model audios for naming (won't break if 404)
     ...TARGETS.map(t => asset(modelPronAudioFor(t.word)))
   ];
   const PRELOAD_IMAGES = TARGETS.map(t => asset(imageSrc(t.base)));
@@ -140,25 +143,27 @@
   const afc_button_labels = ['Picture 1','Picture 2','Picture 3','Picture 4'];
   const afc_trials = [];
   const targetsAFC = sample(TARGETS, TARGETS.length);
-  targetsAFC.forEach((t, idx) => {
-    const foils   = sample(TARGETS.filter(x => x.word !== t.word), 3);
-    const choices = shuffle([t, ...foils]).map(x => ({ word:x.word, img:imageSrc(x.base) }));
-    const correct_index = choices.findIndex(c => c.word === t.word);
-    const strip = choices.map(c => `
-      <div style="display:inline-block;margin:8px">
-        <img src="${asset(c.img)}" alt="${c.word}" style="height:140px;display:block;margin-bottom:6px;border:1px solid #ccc;padding:6px;border-radius:8px">
-      </div>`).join('');
-    afc_trials.push({
-      type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `<div style="text-align:center"><h3>Which picture matches: <em>${t.word}</em>?</h3><div>${strip}</div></div>`,
-      choices: afc_button_labels,
-      data: { task:'4afc', word:t.word, correct_index, item_index:idx, img_ver:CONFIG.img_ver },
-      on_finish: (data) => {
-        data.correct = (data.response === data.correct_index);
-        data.response_label = afc_button_labels[data.response];
-      }
+  if (have('jsPsychHtmlButtonResponse')) {
+    targetsAFC.forEach((t, idx) => {
+      const foils = sample(TARGETS.filter(x => x.word !== t.word), 3);
+      const choices = shuffle([t, ...foils]).map(x => ({ word:x.word, img:imageSrc(x.base) }));
+      const correct_index = choices.findIndex(c => c.word === t.word);
+      const strip = choices.map(c => `
+        <div style="display:inline-block;margin:8px">
+          <img src="${asset(c.img)}" alt="${c.word}" style="height:140px;display:block;margin-bottom:6px;border:1px solid #ccc;padding:6px;border-radius:8px">
+        </div>`).join('');
+      afc_trials.push({
+        type: T('jsPsychHtmlButtonResponse'),
+        stimulus: `<div style="text-align:center"><h3>Which picture matches: <em>${t.word}</em>?</h3><div>${strip}</div></div>`,
+        choices: afc_button_labels,
+        data: { task:'4afc', word:t.word, correct_index, item_index:idx, img_ver:CONFIG.img_ver },
+        on_finish: (data) => {
+          data.correct = (data.response === data.correct_index);
+          data.response_label = afc_button_labels[data.response];
+        }
+      });
     });
-  });
+  }
 
   // Spoken naming (model -> record)
   function naming_intro_block(total){
@@ -171,12 +176,14 @@
     };
   }
 
-  const mic_request = {
+  // --- Ensure jsPsychInitializeMicrophone is available ---
+  const mic_request = have('jsPsychInitializeMicrophone') ? {
     type: T('jsPsychInitializeMicrophone'),
     data: { task:'mic_init' },
-  };
+  } : null;
 
-  const naming_mic_check = {
+  // --- Ensure jsPsychHtmlAudioResponse is available ---
+  const naming_mic_check = have('jsPsychHtmlAudioResponse') ? {
     type: T('jsPsychHtmlAudioResponse'),
     stimulus: `<div style="max-width:640px;margin:0 auto;text-align:left">
       <h3>Microphone check / マイク確認</h3>
@@ -187,7 +194,7 @@
     allow_playback: true,
     accept_button_text: 'Sounds OK / 続行',
     data: { task:'mic_check' }
-  };
+  } : null;
 
   const naming_prepare = {
     type: T('jsPsychHtmlButtonResponse'),
@@ -289,37 +296,44 @@
       <p>Number the actions 1–5. <b>Multiple valid orders</b> exist, but some steps must precede others (e.g., whisk before pour).</p>`,
     choices: ['OK']
   };
+
+  // --- FIX: Custom procedure task to capture input values correctly ---
   const procedural_test = (() => {
     const stepsWithIndex = PROCEDURE_STEPS.map((s,i)=>({s, original_index:i}));
     const shuffled = shuffle(stepsWithIndex);
     const form = shuffled.map((obj, k) => `
-      <div style="margin:8px 0;padding:8px;border:1px solid #ddd;border-radius:8px">
+      <div style="margin:8px 0;padding:8px;border:1px solid #ddd;border-radius:8px" data-step-label="${obj.s}">
         <b>${obj.s}</b><br>
-        <label>Step number: <input type="number" name="ord_${k}" min="1" max="${PROCEDURE_STEPS.length}" required style="width: 80px;"></label>
+        <label>Step number: <input type="number" id="ord_${k}" min="1" max="${PROCEDURE_STEPS.length}" required style="width: 80px;"></label>
       </div>`).join('');
+      
     return {
       type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `<div style="text-align:left;max-width:720px;margin:0 auto">
+      stimulus: `<div id="proc-form" style="text-align:left;max-width:720px;margin:0 auto">
         <h3>Assign a step number (1–5) to each action.</h3>${form}
       </div>`,
       choices: ['Submit / 送信'],
       data: { task:'procedure' },
       on_finish: (data) => {
-        // Parse chosen positions from the displayed inputs
-        const container = document.createElement('div');
-        container.innerHTML = data.stimulus || '';
-        const inputs = [...container.querySelectorAll('input[type=number]')];
+        // Find the visible form and collect data manually
+        const proc_form = document.getElementById('proc-form');
         const pos = {};
-        inputs.forEach((inp, i) => {
-          const label = shuffled[i]?.s;
-          const v = parseInt(inp.getAttribute('value') || inp.value || ''); // jsPsych doesn't keep form state; leave nulls if empty
-          pos[label] = Number.isFinite(v) ? v : null;
+        
+        // Use the shuffled array to map input values back to step labels
+        shuffled.forEach((step_info, i) => {
+            const input_element = document.getElementById(`ord_${i}`);
+            const v = input_element ? parseInt(input_element.value) : null;
+            pos[step_info.s] = Number.isFinite(v) ? v : null;
         });
 
         // Score constraints
         let tot=0, ok=0, violations=[];
         PROC_CONSTRAINTS.forEach(([a,b]) => {
-          if (pos[a] && pos[b]) { tot++; if (pos[a] < pos[b]) ok++; else violations.push(`${a} → ${b}`); }
+          if (pos[a] !== null && pos[b] !== null) { 
+            tot++; 
+            if (pos[a] < pos[b]) ok++; 
+            else violations.push(`${a} → ${b}`); 
+          }
         });
 
         data.responses_positions   = pos;
@@ -330,6 +344,7 @@
       }
     };
   })();
+
 
   // Goodbye
   const goodbye = {
@@ -350,12 +365,18 @@
   timeline.push(...afc_trials);
 
   // Naming (mic init + intro + per-item)
-  timeline.push(mic_request, naming_intro_block(TARGETS.length), naming_mic_check);
-  timeline.push({
-    timeline: [naming_prepare, naming_record],
-    timeline_variables: TARGETS,
-    randomize_order: false
-  });
+  // Only push mic init/check if the plugins are available
+  if (mic_request && naming_mic_check) {
+      timeline.push(mic_request, naming_intro_block(TARGETS.length), naming_mic_check);
+      timeline.push({
+        timeline: [naming_prepare, naming_record],
+        timeline_variables: TARGETS,
+        randomize_order: false
+      });
+  } else {
+      console.error("Microphone plugins not loaded. Skipping naming task.");
+  }
+
 
   // Foley
   timeline.push(foley_intro, ...foley_trials);
@@ -368,8 +389,19 @@
 
   // public launcher called from HTML after PID entry
   window.__START_POSTTEST = () => {
+    // Hide the picker UI
+    document.getElementById('picker')?.style.display = 'none';
+    document.getElementById('explain')?.style.display = 'none';
+
+    // Create the target div if it doesn't exist (assuming you're using the old HTML)
+    let target = document.getElementById('jspsych-target');
+    if (!target) {
+        target = document.createElement('div');
+        target.id = 'jspsych-target';
+        document.body.appendChild(target);
+    }
+    
     jsPsych.data.addProperties({ pid: currentPID(), phase:'post' });
     jsPsych.run(timeline);
   };
 })();
-
