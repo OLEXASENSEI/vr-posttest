@@ -1,337 +1,88 @@
-/**
- * posttest.js — FINAL CODE (Guards and Dependencies Cleaned)
- * - Removed the incorrect dependency check on jsPsychSurveyHtmlForm.
- * - Assumes the syntax error is now fixed (from the previous step's ABto12 function).
- */
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VR Post‑Test</title>
+  <meta name="description" content="Immediate vs Delayed post-test"/>
+  <link rel="icon" href="data:,">
 
-(function(){
-  /* ---------- Helpers & config ---------- */
-  const ASSET_BUST = Math.floor(Math.random() * 100000);
-  const asset = (p) => {
-    const clean = p.replace(/^(\.\/|\/)/, "");
-    return clean + (clean.includes("?") ? "&" : "?") + "v=" + ASSET_BUST;
-  };
+  <!-- jsPsych CSS -->
+  <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet">
 
-  const have = (name) => typeof window[name] !== 'undefined';
-  const T = (name) => window[name];
+  <!-- 1) jsPsych core (unpkg base package + defer) -->
+  <script src="https://unpkg.com/jspsych@7.3.4" defer></script>
 
-  const PATHS = { img: 'img/', audio: 'sounds/', pron: 'pron/' }; 
-  const getParam = (k, fallback=null) => new URLSearchParams(location.search).get(k) ?? fallback;
-
-  function namingPhase(){
-    const p = getParam('phase','post');
-    return (p === 'pre') ? 'pre' : 'post';
-  }
-  function currentPID(){
-    return window.__POSTTEST_PID || 'unknown';
-  }
-  function modelPronAudioFor(target){
-    return `${PATHS.pron}${(target||'').toLowerCase()}.mp3`;
-  }
-
-  function verSuffix(v, pad2=true){ const n = parseInt(v,10)||1; return pad2? String(n).padStart(2,'0') : String(n); }
-  function ABto12(v, def=1){ if(!v) return def; const s=String(v).toUpperCase(); return s==='A'?1:s==='B'?2:(parseInt(s,10)||def); }
-
-  const CONFIG = {
-    img_ver: ABto12(getParam('imgver') ?? getParam('iset') ?? 1, 1),
-    aud_ver: ABto12(getParam('audver') ?? getParam('atok') ?? 1, 1),
-    img_ext: (getParam('imgext') || 'png').replace('.',''),
-    audio_ext: (getParam('audioext') || 'mp3').replace('.',''),
-    pad2img: (getParam('pad2img') ?? '1') === '1',
-    pad2audio: (getParam('pad2audio') ?? '0') === '1',
-    save_local: (getParam('localsave') || '1') === '1',
-  };
-
-  function imageSrc(base){
-    const suff = verSuffix(CONFIG.img_ver, CONFIG.pad2img);
-    return `${PATHS.img}${base}_${suff}.${CONFIG.img_ext}`;
-  }
-  function audioSrc(base){
-    const suff = verSuffix(CONFIG.aud_ver, CONFIG.pad2audio);
-    return `${PATHS.audio}${base}_${suff}.${CONFIG.audio_ext}`;
-  }
-
-  const TARGETS = [
-    { word:'bowl', base:'bowl' }, { word:'egg', base:'egg' }, { word:'flour', base:'flour' },
-    { word:'milk', base:'milk' }, { word:'sugar', base:'sugar' }, { word: 'whisk', base: 'whisk' },
-    { word:'spatula', base:'spatula' }, { word:'pan', base:'pan' }, { word:'butter', base:'butter' },
-    { word:'pancake', base:'pancake' },
-  ];
-
-  const FOLEY = [
-    { label:'sizzle (cooking on pan)', base:'sizzle' },
-    { label:'whisk (mixing in bowl)',  base:'whisk'  },
-    { label:'pour (liquid into bowl)', base:'pour'   },
-    { label:'crack (egg cracking)',    base:'crack'  },
-    { label:'flip (spatula flip)',     base:'flip'   },
-    { label:'spread (butter)',         base:'spread' },
-  ];
-
-  const PROCEDURE_STEPS = ['crack egg','add flour & milk','whisk batter','pour on pan','flip & serve'];
-  const PROC_CONSTRAINTS = [
-    ['crack egg','whisk batter'],
-    ['add flour & milk','whisk batter'],
-    ['whisk batter','pour on pan'],
-    ['pour on pan','flip & serve']
-  ];
-
-  function shuffle(arr){ return arr.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(p=>p[1]); }
-  function sample(arr,n){ return shuffle(arr).slice(0, Math.min(n, arr.length)); }
-
-  /* ---------- Init jsPsych (Guarded) ---------- */
-  if (!have('initJsPsych')) {
-    console.error('jsPsych core (initJsPsych) is not loaded. Cannot initialize experiment.');
-    return;
-  }
+  <!-- 2) jsPsych plugins (unpkg base package + defer) -->
+  <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.3" defer></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.3" defer></script>
+  <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.3" defer></script>
   
-  const jsPsych = T('initJsPsych')({
-    display_element: document.getElementById('jspsych-target'), 
-    use_webaudio: true,
-    show_progress_bar: true,
-    message_progress_bar: 'Progress',
-    default_iti: 300,
-    on_finish: () => {
-      if (CONFIG.save_local) {
-        try { jsPsych.data.get().localSave('json', `post_${currentPID()}.json`); } catch(e){}
-      }
-    }
-  });
-
-  // Unlock audio contexts on first user interaction (esp. iOS/Safari)
-  window.addEventListener('pointerdown', () => {
-    try {
-      const ctx = jsPsych?.pluginAPI?.getAudioContext?.();
-      if (ctx && ctx.state !== 'running') ctx.resume();
-    } catch {}
-  }, { once:true });
-
-  /* ---------- Preload ---------- */
-  if (!have('jsPsychPreload')) {
-    console.warn('Preload plugin not found. Skipping preload phase.');
-    var preload = { type:'html-keyboard-response', stimulus:'<p>Loading skipped.</p>', trial_duration: 1 };
-  } else {
-    const PRELOAD_AUDIO = [
-      ...FOLEY.map(f => asset(audioSrc(f.base))),
-      ...TARGETS.map(t => asset(modelPronAudioFor(t.word)))
-    ];
-    const PRELOAD_IMAGES = TARGETS.map(t => asset(imageSrc(t.base)));
-
-    var preload = {
-      type: T('jsPsychPreload'),
-      audio: PRELOAD_AUDIO,
-      images: PRELOAD_IMAGES,
-      max_load_time: 30000,
-      message: '<p>Loading post-test…</p>',
-      on_finish: d => {
-        const failed = (d.failed_audio||[]).concat(d.failed_images||[]);
-        if (failed.length) console.warn('Preload failed:', failed);
-      }
-    };
-  }
-
-
-  /* ---------- Trials (Guarded) ---------- */
-
-  var welcome = null;
-  var afc_trials = [];
-  var naming_intro_block = null;
-  var mic_request = null;
-  var naming_mic_check = null;
-  var naming_prepare = null;
-  var naming_record = null;
-  var foley_intro = null;
-  var foley_trials = [];
-  var procedural_instructions = null;
-  var procedural_test = null;
-  var goodbye = null;
+  <!-- **REMOVED** The problematic survey-html-form link is now GONE. -->
   
-  const mic_plugins_available = have('jsPsychInitializeMicrophone') && have('jsPsychHtmlAudioResponse');
+  <script src="https://unpkg.com/@jspsych/plugin-audio-button-response@1.1.3" defer></script>
   
-  // Welcome
-  if (have('jsPsychHtmlButtonResponse')) {
-    welcome = {
-      type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `<div style="max-width:780px;margin:0 auto;text-align:left">
-        <h2>VR Study — Post-Test</h2>
-        <p>We’ll run a short test: picture choice, spoken naming, Foley matching, and recipe ordering.</p>
-        <p>Click <b>Begin</b> to start.</p>
-      </div>`,
-      choices: ['Begin']
-    };
+  <!-- NEW PLUGINS REQUIRED FOR MIC/AUDIO TASKS -->
+  <script src="https://unpkg.com/@jspsych/plugin-initialize-microphone@1.0.3" defer></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.3" defer></script>
 
-    // 4AFC (Fixed for Validity)
-    const afc_button_labels = ['Picture 1','Picture 2','Picture 3','Picture 4'];
-    const targetsAFC = sample(TARGETS, TARGETS.length);
-    targetsAFC.forEach((t, idx) => {
-      const foils = sample(TARGETS.filter(x => x.word !== t.word), 3);
-      const choices = shuffle([t, ...foils]).map(x => ({ word:x.word, img:imageSrc(x.base) }));
-      const correct_choice_index = choices.findIndex(c => c.word === t.word);
-      const strip = choices.map(c => `<div style="display:inline-block;margin:8px"><img src="${asset(c.img)}" alt="${c.word}" style="height:140px;display:block;margin-bottom:6px;border:1px solid #ccc;padding:6px;border-radius:8px"></div>`).join('');
-      afc_trials.push({
-        type: T('jsPsychHtmlButtonResponse'),
-        stimulus: `<div style="text-align:center"><h3>Which picture matches: <em>${t.word}</em>?</h3><div>${strip}</div></div>`,
-        choices: afc_button_labels, 
-        data: { task:'4afc', word:t.word, correct_index:correct_choice_index, item_index:idx, img_ver:CONFIG.img_ver },
-        on_finish: (data) => {
-          data.correct = (data.response === data.correct_index);
-          data.response_label = afc_button_labels[data.response];
-        }
-      });
+  <style>
+    /* ... (CSS is unchanged) ... */
+    :root { --bg:#fafafa; --card:#fff; --line:#e5e5e5; --muted:#666; }
+    body { background:var(--bg); font:16px/1.5 system-ui, sans-serif; margin:0; padding:0; }
+    .wrap { max-width:760px; margin:10vh auto; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.06); padding:24px; }
+    h1 { margin:0 0 6px; font-size:24px; }
+    .hint { color:var(--muted); font-size:13px; }
+    .btn { display:inline-block; padding:12px 16px; margin:8px 8px 0 0; border:1px solid var(--line); border-radius:10px; background:#fff; cursor:pointer; font-size:14px; }
+    .btn:hover { background:#f5f5f5; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:10px 0 16px; }
+    input[type=text] { padding:8px 10px; border:1px solid var(--line); border-radius:8px; width:160px; font-size:14px; }
+    #jspsych-target { min-height: 50vh; }
+  </style>
+</head>
+<body>
+  <!-- Picker UI -->
+  <div class="wrap" id="picker">
+    <h1>VR Post‑Test</h1>
+    <p class="hint">Pick <b>Immediate</b> or <b>Delayed</b>.</p>
+    <div class="row">
+      <label for="pid">Participant ID:</label>
+      <input id="pid" type="text" value="S01"/>
+    </div>
+    <p>
+      <button class="btn" id="btn-immediate">Start: Immediate</button>
+      <button class="btn" id="btn-delayed">Start: Delayed</button>
+    </p>
+    <p class="hint">(Immediate: 4 tasks · Delayed: 3 tasks)</p>
+  </div>
+
+  <!-- Hidden div where jsPsych content will be rendered -->
+  <div id="jspsych-target"></div>
+
+  <!-- Explanation (optional) -->
+  <div class="wrap" id="explain" style="display:none">
+    <p>Study details…</p>
+  </div>
+
+  <noscript>
+    <div class="wrap"><p>Please enable JavaScript to run this study.</p></div>
+  </noscript>
+
+  <!-- 3) Your post-test logic -->
+  <script src="posttest.js" defer></script>
+
+  <!-- 4) Wire the buttons last -->
+  <script defer>
+    document.addEventListener('DOMContentLoaded', () => {
+        const getPid = () => document.getElementById('pid')?.value.trim() || `S_${Date.now()}`;
+
+        document.getElementById('btn-immediate')?.addEventListener('click', () => {
+            window.__START_POSTTEST(getPid(), false); 
+        });
+        document.getElementById('btn-delayed')?.addEventListener('click', () => {
+            window.__START_POSTTEST(getPid(), true); 
+        });
     });
-    
-    // Goodbye
-    goodbye = {
-      type: T('jsPsychHtmlButtonResponse'),
-      stimulus: () => `<div style="max-width:720px;margin:0 auto;text-align:left"><h3>All done!</h3><p>Thank you. Your responses have been recorded.</p><p style="font-size:.9em;color:#666">Participant: <code>${currentPID()}</code> · Phase: <code>${namingPhase()}</code></p></div>`,
-      choices: ['Finish']
-    };
-  }
-
-  // Naming (mic init + intro + per-item)
-  if (mic_plugins_available) {
-      naming_intro_block = { type: T('jsPsychHtmlButtonResponse'), stimulus: `<h2>Picture Naming / 絵の命名</h2><p>For each picture: (1) optionally hear a model, (2) record your pronunciation (4s).</p><p style="color:#666">Pictures: ${TARGETS.length}</p>`, choices: ['Begin'] };
-      mic_request = { type: T('jsPsychInitializeMicrophone'), data: { task:'mic_init' } };
-      naming_mic_check = { type: T('jsPsychHtmlAudioResponse'), stimulus: `<div style="max-width:640px;margin:0 auto;text-align:left"><h3>Microphone check / マイク確認</h3><p>Say “test” for ~2 seconds, then play it back.</p></div>`, recording_duration: 2000, show_done_button: true, allow_playback: true, accept_button_text: 'Sounds OK / 続行', data: { task:'mic_check' } };
-      naming_prepare = {
-        type: T('jsPsychHtmlButtonResponse'),
-        stimulus: () => {
-          const img   = imageSrc(jsPsych.timelineVariable('base'));
-          const tgt   = jsPsych.timelineVariable('word') || '';
-          const imgHTML = `<img src="${asset(img)}" style="width:350px;border-radius:8px;" />`;
-          return `<div style="text-align:center;">${imgHTML}<div style="margin-top:12px;"><button id="play-model" class="jspsych-btn" style="margin-right:8px;">▶️ Model</button><span id="model-status" style="font-size:13px;color:#666">Optional</span></div><p style="margin-top:16px;">When ready, click <b>Start recording</b> and say the English name.</p></div>`;
-        },
-        choices: ['Start recording / 録音開始'], post_trial_gap: 150, data: () => ({ task:'picture_naming_prepare', target:jsPsych.timelineVariable('word'), image_base:jsPsych.timelineVariable('base') }),
-        on_load: () => {
-          const tgt = jsPsych.timelineVariable('word') || ''; const model = modelPronAudioFor(tgt); const btn = document.getElementById('play-model'); const stat = document.getElementById('model-status');
-          let a = new Audio(); let ready = false; const onCan = () => { ready = true; stat.textContent = 'Ready'; }; const onErr = () => { ready = false; stat.textContent = 'Not available'; btn.disabled = true; };
-          a.preload = 'auto'; a.addEventListener('canplaythrough', onCan); a.addEventListener('error', onErr); a.src = asset(model);
-          btn?.addEventListener('click', () => { if(!ready) return; try { a.currentTime=0; a.play(); stat.textContent='Playing…'; } catch(e){} });
-        }
-      };
-      naming_record = {
-        type: T('jsPsychHtmlAudioResponse'), stimulus: () => { const img = imageSrc(jsPsych.timelineVariable('base')); return `<div style="text-align:center;"><img src="${asset(img)}" style="width:350px;border-radius:8px;" /><p style="margin-top:16px; color:#d32f2f; font-weight:bold;">🔴 Recording… speak now!</p></div>`; },
-        recording_duration: 4000, show_done_button: false, allow_playback: false,
-        data: () => ({ task:'picture_naming_audio', target: jsPsych.timelineVariable('word'), image_base: jsPsych.timelineVariable('base'), phase: namingPhase(), pid_snapshot: currentPID() }),
-        on_finish: (d) => {
-          const pid = d.pid_snapshot || currentPID(); const tgt = (d.target || 'unknown').toLowerCase(); const idx = typeof d.trial_index === 'number' ? String(d.trial_index) : 'x'; const phase = d.phase || namingPhase(); d.audio_filename = `${phase}_${pid}_${tgt}_${idx}.wav`;
-          try {
-            const blob = (d.response && d.response instanceof Blob) ? d.response : (d.response?.recording && d.response.recording instanceof Blob) ? d.response.recording : null;
-            if (blob) d.audio_blob_url = URL.createObjectURL(blob);
-          } catch(e){}
-        }
-      };
-  } else {
-      console.warn("Microphone plugins not loaded. Skipping naming task.");
-  }
-  
-  // Foley (audio multiple-choice)
-  if (have('jsPsychAudioButtonResponse')) {
-      foley_intro = { type: T('jsPsychHtmlButtonResponse'), stimulus: `<h2>Sound Matching / 音のマッチング</h2><p>Play the sound and choose what it represents.</p>`, choices: ['Begin'] };
-      foley_trials = FOLEY.map((f, idx) => {
-        const foils = sample(FOLEY.filter(x => x.base !== f.base), 3); const choices = shuffle([f.label, ...foils.map(x => x.label)]); const correct_index = choices.findIndex(l => l === f.label);
-        return { type: T('jsPsychAudioButtonResponse'), stimulus: audioSrc(f.base), choices, prompt: '<p>Listen, then choose the best meaning.</p>', trial_ends_after_audio: false, response_allowed_while_playing: false, data: { task:'foley', file:audioSrc(f.base), correct_index, item_index:idx, aud_ver:CONFIG.aud_ver }, on_finish: (d) => { d.correct = (d.response === correct_index); } };
-      });
-  } else {
-      console.warn("Audio Button Response plugin not loaded. Skipping Foley task.");
-  }
-
-  // Procedure (partial-order scoring)
-  if (have('jsPsychHtmlButtonResponse')) {
-      procedural_instructions = { type: T('jsPsychHtmlButtonResponse'), stimulus: `<h3>Recipe Ordering</h3><p>Number the actions 1–5. <b>Multiple valid orders</b> exist, but some steps must precede others (e.g., whisk before pour).</p>`, choices: ['OK'] };
-      
-      procedural_test = (() => {
-        const stepsWithIndex = PROCEDURE_STEPS.map((s,i)=>({s, original_index:i}));
-        const shuffled = shuffle(stepsWithIndex);
-        const form = shuffled.map((obj, k) => `<div style="margin:8px 0;padding:8px;border:1px solid #ddd;border-radius:8px" data-step-label="${obj.s}"><b>${obj.s}</b><br><label>Step number: <input type="number" id="ord_${k}" min="1" max="${PROCEDURE_STEPS.length}" required style="width: 80px;"></label></div>`).join('');
-          
-        return {
-          type: T('jsPsychHtmlButtonResponse'), stimulus: `<div id="proc-form" style="text-align:left;max-width:720px;margin:0 auto"><h3>Assign a step number (1–5) to each action.</h3>${form}</div>`, choices: ['Submit / 送信'], data: { task:'procedure' },
-          on_finish: (data) => {
-            const pos = {};
-            shuffled.forEach((step_info, i) => {
-                const input_element = document.getElementById(`ord_${i}`);
-                const v = input_element ? parseInt(input_element.value) : null;
-                pos[step_info.s] = Number.isFinite(v) ? v : null;
-            });
-            let tot=0, ok=0, violations=[]; PROC_CONSTRAINTS.forEach(([a,b]) => { if (pos[a] !== null && pos[b] !== null) { tot++; if (pos[a] < pos[b]) ok++; else violations.push(`${a} → ${b}`); } });
-            data.responses_positions = pos; data.constraints_total = tot; data.constraints_satisfied = ok; data.partial_order_score = (tot>0) ? ok/tot : null; data.violations = violations;
-          }
-        };
-      })();
-  } else {
-      console.warn("HTML Button Response plugin not loaded. Skipping procedure task.");
-  }
-  
-  /* ---------- Timeline ---------- */
-  const timeline = [];
-  
-  if (preload) timeline.push(preload);
-  if (welcome) timeline.push(welcome);
-
-  // 4AFC
-  timeline.push(...afc_trials);
-
-  // Naming (mic init + intro + per-item)
-  if (mic_plugins_available) {
-    timeline.push(mic_request, naming_intro_block, naming_mic_check);
-    timeline.push({
-      timeline: [naming_prepare, naming_record],
-      timeline_variables: TARGETS,
-      randomize_order: false
-    });
-  }
-
-  // Foley
-  if (foley_intro) timeline.push(foley_intro, ...foley_trials);
-
-  // Procedure
-  if (procedural_instructions) timeline.push(procedural_instructions, procedural_test);
-
-  // Goodbye
-  if (goodbye) timeline.push(goodbye);
-
-  /* ---------- Public Launcher (called from HTML) ---------- */
-  window.__START_POSTTEST = (pid_value, is_delayed = false) => {
-    // 1. Set global PID from the HTML picker
-    window.__POSTTEST_PID = pid_value || 'S00';
-
-    // 2. Hide the picker UI
-    document.getElementById('picker')?.style.display = 'none';
-    document.getElementById('explain')?.style.display = 'none';
-
-    // 3. Ensure target div exists and clear it
-    let target = document.getElementById('jspsych-target');
-    if (!target) {
-        target = document.createElement('div');
-        target.id = 'jspsych-target';
-        document.body.appendChild(target);
-    }
-    target.innerHTML = ''; 
-    
-    // 4. Filter timeline based on 'is_delayed' flag
-    const final_timeline = timeline.filter(trial => {
-      // Logic for removing the procedure task for the delayed condition
-      if (is_delayed && trial === procedural_instructions) return false;
-      if (is_delayed && trial === procedural_test) return false;
-      
-      // Also remove all Naming tasks (mic init, intro, check, and loop) if they exist
-      // Since mic tasks are already guarded by mic_plugins_available, we can remove them explicitly
-      if (is_delayed && mic_plugins_available) {
-        if (trial === mic_request) return false;
-        if (trial === naming_intro_block) return false;
-        if (trial === naming_mic_check) return false;
-        // Skip the naming task loop block (it's the only other entry that starts with timeline)
-        if (Array.isArray(trial.timeline) && trial.timeline[0] === naming_prepare) return false;
-      }
-
-      return true;
-    });
-    
-    // 5. Run the experiment
-    jsPsych.data.addProperties({ 
-        pid: currentPID(), 
-        phase: is_delayed ? 'post_delayed' : 'post_immediate' 
-    });
-    jsPsych.run(final_timeline);
-  };
-})();
+  </script>
+</body>
+</html>
