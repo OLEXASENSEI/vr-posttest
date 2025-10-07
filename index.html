@@ -18,6 +18,8 @@
   <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.3" defer></script>
   <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.3" defer></script>
   
+  <!-- **REMOVED:** The problematic survey-html-form link is now GONE. -->
+  
   <script src="https://unpkg.com/@jspsych/plugin-audio-button-response@1.1.3" defer></script>
   
   <!-- NEW PLUGINS REQUIRED FOR MIC/AUDIO TASKS -->
@@ -25,6 +27,7 @@
   <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.3" defer></script>
 
   <style>
+    /* ... (CSS is unchanged) ... */
     :root { --bg:#fafafa; --card:#fff; --line:#e5e5e5; --muted:#666; }
     body { background:var(--bg); font:16px/1.5 system-ui, sans-serif; margin:0; padding:0; }
     .wrap { max-width:760px; margin:10vh auto; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.06); padding:24px; }
@@ -34,7 +37,6 @@
     .btn:hover { background:#f5f5f5; }
     .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:10px 0 16px; }
     input[type=text] { padding:8px 10px; border:1px solid var(--line); border-radius:8px; width:160px; font-size:14px; }
-    /* New target div style for jsPsych output */
     #jspsych-target { min-height: 50vh; }
   </style>
 </head>
@@ -66,22 +68,18 @@
     <div class="wrap"><p>Please enable JavaScript to run this study.</p></div>
   </noscript>
 
-  <!-- 3) Your post-test logic (now named posttest.js to match the internal script) -->
+  <!-- 3) Your post-test logic -->
   <script src="posttest.js" defer></script>
 
-  <!-- 4) Wire the buttons last (calls the function exposed by posttest.js) -->
+  <!-- 4) Wire the buttons last -->
   <script defer>
     document.addEventListener('DOMContentLoaded', () => {
-        // Set the global PID for use by the JS functions
         const getPid = () => document.getElementById('pid')?.value.trim() || `S_${Date.now()}`;
 
-        // The JS file exposes the start function globally: window.__START_POSTTEST
         document.getElementById('btn-immediate')?.addEventListener('click', () => {
-            // false = not delayed
             window.__START_POSTTEST(getPid(), false); 
         });
         document.getElementById('btn-delayed')?.addEventListener('click', () => {
-            // true = delayed
             window.__START_POSTTEST(getPid(), true); 
         });
     });
