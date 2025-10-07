@@ -5,38 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>VR Post‑Test</title>
   <meta name="description" content="Immediate vs Delayed post-test"/>
+  <link rel="icon" href="data:,">
 
   <!-- jsPsych CSS -->
   <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet">
 
-  <!-- 1) jsPsych core (UMD bundle) -->
+  <!-- 1) jsPsych core (unpkg base package + defer) -->
   <script src="https://unpkg.com/jspsych@7.3.4" defer></script>
 
-  <!-- 2) jsPsych plugins (UMD bundles) -->
+  <!-- 2) jsPsych plugins (unpkg base package + defer) -->
   <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.3" defer></script>
   <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.3" defer></script>
   <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.3" defer></script>
+  
+  <!-- NOTE: This specific plugin is the one we fixed with the local hosting logic -->
+  <script src="js/survey-html-form.js" defer></script> 
+  
   <script src="https://unpkg.com/@jspsych/plugin-audio-button-response@1.1.3" defer></script>
+  
+  <!-- NEW PLUGINS REQUIRED FOR MIC/AUDIO TASKS -->
+  <script src="https://unpkg.com/@jspsych/plugin-initialize-microphone@1.0.3" defer></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.3" defer></script>
 
   <style>
     :root { --bg:#fafafa; --card:#fff; --line:#e5e5e5; --muted:#666; }
     body { background:var(--bg); font:16px/1.5 system-ui, sans-serif; margin:0; padding:0; }
-    .wrap { max-width:760px; margin:10vh auto; background:var(--card); border:1px solid var(--line); border-radius:12px; 
-            box-shadow:0 6px 20px rgba(0,0,0,.06); padding:24px; }
+    .wrap { max-width:760px; margin:10vh auto; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.06); padding:24px; }
     h1 { margin:0 0 6px; font-size:24px; }
     .hint { color:var(--muted); font-size:13px; }
-    .btn { display:inline-block; padding:12px 16px; margin:8px 8px 0 0; border:1px solid var(--line); border-radius:10px; 
-           background:#fff; cursor:pointer; font-size:14px; }
+    .btn { display:inline-block; padding:12px 16px; margin:8px 8px 0 0; border:1px solid var(--line); border-radius:10px; background:#fff; cursor:pointer; font-size:14px; }
     .btn:hover { background:#f5f5f5; }
     .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:10px 0 16px; }
     input[type=text] { padding:8px 10px; border:1px solid var(--line); border-radius:8px; width:160px; font-size:14px; }
+    /* New target div style for jsPsych output */
+    #jspsych-target { min-height: 50vh; }
   </style>
 </head>
 <body>
-  <!-- Participant picker -->
+  <!-- Picker UI -->
   <div class="wrap" id="picker">
     <h1>VR Post‑Test</h1>
-    <p class="hint">Pick <b>Immediate</b> or <b>Delayed</b>. This page runs the entire study—no other files needed.</p>
+    <p class="hint">Pick <b>Immediate</b> or <b>Delayed</b>.</p>
     <div class="row">
       <label for="pid">Participant ID:</label>
       <input id="pid" type="text" value="S01"/>
@@ -48,7 +57,10 @@
     <p class="hint">(Immediate: 4 tasks · Delayed: 3 tasks)</p>
   </div>
 
-  <!-- Optional explanation (hidden once test starts) -->
+  <!-- Hidden div where jsPsych content will be rendered -->
+  <div id="jspsych-target"></div>
+
+  <!-- Explanation (optional) -->
   <div class="wrap" id="explain" style="display:none">
     <p>Study details…</p>
   </div>
@@ -57,18 +69,24 @@
     <div class="wrap"><p>Please enable JavaScript to run this study.</p></div>
   </noscript>
 
-  <!-- 3) Main experiment logic -->
+  <!-- 3) Your post-test logic (now named posttest.js to match the internal script) -->
   <script src="posttest.js" defer></script>
 
-  <!-- 4) Wire the buttons last: set PID & launch -->
+  <!-- 4) Wire the buttons last (calls the function exposed by posttest.js) -->
   <script defer>
-    document.getElementById('btn-immediate')?.addEventListener('click', () => {
-      window.__POSTTEST_PID = document.getElementById('pid')?.value.trim() || `P_${Date.now()}`;
-      __START_POSTTEST({ delayed:false });
-    });
-    document.getElementById('btn-delayed')?.addEventListener('click', () => {
-      window.__POSTTEST_PID = document.getElementById('pid')?.value.trim() || `P_${Date.now()}`;
-      __START_POSTTEST({ delayed:true });
+    document.addEventListener('DOMContentLoaded', () => {
+        // Set the global PID for use by the JS functions
+        const getPid = () => document.getElementById('pid')?.value.trim() || `S_${Date.now()}`;
+
+        // The JS file exposes the start function globally: window.__START_POSTTEST
+        document.getElementById('btn-immediate')?.addEventListener('click', () => {
+            // false = not delayed
+            window.__START_POSTTEST(getPid(), false); 
+        });
+        document.getElementById('btn-delayed')?.addEventListener('click', () => {
+            // true = delayed
+            window.__START_POSTTEST(getPid(), true); 
+        });
     });
   </script>
 </body>
