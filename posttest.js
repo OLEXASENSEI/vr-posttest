@@ -1,23 +1,22 @@
-// VR Post-Test Battery
-// Version 1.2 (assets fixed to your actual PNG/MP3 filenames; safer timelineVariable usage + JSON parsing)
+// VR Post-Test Battery - Fixed Version 2.0
+// Focuses on: Recall, Retention, Intelligibility
 
 /* ========== GLOBAL STATE ========== */
 let jsPsych = null;
 let currentPID = 'unknown';
-let testCondition = 'immediate'; // or 'delayed'
+let testCondition = 'immediate';
+let microphoneAvailable = false;
 
 /* ========== HELPERS ========== */
 const have = (name) => typeof window[name] !== 'undefined';
 const T = (name) => window[name];
 
-// Asset helper with cache busting
 const ASSET_BUST = Math.floor(Math.random() * 100000);
 const asset = (p) => {
   const clean = p.replace(/^(\.\/|\/)/, "");
   return clean + (clean.includes("?") ? "&" : "?") + "v=" + ASSET_BUST;
 };
 
-// Safe object/JSON reader
 function asObject(x) {
   if (!x) return {};
   if (typeof x === 'string') {
@@ -26,8 +25,9 @@ function asObject(x) {
   return (typeof x === 'object') ? x : {};
 }
 
-// Your actual asset variants on disk
+/* ========== ASSET DEFINITIONS ========== */
 const IMG = {
+  // Objects
   bowl:    ['img/bowl_01.png','img/bowl_02.png'],
   egg:     ['img/egg_01.png','img/egg_02.png'],
   flour:   ['img/flour_01.png','img/flour_02.png'],
@@ -35,9 +35,15 @@ const IMG = {
   butter:  ['img/butter_01.png','img/butter_02.png'],
   milk:    ['img/milk_01.png','img/milk_02.png'],
   pan:     ['img/pan_01.png','img/pan_02.png'],
-  pancake: ['img/pancake_01.png','img/pancake_02.png'],
-  sugar:   ['img/sugar_01.png','img/sugar_02.png'],
   whisk:   ['img/whisk_01.png','img/whisk_02.png'],
+  
+  // Actions - YOU NEED TO ADD THESE FILES
+  mixing:   ['img/mixing_01.png','img/mixing_02.png'],
+  cracking: ['img/cracking_01.png','img/cracking_02.png'],
+  pouring:  ['img/pouring_01.png','img/pouring_02.png'],
+  flipping: ['img/flipping_01.png','img/flipping_02.png'],
+  heating:  ['img/heating_01.png','img/heating_02.png'],
+  sizzling: ['img/pan_01.png','img/pan_02.png'], // reuse pan for sizzling
 };
 
 const SND = {
@@ -51,7 +57,6 @@ const SND = {
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-// (Optional) tiny sfx helper
 function playOne(key){
   try {
     const opts = SND[key];
@@ -62,24 +67,43 @@ function playOne(key){
 }
 
 /* ========== STIMULI DEFINITIONS ========== */
-// Picture naming stimuli (logical targets; actual file picked at runtime)
+// Picture naming - Objects AND Actions
 const picture_naming_stimuli = [
+  // Objects
   { target: 'bowl',    category: 'utensil'    },
   { target: 'egg',     category: 'ingredient' },
   { target: 'flour',   category: 'ingredient' },
   { target: 'spatula', category: 'utensil'    },
+  { target: 'pan',     category: 'utensil'    },
+  { target: 'butter',  category: 'ingredient' },
+  
+  // Actions/Verbs
+  { target: 'mixing',   category: 'action' },
+  { target: 'cracking', category: 'action' },
+  { target: 'pouring',  category: 'action' },
+  { target: 'flipping', category: 'action' },
+  { target: 'heating',  category: 'action' },
+  { target: 'sizzling', category: 'process' },
 ];
 
-// Procedure steps (clear wording)
+// Foley sounds for post-test
+const foley_stimuli = [
+  { audio: 'crack',  options: ['stirring', 'cracking'], correct: 1 },
+  { audio: 'whisk',  options: ['mixing', 'pouring'],    correct: 0 },
+  { audio: 'pour',   options: ['pouring', 'flipping'],  correct: 0 },
+  { audio: 'sizzle', options: ['cold batter', 'cooking on pan'], correct: 1 },
+];
+
+// Procedure steps
 const PROCEDURE_STEPS = [
-  'Crack the eggs into the bowl',
-  'Add flour to the bowl',
-  'Whisk the mixture until smooth',
+  'Crack eggs',
+  'Mix flour and eggs',
   'Heat the pan',
-  'Pour the batter onto the pan'
+  'Pour batter on pan',
+  'Flip when ready'
 ];
 
-// Transfer test words (recognition)
+// Transfer test (immediate only)
 const transfer_words = [
   { word: 'bowl', type: 'target', trained: true },
   { word: 'egg', type: 'target', trained: true },
@@ -98,27 +122,24 @@ window.__START_POSTTEST = function(pid, isDelayed) {
 
   console.log(`Starting ${testCondition} post-test for participant ${currentPID}`);
 
-  // Hide picker UI
   const picker = document.getElementById('picker');
   if (picker) picker.style.display = 'none';
 
-  // Initialize jsPsych
   if (!have('initJsPsych')) {
-    alert('jsPsych not loaded. Please refresh and try again.');
+    alert('jsPsych not loaded. Please refresh.');
     return;
   }
 
   jsPsych = T('initJsPsych')({
     display_element: 'jspsych-target',
     show_progress_bar: true,
-    message_progress_bar: 'Progress',
+    message_progress_bar: 'Progress / 進捗',
     on_finish: () => {
       saveData();
       showCompletion();
     }
   });
 
-  // Build and run timeline
   const timeline = buildTimeline(isDelayed);
   jsPsych.run(timeline);
 };
@@ -131,246 +152,377 @@ function buildTimeline(isDelayed) {
   timeline.push({
     type: T('jsPsychHtmlButtonResponse'),
     stimulus: `
-      <h2>Post-Test (${testCondition})</h2>
-      <p>Participant: ${currentPID}</p>
-      <p>You will complete ${isDelayed ? '3' : '4'} tasks.</p>
+      <h2>Post-Test / ポストテスト</h2>
+      <p><strong>Participant:</strong> ${currentPID}</p>
+      <p><strong>Condition:</strong> ${testCondition}</p>
+      <p>This will take approximately ${isDelayed ? '15-20' : '20-25'} minutes.</p>
+      <p>Focus on: <b>Recall, Retention, and Pronunciation</b></p>
     `,
-    choices: ['Begin']
+    choices: ['Begin / 開始']
   });
 
-  // Task 1: Procedural Knowledge Test
-  timeline.push(buildProceduralTask());
+  // Task 1: Open-Ended Procedural Recall
+  timeline.push(buildProceduralRecallTask());
 
-  // Task 2: Picture Naming (with microphone)
+  // Task 2: Foley Sound Recognition
+  timeline.push(buildFoleyTask());
+
+  // Task 3: Picture Naming (Objects + Actions)
   if (have('jsPsychInitializeMicrophone') && have('jsPsychHtmlAudioResponse')) {
     timeline.push(...buildPictureNamingTask());
   } else {
-    console.warn('Microphone plugins not available, skipping picture naming');
-    timeline.push({
-      type: T('jsPsychHtmlButtonResponse'),
-      stimulus: '<p>Picture naming task skipped (microphone plugins not available)</p>',
-      choices: ['Continue']
-    });
+    console.warn('Microphone plugins not available');
   }
 
-  // Task 3: Transfer/Recognition Test (IMMEDIATE ONLY)
+  // Task 4: Transfer/Recognition (Immediate only)
   if (!isDelayed) {
     timeline.push(buildTransferTask());
   }
 
-  // Task 4: Vocabulary Size Test
-  timeline.push(buildVocabularyTask());
-
-  // End screen
-  timeline.push({
-    type: T('jsPsychHtmlButtonResponse'),
-    stimulus: `
-      <h2>Complete!</h2>
-      <p>Thank you for completing the post-test.</p>
-      <p>Your data has been saved.</p>
-    `,
-    choices: ['Finish']
-  });
+  // Task 5: Post-Training Questionnaire
+  timeline.push(buildPostQuestionnaire());
 
   return timeline;
 }
 
 /* ========== TASK BUILDERS ========== */
 
-// Task 1: Procedural Knowledge (constraint scoring keeps flexibility)
-function buildProceduralTask() {
+// Task 1: OPEN-ENDED Procedural Recall
+function buildProceduralRecallTask() {
+  const randomizedSteps = jsPsych.randomization.shuffle([...PROCEDURE_STEPS]);
+  
   return {
     type: T('jsPsychSurveyText'),
     preamble: `
-      <h3>Recipe Order Task</h3>
-      <p>Number these pancake-making steps from <b>1</b> (first) to <b>5</b> (last):</p>
+      <h3>Recipe Memory Test / レシピ記憶テスト</h3>
+      <p>Write the pancake-making steps in the correct order (1–5).</p>
+      <p>Write what you remember - spelling doesn't have to be perfect.</p>
+      <p>パンケーキの作り方を順番に書いてください（1–5）。</p>
     `,
-    questions: PROCEDURE_STEPS.map((step, i) => ({
-      prompt: `<b>${step}</b>`,
-      name: `step_${i}`,
-      placeholder: 'Enter 1–5',
-      required: true
-    })),
-    button_label: 'Submit',
+    questions: [
+      { prompt: '<b>Step 1 (First / 最初):</b>', name: 'step_1', placeholder: 'What happens first?', required: true },
+      { prompt: '<b>Step 2:</b>', name: 'step_2', placeholder: '', required: true },
+      { prompt: '<b>Step 3:</b>', name: 'step_3', placeholder: '', required: true },
+      { prompt: '<b>Step 4:</b>', name: 'step_4', placeholder: '', required: true },
+      { prompt: '<b>Step 5 (Last / 最後):</b>', name: 'step_5', placeholder: 'What happens last?', required: true },
+    ],
+    button_label: 'Submit / 送信',
     data: {
-      task: 'procedural_knowledge_post',
+      task: 'procedural_recall_open_ended',
       condition: testCondition,
-      pid: currentPID
+      pid: currentPID,
+      correct_steps: PROCEDURE_STEPS
     },
     on_finish: (data) => {
       const responses = asObject(data.response ?? data.responses);
-      const positions = {};
-      let score = 0;
-
-      PROCEDURE_STEPS.forEach((step, i) => {
-        const val = parseInt(responses[`step_${i}`], 10);
-        positions[step] = Number.isFinite(val) ? val : null;
-      });
-
-      // Partial-order constraints
-      const P = positions;
-      const ok = (a,b) => P[a] != null && P[b] != null && P[a] < P[b];
-
-      if (ok('Crack the eggs into the bowl', 'Whisk the mixture until smooth')) score++;
-      if (ok('Add flour to the bowl',       'Whisk the mixture until smooth')) score++;
-      if (ok('Whisk the mixture until smooth', 'Pour the batter onto the pan')) score++;
-      if (ok('Heat the pan', 'Pour the batter onto the pan')) score++;
-
-      data.procedure_score = score / 4; // 0–1
-      data.step_positions  = positions;
+      data.recalled_steps = [
+        responses.step_1 || '',
+        responses.step_2 || '',
+        responses.step_3 || '',
+        responses.step_4 || '',
+        responses.step_5 || ''
+      ];
+      // Manual scoring will be needed - save for later analysis
+      data.needs_manual_scoring = true;
     }
   };
 }
 
-// Task 2: Picture Naming (uses your PNG file names)
-function buildPictureNamingTask() {
+// Task 2: Foley Sound Recognition
+function buildFoleyTask() {
   const tasks = [];
-
-  // Initialize microphone
-  tasks.push({
-    type: T('jsPsychInitializeMicrophone'),
-    data: { task: 'mic_init' }
-  });
-
-  // Instructions
+  
   tasks.push({
     type: T('jsPsychHtmlButtonResponse'),
     stimulus: `
-      <h3>Picture Naming</h3>
-      <p>You will see pictures from the VR experience.</p>
-      <p>Say the English name of each object.</p>
-      <p>You have 4 seconds to respond.</p>
+      <h3>Sound Recognition / 音の認識</h3>
+      <p>Listen to cooking sounds and identify what they represent.</p>
+      <p>料理の音を聞いて、何の音かを選んでください。</p>
+      <p><b>Please ensure your volume is adequate.</b></p>
     `,
-    choices: ['Start']
+    choices: ['Begin / 開始']
   });
 
-  // Trials
-  picture_naming_stimuli.forEach((stim, idx) => {
-    const variants = IMG[stim.target] || [];
-    const chosen = variants.length ? pick(variants) : null;
-    const imgPath = chosen ? asset(chosen) : null;
-
-    const fallbackSVG = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22200%22><rect fill=%22%23ddd%22 width=%22300%22 height=%22200%22/><text x=%2250%%22 y=%2250%%22 text-anchor=%22middle%22>Image not found</text></svg>";
-
-    // Show picture
+  foley_stimuli.forEach((stim, idx) => {
+    const audioFiles = SND[stim.audio];
+    const chosenFile = audioFiles ? pick(audioFiles) : null;
+    
     tasks.push({
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `
         <div style="text-align:center;">
-          <img src="${imgPath || fallbackSVG}" style="width:300px; height:auto;"
-               onerror="this.src='${fallbackSVG}'">
-          <p>Name this object in English</p>
+          <p>Sound ${idx + 1} of ${foley_stimuli.length}</p>
+          <div style="padding:20px; background:#f8f9fa; border-radius:10px; margin:20px auto; max-width:400px;">
+            <button id="play-sound" class="jspsych-btn" style="font-size:18px;">▶️ Play Sound</button>
+            <p id="status" style="margin-top:10px; color:#666;">Click to play</p>
+          </div>
+          <p>What does this sound represent?</p>
+          <p style="color:#666;">この音は何を表していますか？</p>
         </div>
       `,
-      choices: ['Ready to record'],
+      choices: stim.options,
       data: {
-        task: 'picture_naming_prepare',
-        target: stim.target,
-        trial_num: idx + 1
-      },
-      on_finish: () => playOne('sizzle')
-    });
-
-    // Record response
-    tasks.push({
-      type: T('jsPsychHtmlAudioResponse'),
-      stimulus: `
-        <div style="text-align:center;">
-          <img src="${imgPath || fallbackSVG}" style="width:300px; height:auto;"
-               onerror="this.src='${fallbackSVG}'">
-          <p style="color:red; font-weight:bold;">🔴 Recording... Speak now!</p>
-        </div>
-      `,
-      recording_duration: 4000,
-      show_done_button: false,
-      data: {
-        task: 'picture_naming_response',
-        target: stim.target,
-        category: stim.category,
+        task: 'foley_recognition',
+        audio_key: stim.audio,
+        correct_answer: stim.correct,
         condition: testCondition,
-        pid: currentPID,
-        trial_num: idx + 1
+        pid: currentPID
       },
-      on_finish: () => playOne('flip')
+      on_load: function() {
+        if (!chosenFile) return;
+        
+        const btn = document.getElementById('play-sound');
+        const status = document.getElementById('status');
+        const audio = new Audio(asset(chosenFile));
+        
+        audio.addEventListener('canplaythrough', () => {
+          status.textContent = 'Ready to play';
+        });
+        
+        audio.addEventListener('error', () => {
+          btn.textContent = '❌ Audio unavailable';
+          btn.disabled = true;
+        });
+        
+        btn.addEventListener('click', () => {
+          try {
+            audio.currentTime = 0;
+            audio.play();
+            status.textContent = 'Playing...';
+          } catch (e) {
+            status.textContent = 'Playback failed';
+          }
+        });
+      },
+      on_finish: (data) => {
+        data.correct = (data.response === data.correct_answer);
+      }
     });
   });
 
   return tasks;
 }
 
-// Task 3: Transfer/Recognition Test (Immediate only)
-function buildTransferTask() {
-  return {
+// Task 3: Picture Naming (Objects + Actions)
+function buildPictureNamingTask() {
+  const tasks = [];
+
+  tasks.push({
+    type: T('jsPsychInitializeMicrophone'),
+    data: { task: 'mic_init' },
+    on_finish: () => { microphoneAvailable = true; }
+  });
+
+  tasks.push({
     type: T('jsPsychHtmlButtonResponse'),
-    stimulus: () => {
-      const word = jsPsych.timelineVariable('word');
-      return `
-        <div style="text-align:center; padding:40px;">
-          <h3>Recognition Test</h3>
-          <p style="font-size:32px; font-weight:bold; margin:30px 0;">${word}</p>
-          <p>Did you see this word in the VR experience?</p>
+    stimulus: `
+      <h3>Picture Naming / 絵の命名</h3>
+      <p>You will see images from the VR experience.</p>
+      <p>Say the English name of each item or action.</p>
+      <p>VR体験で見た画像が表示されます。英語で名前を言ってください。</p>
+      <p><b>You have 4 seconds per item.</b></p>
+    `,
+    choices: ['Start / 開始']
+  });
+
+  // Microphone check
+  tasks.push({
+    type: T('jsPsychHtmlAudioResponse'),
+    stimulus: '<h3>Microphone Check / マイク確認</h3><p>Say "test" for 2 seconds.</p>',
+    recording_duration: 2000,
+    show_done_button: true,
+    allow_playback: true,
+    accept_button_text: 'Sounds OK / 続行',
+    data: { task: 'mic_check' }
+  });
+
+  // Randomize picture order
+  const randomizedStimuli = jsPsych.randomization.shuffle([...picture_naming_stimuli]);
+
+  randomizedStimuli.forEach((stim, idx) => {
+    const variants = IMG[stim.target] || [];
+    const chosen = variants.length ? pick(variants) : null;
+    const imgPath = chosen ? asset(chosen) : null;
+    const fallbackSVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200'%3E%3Crect fill='%23ddd' width='300' height='200'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle'%3EImage not found%3C/text%3E%3C/svg%3E";
+
+    // Prepare screen
+    tasks.push({
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `
+        <div style="text-align:center;">
+          <p style="color:#666;">Image ${idx + 1} of ${randomizedStimuli.length}</p>
+          <img src="${imgPath || fallbackSVG}" style="width:350px; height:auto; border-radius:8px;"
+               onerror="this.src='${fallbackSVG}'">
+          <p style="margin-top:16px;">When ready, click the button to start recording.</p>
+          <p style="color:#666;">準備ができたら録音を開始してください。</p>
         </div>
-      `;
-    },
-    choices: ['YES', 'NO'],
-    timeline_variables: transfer_words,
-    randomize_order: true,
-    data: () => ({
-      task: 'transfer_test',
-      word: jsPsych.timelineVariable('word'),
-      correct_answer: jsPsych.timelineVariable('trained'),
-      word_type: jsPsych.timelineVariable('type'),
-      condition: testCondition,
-      pid: currentPID
-    }),
-    on_finish: (data) => {
-      const said_yes = (data.response === 0); // YES button index
-      data.response_label = said_yes ? 'yes' : 'no';
-      data.correct = (said_yes === data.correct_answer);
-      data.signal_type = (data.correct_answer === true)
-        ? (said_yes ? 'hit' : 'miss')
-        : (said_yes ? 'false_alarm' : 'correct_rejection');
-    }
-  };
+      `,
+      choices: ['Ready to Record / 録音開始'],
+      data: {
+        task: 'picture_naming_prepare',
+        target: stim.target,
+        category: stim.category,
+        trial_num: idx + 1
+      }
+    });
+
+    // Record screen
+    tasks.push({
+      type: T('jsPsychHtmlAudioResponse'),
+      stimulus: `
+        <div style="text-align:center;">
+          <img src="${imgPath || fallbackSVG}" style="width:350px; height:auto; border-radius:8px;"
+               onerror="this.src='${fallbackSVG}'">
+          <p style="margin-top:16px; color:#d32f2f; font-weight:bold; font-size:18px;">
+            🔴 Recording... Speak now!
+          </p>
+        </div>
+      `,
+      recording_duration: 4000,
+      show_done_button: false,
+      data: {
+        task: 'picture_naming_audio',
+        target: stim.target,
+        category: stim.category,
+        condition: testCondition,
+        pid: currentPID,
+        trial_num: idx + 1,
+        phase: 'post'
+      },
+      on_finish: (d) => {
+        const tgt = (d.target || 'unknown').toLowerCase();
+        const idx = d.trial_num || 'x';
+        d.audio_filename = `post_${currentPID}_${tgt}_${idx}.wav`;
+      }
+    });
+  });
+
+  return tasks;
 }
 
-// Task 4: Vocabulary Size Estimate
-function buildVocabularyTask() {
-  const vocab_items = [
-    { word: 'BOOK', real: true },
-    { word: 'FLORP', real: false },
-    { word: 'ENIGMA', real: true },
-    { word: 'BRASTICATE', real: false },
-    { word: 'UBIQUITOUS', real: true },
-    { word: 'MOXILATE', real: false },
-  ];
+// Task 4: Transfer/Recognition Test (Immediate only) - FIXED
+function buildTransferTask() {
+  const intro = {
+    type: T('jsPsychHtmlButtonResponse'),
+    stimulus: `
+      <h3>Recognition Test / 認識テスト</h3>
+      <p>You will see words one at a time.</p>
+      <p>Decide if you saw each word in the VR experience.</p>
+      <p>VR体験で見た単語かどうかを判断してください。</p>
+    `,
+    choices: ['Begin / 開始']
+  };
+
+  const trial = {
+    timeline: [{
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: jsPsych.timelineVariable('word_display'),
+      choices: ['YES - I saw this', 'NO - I did not see this'],
+      data: jsPsych.timelineVariable('trial_data'),
+      on_finish: (data) => {
+        const said_yes = (data.response === 0);
+        data.response_label = said_yes ? 'yes' : 'no';
+        data.correct = (said_yes === data.correct_answer);
+        data.signal_type = (data.correct_answer === true)
+          ? (said_yes ? 'hit' : 'miss')
+          : (said_yes ? 'false_alarm' : 'correct_rejection');
+      }
+    }],
+    timeline_variables: transfer_words.map(item => ({
+      word_display: `
+        <div style="text-align:center; padding:40px;">
+          <p style="font-size:36px; font-weight:bold; margin:30px 0;">${item.word}</p>
+          <p>Did you see this word in the VR experience?</p>
+        </div>
+      `,
+      trial_data: {
+        task: 'transfer_test',
+        word: item.word,
+        correct_answer: item.trained,
+        word_type: item.type,
+        condition: testCondition,
+        pid: currentPID
+      }
+    })),
+    randomize_order: true
+  };
+
+  return { timeline: [intro, trial] };
+}
+
+// Task 5: Post-Training Questionnaire
+function buildPostQuestionnaire() {
+  if (!have('jsPsychSurvey')) {
+    return {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: '<p>Survey plugin not available</p>',
+      choices: ['Continue']
+    };
+  }
 
   return {
-    type: T('jsPsychHtmlButtonResponse'),
-    stimulus: () => {
-      const word = jsPsych.timelineVariable('word');
-      return `
-        <div style="text-align:center; padding:40px;">
-          <h3>Vocabulary Check</h3>
-          <p style="font-size:28px; font-weight:bold; margin:30px 0;">${word}</p>
-          <p>Is this a real English word?</p>
-        </div>
-      `;
+    type: T('jsPsychSurvey'),
+    survey_json: {
+      title: 'Post-Training Questionnaire / 訓練後アンケート',
+      showQuestionNumbers: 'off',
+      pages: [{
+        elements: [
+          {
+            type: 'rating',
+            name: 'confidence_vocabulary',
+            title: 'How confident are you with the pancake-making vocabulary?',
+            description: 'パンケーキ作りの語彙にどのくらい自信がありますか？',
+            isRequired: true,
+            rateMin: 1,
+            rateMax: 5,
+            minRateDescription: 'Not confident',
+            maxRateDescription: 'Very confident'
+          },
+          {
+            type: 'rating',
+            name: 'confidence_procedure',
+            title: 'How confident are you that you could make pancakes following the procedure?',
+            description: '手順に従ってパンケーキを作れると思いますか？',
+            isRequired: true,
+            rateMin: 1,
+            rateMax: 5,
+            minRateDescription: 'Not confident',
+            maxRateDescription: 'Very confident'
+          },
+          {
+            type: 'rating',
+            name: 'training_helpfulness',
+            title: 'How helpful was the VR training for learning?',
+            description: 'VR訓練は学習に役立ちましたか？',
+            isRequired: true,
+            rateMin: 1,
+            rateMax: 5,
+            minRateDescription: 'Not helpful',
+            maxRateDescription: 'Very helpful'
+          },
+          {
+            type: 'comment',
+            name: 'learning_strategies',
+            title: 'What strategies did you use to remember the vocabulary and procedures?',
+            description: '語彙や手順を覚えるためにどのような戦略を使いましたか？',
+            isRequired: false,
+            rows: 3
+          },
+          {
+            type: 'comment',
+            name: 'difficulties',
+            title: 'What was most difficult about the learning experience?',
+            description: '学習体験で最も難しかったことは何ですか？',
+            isRequired: false,
+            rows: 3
+          }
+        ]
+      }]
     },
-    choices: ['Real Word', 'Not a Word'],
-    timeline_variables: vocab_items,
-    randomize_order: true,
-    data: () => ({
-      task: 'vocabulary_test',
-      word: jsPsych.timelineVariable('word'),
-      correct_answer: jsPsych.timelineVariable('real'),
+    data: {
+      task: 'post_questionnaire',
       condition: testCondition,
       pid: currentPID
-    }),
-    on_finish: (data) => {
-      const said_real = (data.response === 0);
-      data.response_label = said_real ? 'real' : 'fake';
-      data.correct = (said_real === data.correct_answer);
     }
   };
 }
@@ -381,7 +533,6 @@ function saveData() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `posttest_${testCondition}_${currentPID}_${timestamp}.json`;
 
-  // Save to localStorage
   localStorage.setItem('posttest_latest', JSON.stringify({
     filename: filename,
     condition: testCondition,
@@ -390,7 +541,6 @@ function saveData() {
     data: data
   }));
 
-  // Download as file
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -410,19 +560,19 @@ function showCompletion() {
   target.innerHTML = `
     <div style="max-width:600px; margin:50px auto; text-align:center; padding:40px; 
                 background:white; border-radius:12px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
-      <h2>✅ Post-Test Complete!</h2>
+      <h2>✅ Post-Test Complete! / 完了！</h2>
       <p><strong>Participant:</strong> ${currentPID}</p>
       <p><strong>Condition:</strong> ${testCondition}</p>
       <p>Your data has been downloaded automatically.</p>
+      <p>データは自動的にダウンロードされました。</p>
       <p style="margin-top:30px;">
         <button onclick="location.reload()" style="padding:10px 20px; font-size:16px; 
                 background:#4CAF50; color:white; border:none; border-radius:8px; cursor:pointer;">
-          Run Another Test
+          Run Another Test / 別のテストを実行
         </button>
       </p>
     </div>
   `;
 }
 
-// Log that script loaded successfully
-console.log('Post-test script loaded successfully');
+console.log('Post-test script v2.0 loaded successfully');
