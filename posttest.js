@@ -1,8 +1,7 @@
-// VR Post-Test Battery - Version 2.7
-// + Iconic vs Arbitrary vs True Foils in recognition (with POS labels)
-// + Final open-ended exit question
-// + Resilient audio loader (from 2.6)
-// + Clarified picture-recording instructions
+// VR Post-Test Battery - Version 2.8
+// - FIX: Foley spacer now always has a valid plugin type (keyboard OR button fallback)
+// - Sound loader: resilient + alias patterns for common alt names
+// - Keeps iconic vs arbitrary recognition, confidence, and exit feedback from v2.7
 
 /* ========== GLOBAL STATE ========== */
 let jsPsych = null;
@@ -34,7 +33,7 @@ function pickForPID(key, arr){
   return arr[idx];
 }
 
-/* ========== IMAGES (post-test PNG set) ========== */
+/* ========== IMAGES (png set) ========== */
 const IMG = {
   bowl:     ['img/bowl_01.png', 'img/bowl_02.png'],
   butter:   ['img/butter_01.png', 'img/butter_02.png'],
@@ -53,7 +52,8 @@ const IMG = {
   sizzling: ['img/sizzling_01.png', 'img/sizzling_02.png'],
 };
 
-/* ========== SOUNDS (names are flexible; loader is resilient) ========== */
+/* ========== SOUNDS ========== */
+/* Core names per key; the loader will also try aliases below */
 const SND = {
   crack:  ['crack_01.mp3',  'crack_02.mp3'],
   flip:   ['flip_01.mp3',   'flip_02.mp3'],
@@ -63,27 +63,44 @@ const SND = {
   whisk:  ['whisk_01.mp3',  'whisk_02.mp3'],
 };
 
-/* ========== IMAGE/SOUND RESOLVERS ========== */
+/* Optional aliases to match alt filenames you might actually have in /sounds */
+const SND_ALIASES = {
+  crack:  ['egg_crack.mp3', 'cracking.mp3'],
+  whisk:  ['circular_whir.mp3', 'whisk.mp3'],
+  pour:   ['granular_pour.mp3', 'liquid_flow.mp3', 'pour.mp3'],
+  sizzle: ['frying_sizzle.mp3', 'tss.mp3', 'sizzle.mp3'],
+  flip:   ['pan_flip.mp3', 'flip.mp3'],
+  spread: ['butter_spread.mp3', 'spread.mp3'],
+};
+
 function imageSrcFor(key){
   const variants = IMG[key];
   const chosen   = pickForPID(key, variants);
   return chosen ? asset(chosen) : null;
 }
 
-// Build a set of candidate sound filenames to try
+/* Build a list of candidate paths to try for a given base */
 function makeSoundCandidates(nameOrPath){
   const base = (nameOrPath.includes('/') ? nameOrPath : ('sounds/' + nameOrPath)).replace(/\\/g,'/');
   const noBust = base.replace(/\?.*$/, '');
   const trySet = new Set();
 
-  trySet.add(noBust);                                           // as-is
-  trySet.add(noBust.replace(/_0(\d+)\.mp3$/i, '_$1.mp3'));      // _01 -> _1
-  trySet.add(noBust.replace(/_[0-9]{1,2}\.mp3$/i, '.mp3'));     // strip suffix
+  // 1) as written
+  trySet.add(noBust);
+
+  // 2) _01 -> _1
+  trySet.add(noBust.replace(/_0(\d+)\.mp3$/i, '_$1.mp3'));
+
+  // 3) strip suffix entirely: _01 -> none
+  trySet.add(noBust.replace(/_[0-9]{1,2}\.mp3$/i, '.mp3'));
+
+  // 4) wav / ogg fallbacks of those
   [...Array.from(trySet)].forEach(p => trySet.add(p.replace(/\.mp3$/i, '.wav')));
   [...Array.from(trySet)].forEach(p => trySet.add(p.replace(/\.(mp3|wav)$/i, '.ogg')));
 
   return Array.from(trySet);
 }
+
 function createResilientAudioLoader(candidates){
   let idx = 0, audio = null;
   function loadNext(onReady, onFail){
@@ -102,16 +119,25 @@ function createResilientAudioLoader(candidates){
   }
   return { loadNext };
 }
+
 function soundCandidatesFor(key){
-  const variants = SND[key];
-  const chosen   = pickForPID(key, variants);
-  if (!chosen) return [];
-  return makeSoundCandidates(chosen);
+  const primary = SND[key] || [];
+  const aliases = SND_ALIASES[key] || [];
+  // Flatten and expand into candidate variants
+  const raw = [...primary, ...aliases];
+  // Expand each raw into its fallback pattern set
+  const expanded = raw.flatMap(r => makeSoundCandidates(r));
+  // De-dup while preserving order
+  const seen = new Set(); const list = [];
+  for (const p of expanded) { if (!seen.has(p)) { seen.add(p); list.push(p); } }
+  return list;
 }
+
 function playOne(key){
   try {
     const loader = createResilientAudioLoader(soundCandidatesFor(key));
-    loader.loadNext((audio)=>{ audio.currentTime=0; audio.play().catch(()=>{}); }, ()=>{ console.warn('Audio failed for', key); });
+    loader.loadNext((audio)=>{ audio.currentTime=0; audio.play().catch(()=>{}); },
+      ()=>{ console.warn('[posttest] All audio candidates failed for', key); });
   } catch { /* noop */ }
 }
 
@@ -149,12 +175,7 @@ const PROCEDURE_STEPS = [
   'Flip when ready',
 ];
 
-/* ===== Recognition pool: ICONIC vs ARBITRARY vs FOILS (with POS labels) =====
-   - trained:true = appeared in VR training (objects/actions or foley naming)
-   - trained:false = foils (never shown)
-   - iconic:true  = sound-symbolic / onomatopoeic (e.g., sizzle, crack, splash, glug)
-   - pos: 'verb'|'noun'|'interj'
-*/
+/* Recognition pool: ICONIC vs ARBITRARY vs FOILS */
 const transfer_words = [
   // ICONIC TARGETS (trained)
   { word: 'sizzle', pos: 'verb',  iconic: true,  type: 'target_iconic',   trained: true  },
@@ -168,12 +189,12 @@ const transfer_words = [
   { word: 'spatula',pos: 'noun',  iconic: false, type: 'target_arbitrary', trained: true },
   { word: 'flour',  pos: 'noun',  iconic: false, type: 'target_arbitrary', trained: true },
 
-  // ICONIC FOILS (never shown, still sound-symbolic)
+  // ICONIC FOILS (never shown)
   { word: 'glug',   pos: 'verb',  iconic: true,  type: 'foil_iconic',     trained: false },
   { word: 'splash', pos: 'verb',  iconic: true,  type: 'foil_iconic',     trained: false },
   { word: 'tss',    pos: 'interj',iconic: true,  type: 'foil_iconic',     trained: false },
 
-  // TRUE FOILS (domain-relevant, never shown)
+  // TRUE FOILS (never shown)
   { word: 'fork',   pos: 'noun',  iconic: false, type: 'foil_true',       trained: false },
   { word: 'knife',  pos: 'noun',  iconic: false, type: 'foil_true',       trained: false },
   { word: 'salt',   pos: 'noun',  iconic: false, type: 'foil_true',       trained: false },
@@ -240,8 +261,8 @@ function buildTimeline(isDelayed) {
 
   if (!isDelayed) tl.push(buildTransferTask());
 
-  tl.push(buildPostQuestionnaire());       // Likert + comments
-  tl.push(buildExitOpenQuestion());        // NEW: explicit open-ended exit item
+  tl.push(buildPostQuestionnaire());
+  tl.push(buildExitOpenQuestion());
 
   return tl;
 }
@@ -283,8 +304,21 @@ function buildFoleyTask() {
 
   foley_stimuli.forEach((stim, idx) => {
     if (idx > 0) {
-      tasks.push({ type: T('jsPsychHtmlKeyboardResponse'), stimulus: `<div style="text-align:center;padding:20px;">Press SPACE for next sound</div>`, choices: [' '] });
+      if (have('jsPsychHtmlKeyboardResponse')) {
+        tasks.push({
+          type: T('jsPsychHtmlKeyboardResponse'),
+          stimulus: `<div style="text-align:center;padding:20px;">Press SPACE for next sound</div>`,
+          choices: [' ']
+        });
+      } else {
+        tasks.push({
+          type: T('jsPsychHtmlButtonResponse'),
+          stimulus: `<div style="text-align:center;padding:20px;">Ready for the next sound?</div>`,
+          choices: ['Continue / 続行']
+        });
+      }
     }
+
     tasks.push({
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `
@@ -293,19 +327,29 @@ function buildFoleyTask() {
             <button id="play-sound-${idx}" class="jspsych-btn">▶️ Play Sound</button>
             <div id="status-${idx}" style="font-size:13px;color:#666;margin-top:8px;">Loading…</div>
           </div>
+          <p>What does this sound represent?</p>
+          <p style="color:#666;margin-top:4px;">この音は何を表していますか？</p>
         </div>`,
       choices: stim.options,
       data: { task:'foley_recognition', audio_key: stim.audio, correct_answer: stim.correct, pid: currentPID, condition: testCondition, trial_number: idx+1 },
       on_load: function(){
         const btn = document.getElementById(`play-sound-${idx}`);
         const status = document.getElementById(`status-${idx}`);
-        const loader = createResilientAudioLoader(soundCandidatesFor(stim.audio));
+        const candidates = soundCandidatesFor(stim.audio);
+        const loader = createResilientAudioLoader(candidates);
+
+        btn.disabled = true;
+        status.textContent = 'Loading audio…';
+
         loader.loadNext((audio)=>{
           status.textContent='Ready - click to play'; btn.disabled=false;
           const click = ()=>{ btn.disabled=true; status.textContent='🔊 Playing…'; audio.currentTime=0; audio.play().then(()=>{ audio.onended=()=>{ btn.disabled=false; status.textContent='Finished - choose your answer'; }; }).catch(()=>{ btn.disabled=false; status.textContent='Playback failed'; }); };
           btn.addEventListener('click', click);
           cleanupManager.register(`foley_${idx}`, ()=>{ btn.removeEventListener('click', click); try{ audio.pause(); audio.src=''; audio.load(); }catch{} });
-        }, ()=>{ btn.textContent='❌ Audio unavailable'; btn.disabled=true; status.textContent='Please answer without audio'; });
+        }, ()=>{
+          console.warn('[posttest] All candidates failed for', stim.audio, candidates);
+          btn.textContent='❌ Audio unavailable'; btn.disabled=true; status.textContent='Please answer without audio';
+        });
       },
       on_finish: d => { cleanupManager.cleanup(`foley_${idx}`); d.correct = (d.response === d.correct_answer); }
     });
@@ -315,7 +359,7 @@ function buildFoleyTask() {
 
 function buildPictureNamingTask() {
   const tasks = [];
-  tasks.push({ type: T('jsPsychInitializeMicrophone'), data:{task:'mic_init'}, on_finish:()=>{ microphoneAvailable=true; } });
+  tasks.push({ type: T('jsPsychInitializeMicrophone'), data:{task:'mic_init'}, on_finish:()=>{ microphoneAvailable=true; console.log('Microphone initialized'); } });
 
   tasks.push({
     type: T('jsPsychHtmlButtonResponse'),
@@ -358,7 +402,8 @@ function buildPictureNamingTask() {
       data: () => ({ task:'picture_naming_audio', target: jsPsych.timelineVariable('stim').target, category: jsPsych.timelineVariable('stim').category, pid: currentPID, phase:'post' }),
       on_finish: (d) => {
         const tgt = (d.target||'unknown').toLowerCase();
-        d.audio_filename = `post_${currentPID}_${tgt}_${jsPsych.timelineVariable('stim').target}.wav`;
+        const idx = jsPsych.timelineVariable('idx') || 'x';
+        d.audio_filename = `post_${currentPID}_${tgt}_${idx}.wav`;
         try {
           const rec = d.response && (d.response instanceof Blob ? d.response : d.response.recording);
           if (rec instanceof Blob) d.audio_blob_url = URL.createObjectURL(rec);
@@ -437,10 +482,10 @@ function buildPostQuestionnaire() {
         showCompletedPage: false,
         pages: [{
           elements: [
-            { type: 'rating', name: 'confidence_vocabulary',  title: 'Vocabulary confidence?', description: '語彙の自信', isRequired: true, rateMin: 1, rateMax: 5 },
-            { type: 'rating', name: 'confidence_procedure',   title: 'Procedure confidence?', description: '手順の自信', isRequired: true, rateMin: 1, rateMax: 5 },
-            { type: 'rating', name: 'training_helpfulness',   title: 'Training helpfulness?', description: '訓練の有用性', isRequired: true, rateMin: 1, rateMax: 5 },
-            { type: 'comment', name: 'learning_strategies',   title: 'Strategies you used (optional)', isRequired: false, rows: 3 },
+            { type: 'rating', name: 'confidence_vocabulary',  title: 'Vocabulary confidence?', isRequired: true, rateMin: 1, rateMax: 5 },
+            { type: 'rating', name: 'confidence_procedure',   title: 'Procedure confidence?',  isRequired: true, rateMin: 1, rateMax: 5 },
+            { type: 'rating', name: 'training_helpfulness',   title: 'Training helpfulness?',  isRequired: true, rateMin: 1, rateMax: 5 },
+            { type: 'comment', name: 'learning_strategies',   title: 'Strategies used (optional)', isRequired: false, rows: 3 },
             { type: 'comment', name: 'difficulties',          title: 'Most difficult part (optional)', isRequired: false, rows: 3 },
             { type: 'comment', name: 'additional_comments',   title: 'Anything else? (optional)', isRequired: false, rows: 3 },
           ]
@@ -456,7 +501,7 @@ function buildPostQuestionnaire() {
   };
 }
 
-/* === NEW: explicit exit open-ended question (questions / concerns / issues) === */
+/* Final open-ended feedback */
 function buildExitOpenQuestion(){
   if (!have('jsPsychSurveyText')) {
     return { type: T('jsPsychHtmlButtonResponse'), stimulus: '<p>Feedback form unavailable.</p>', choices: ['Finish'] };
@@ -512,4 +557,4 @@ function showCompletion() {
 }
 
 window.addEventListener('beforeunload', () => cleanupManager.cleanupAll());
-console.log('Post-test script v2.7 loaded — iconic vs arbitrary recognition + exit feedback + resilient audio');
+console.log('Post-test script v2.8 loaded — spacer type fix + alias-aware audio + iconic recognition + exit feedback');
