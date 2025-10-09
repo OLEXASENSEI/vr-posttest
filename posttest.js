@@ -1,4 +1,4 @@
-// VR Post-Test Battery - Fixed Version 2.0
+// VR Post-Test Battery - Complete Version 2.1
 // Focuses on: Recall, Retention, Intelligibility
 
 /* ========== GLOBAL STATE ========== */
@@ -27,23 +27,21 @@ function asObject(x) {
 
 /* ========== ASSET DEFINITIONS ========== */
 const IMG = {
-  // Objects
-  bowl:    ['img/bowl_01.png','img/bowl_02.png'],
-  egg:     ['img/egg_01.png','img/egg_02.png'],
-  flour:   ['img/flour_01.png','img/flour_02.png'],
-  spatula: ['img/spatula_01.png','img/spatula_02.png'],
-  butter:  ['img/butter_01.png','img/butter_02.png'],
-  milk:    ['img/milk_01.png','img/milk_02.png'],
-  pan:     ['img/pan_01.png','img/pan_02.png'],
-  whisk:   ['img/whisk_01.png','img/whisk_02.png'],
+  // Objects - using your actual filenames
+  bowl:    ['img/bowl.jpg'],
+  egg:     ['img/egg.jpg'],
+  flour:   ['img/flour.jpg'],
+  spatula: ['img/spatula.jpg'],
+  pan:     ['img/pan.jpg'],
+  milk:    ['img/milk.jpg'],
   
-  // Actions - YOU NEED TO ADD THESE FILES
-  mixing:   ['img/mixing_01.png','img/mixing_02.png'],
-  cracking: ['img/cracking_01.png','img/cracking_02.png'],
-  pouring:  ['img/pouring_01.png','img/pouring_02.png'],
-  flipping: ['img/flipping_01.png','img/flipping_02.png'],
-  heating:  ['img/heating_01.png','img/heating_02.png'],
-  sizzling: ['img/pan_01.png','img/pan_02.png'], // reuse pan for sizzling
+  // Actions - using your actual filenames with correct extensions
+  mixing:   ['img/mixing.jpeg'],
+  cracking: ['img/cracking.jpeg'],
+  pouring:  ['img/pouring.jpeg'],
+  flipping: ['img/flipping.jpg'],
+  heating:  ['img/heating.jpeg'],
+  sizzling: ['img/sizzling.jpeg'],
 };
 
 const SND = {
@@ -55,7 +53,7 @@ const SND = {
   whisk:  ['sounds/whisk_1.mp3','sounds/whisk_2.mp3'],
 };
 
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const pick = (arr) => arr && arr.length ? arr[Math.floor(Math.random() * arr.length)] : arr[0];
 
 function playOne(key){
   try {
@@ -67,7 +65,7 @@ function playOne(key){
 }
 
 /* ========== STIMULI DEFINITIONS ========== */
-// Picture naming - Objects AND Actions
+// Picture naming - Objects AND Actions (matching your actual files)
 const picture_naming_stimuli = [
   // Objects
   { target: 'bowl',    category: 'utensil'    },
@@ -75,7 +73,7 @@ const picture_naming_stimuli = [
   { target: 'flour',   category: 'ingredient' },
   { target: 'spatula', category: 'utensil'    },
   { target: 'pan',     category: 'utensil'    },
-  { target: 'butter',  category: 'ingredient' },
+  { target: 'milk',    category: 'ingredient' },
   
   // Actions/Verbs
   { target: 'mixing',   category: 'action' },
@@ -165,11 +163,11 @@ function buildTimeline(isDelayed) {
   timeline.push(buildProceduralRecallTask());
 
   // Task 2: Foley Sound Recognition
-  timeline.push(buildFoleyTask());
+  timeline.push(...buildFoleyTask()); // SPREAD the array
 
   // Task 3: Picture Naming (Objects + Actions)
   if (have('jsPsychInitializeMicrophone') && have('jsPsychHtmlAudioResponse')) {
-    timeline.push(...buildPictureNamingTask());
+    timeline.push(...buildPictureNamingTask()); // SPREAD the array
   } else {
     console.warn('Microphone plugins not available');
   }
@@ -189,8 +187,6 @@ function buildTimeline(isDelayed) {
 
 // Task 1: OPEN-ENDED Procedural Recall
 function buildProceduralRecallTask() {
-  const randomizedSteps = jsPsych.randomization.shuffle([...PROCEDURE_STEPS]);
-  
   return {
     type: T('jsPsychSurveyText'),
     preamble: `
@@ -222,7 +218,6 @@ function buildProceduralRecallTask() {
         responses.step_4 || '',
         responses.step_5 || ''
       ];
-      // Manual scoring will be needed - save for later analysis
       data.needs_manual_scoring = true;
     }
   };
@@ -248,7 +243,7 @@ function buildFoleyTask() {
     const chosenFile = audioFiles ? pick(audioFiles) : null;
     
     tasks.push({
-      type: T('jsPsychHtmlButtonResponse'),
+      type: T('jsPsychHtmlButtonResponse'), // EXPLICITLY ADD TYPE
       stimulus: `
         <div style="text-align:center;">
           <p>Sound ${idx + 1} of ${foley_stimuli.length}</p>
@@ -575,4 +570,4 @@ function showCompletion() {
   `;
 }
 
-console.log('Post-test script v2.0 loaded successfully');
+console.log('Post-test script v2.2 loaded successfully');
