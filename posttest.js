@@ -305,6 +305,12 @@ function buildProceduralRecallTask() {
 function buildFoleyTask() {
   const tasks = [];
   
+  // Check for required plugin
+  if (!have('jsPsychHtmlButtonResponse')) {
+    console.error('jsPsychHtmlButtonResponse plugin not available');
+    return tasks;
+  }
+  
   tasks.push({
     type: T('jsPsychHtmlButtonResponse'),
     stimulus: `
@@ -330,7 +336,7 @@ function buildFoleyTask() {
     }
     
     // Add a break screen before each sound (except first)
-    if (idx > 0) {
+    if (idx > 0 && have('jsPsychHtmlKeyboardResponse')) {
       tasks.push({
         type: T('jsPsychHtmlKeyboardResponse'),
         stimulus: `
@@ -341,6 +347,19 @@ function buildFoleyTask() {
           </div>
         `,
         choices: [' '],
+        post_trial_gap: 500
+      });
+    } else if (idx > 0 && have('jsPsychHtmlButtonResponse')) {
+      // Fallback to button response if keyboard response not available
+      tasks.push({
+        type: T('jsPsychHtmlButtonResponse'),
+        stimulus: `
+          <div style="text-align:center; padding: 40px;">
+            <p style="font-size: 20px; color: #666;">Ready for the next sound?</p>
+            <p style="font-size: 16px;">次の音の準備はいいですか？</p>
+          </div>
+        `,
+        choices: ['Continue / 続行'],
         post_trial_gap: 500
       });
     }
