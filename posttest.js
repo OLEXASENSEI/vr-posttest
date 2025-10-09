@@ -1,7 +1,9 @@
-// VR Post-Test Battery - Version 2.8
-// - FIX: Foley spacer now always has a valid plugin type (keyboard OR button fallback)
+// VR Post-Test Battery - Version 2.9
+// - FIX: Recognition test no longer shows answers (removed Target/Foil labels)
+// - FIX: Added timeline logging to track which tasks are included
+// - FIX: Audio filenames now match actual files (_1.mp3 instead of _01.mp3)
 // - Sound loader: resilient + alias patterns for common alt names
-// - Keeps iconic vs arbitrary recognition, confidence, and exit feedback from v2.7
+// - Keeps iconic vs arbitrary recognition, confidence, and exit feedback
 
 /* ========== GLOBAL STATE ========== */
 let jsPsych = null;
@@ -55,12 +57,12 @@ const IMG = {
 /* ========== SOUNDS ========== */
 /* Core names per key; the loader will also try aliases below */
 const SND = {
-  crack:  ['crack_01.mp3',  'crack_02.mp3'],
-  flip:   ['flip_01.mp3',   'flip_02.mp3'],
-  pour:   ['pour_01.mp3',   'pour_02.mp3'],
-  sizzle: ['sizzle_01.mp3', 'sizzle_02.mp3'],
-  spread: ['spread_01.mp3', 'spread_02.mp3'],
-  whisk:  ['whisk_01.mp3',  'whisk_02.mp3'],
+  crack:  ['crack_1.mp3',  'crack_2.mp3'],
+  flip:   ['flip_1.mp3',   'flip_2.mp3'],
+  pour:   ['pour_1.mp3',   'pour_2.mp3'],
+  sizzle: ['sizzle_1.mp3', 'sizzle_2.mp3'],
+  spread: ['spread_1.mp3', 'spread_2.mp3'],
+  whisk:  ['whisk_1.mp3',  'whisk_2.mp3'],
 };
 
 /* Optional aliases to match alt filenames you might actually have in /sounds */
@@ -250,20 +252,36 @@ function buildTimeline(isDelayed) {
     choices: ['Begin / 開始']
   });
 
-  if (have('jsPsychSurveyText')) tl.push(buildProceduralRecallTask());
+  if (have('jsPsychSurveyText')) {
+    tl.push(buildProceduralRecallTask());
+    console.log('✓ Added procedural recall task');
+  }
+  
   tl.push(...buildFoleyTask());
+  console.log('✓ Added foley recognition task');
 
   if (have('jsPsychInitializeMicrophone') && have('jsPsychHtmlAudioResponse')) {
     tl.push(...buildPictureNamingTask());
+    console.log('✓ Added picture naming task');
   } else {
     tl.push({ type: T('jsPsychHtmlButtonResponse'), stimulus: '<p>Picture naming skipped (microphone not available)</p>', choices: ['Continue'] });
+    console.log('⚠ Picture naming unavailable');
   }
 
-  if (!isDelayed) tl.push(buildTransferTask());
+  if (!isDelayed) {
+    tl.push(buildTransferTask());
+    console.log('✓ Added transfer/recognition task');
+  } else {
+    console.log('⊘ Transfer task skipped (delayed condition)');
+  }
 
   tl.push(buildPostQuestionnaire());
+  console.log('✓ Added post-questionnaire');
+  
   tl.push(buildExitOpenQuestion());
+  console.log('✓ Added exit feedback');
 
+  console.log(`Timeline built with ${tl.length} total items`);
   return tl;
 }
 
@@ -451,8 +469,8 @@ function buildTransferTask() {
         <div style="text-align:center; padding:28px;">
           <div style="padding: 22px; background: #f8f9fa; border-radius: 10px; border: 2px solid #e0e0e0;">
             <p style="font-size:32px; font-weight:bold; margin:10px 0; color:#333">${item.word}</p>
-            <p style="font-size:12px; color:#888; margin:0;">${item.pos.toUpperCase()} • ${item.iconic ? 'ICONIC' : 'ARBITRARY'} • ${item.trained ? 'Target' : 'Foil'}</p>
           </div>
+          <p style="font-size:14px; color:#666; margin-top:16px;">Did you see this word in the VR training?</p>
         </div>
       `,
       trial_data: {
@@ -557,4 +575,4 @@ function showCompletion() {
 }
 
 window.addEventListener('beforeunload', () => cleanupManager.cleanupAll());
-console.log('Post-test script v2.8 loaded — spacer type fix + alias-aware audio + iconic recognition + exit feedback');
+console.log('Post-test script v2.9 loaded — fixed: hidden answers in recognition + timeline logging');
