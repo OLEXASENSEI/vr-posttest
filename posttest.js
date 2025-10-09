@@ -1,10 +1,9 @@
-// VR Post-Test Battery - Complete Fixed Version 2.4
-// Changes from 2.3:
-// - Image filenames now match your *_01.png / *_02.png assets
-// - Deterministic per-participant variant selection for images & sounds
-// - Foley task uses the same variant system
-// - Post questionnaire gracefully falls back if plugin-survey isn't loaded
-// - Minor defensive checks and cleanup tightening
+// VR Post-Test Battery - Complete Fixed Version 2.5
+// Changes from 2.4:
+// - Robust sound path resolver: adds "sounds/" if missing; tolerates _01 vs _1 filenames
+// - Keeps deterministic per-participant selection for image/sound variants
+// - Image filename fixes for *_01.png / *_02.png remain
+// - Survey fallback remains
 
 /* ========== GLOBAL STATE ========== */
 let jsPsych = null;
@@ -32,7 +31,7 @@ function asObject(x) {
 }
 
 /* ========== ASSET DEFINITIONS (MATCH YOUR FOLDER) ========== */
-// Images: exact filenames from your folder listing
+// Images: exact filenames from your post-test folder listing
 const IMG = {
   // objects / tools / ingredients
   bowl:     ['img/bowl_01.png', 'img/bowl_02.png'],
@@ -46,7 +45,7 @@ const IMG = {
   sugar:    ['img/sugar_01.png', 'img/sugar_02.png'],
   whisk:    ['img/whisk_01.png', 'img/whisk_02.png'],
 
-  // actions / states (present in your folder)
+  // actions / states
   mixing:   ['img/mixing_01.png',   'img/mixing_02.png'],
   cracking: ['img/cracking_01.png', 'img/cracking_02.png'],
   pouring:  ['img/pouring_01.png',  'img/pouring_02.png'],
@@ -57,14 +56,14 @@ const IMG = {
   // heating:  ['img/heating_01.png',  'img/heating_02.png'],
 };
 
-// Sounds: adjust names if your /sounds filenames differ
+// Sounds: keep whatever you currently have; the resolver below will normalize
 const SND = {
-  crack:  ['sounds/crack_01.mp3',  'sounds/crack_02.mp3'],
-  flip:   ['sounds/flip_01.mp3',   'sounds/flip_02.mp3'],
-  pour:   ['sounds/pour_01.mp3',   'sounds/pour_02.mp3'],
-  sizzle: ['sounds/sizzle_01.mp3', 'sounds/sizzle_02.mp3'],
-  spread: ['sounds/spread_01.mp3', 'sounds/spread_02.mp3'],
-  whisk:  ['sounds/whisk_01.mp3',  'sounds/whisk_02.mp3'],
+  crack:  ['crack_01.mp3',  'crack_02.mp3'],    // with or without "sounds/" is fine
+  flip:   ['flip_01.mp3',   'flip_02.mp3'],
+  pour:   ['pour_01.mp3',   'pour_02.mp3'],
+  sizzle: ['sizzle_01.mp3', 'sizzle_02.mp3'],
+  spread: ['spread_01.mp3', 'spread_02.mp3'],
+  whisk:  ['whisk_01.mp3',  'whisk_02.mp3'],
 };
 
 // Deterministic per-participant variant picker
@@ -83,10 +82,36 @@ function imageSrcFor(key){
   const chosen   = pickForPID(key, variants);
   return chosen ? asset(chosen) : null;
 }
+
+// Robust sound resolver: adds "sounds/" if missing; tolerates _01 vs _1 filenames
 function soundSrcFor(key){
   const variants = SND[key];
   const chosen   = pickForPID(key, variants);
-  return chosen ? asset(chosen) : null;
+  if (!chosen) return null;
+
+  // Start with whatever was configured
+  let base = chosen.trim();
+
+  // If there is no folder component, default to sounds/
+  if (!base.includes('/')) base = 'sounds/' + base;
+
+  // Candidates to try: as-is, force zero, strip zero
+  const asIs    = base;
+  const withZero = base.replace(/(_)(\d)\.mp3$/i, (_, u, d) => `${u}0${d}.mp3`);
+  const noZero   = base.replace(/(_0)(\d)\.mp3$/i, (_, u0, d) => `_${d}.mp3`);
+
+  // Deduplicate while preserving order
+  const seen = new Set();
+  const candidates = [asIs, withZero, noZero].filter(p => {
+    if (seen.has(p)) return false;
+    seen.add(p);
+    return true;
+  });
+
+  const chosenPath = candidates[0];
+  console.log('[posttest] soundSrcFor', { key, chosen, candidates, chosenPath });
+
+  return asset(chosenPath);
 }
 
 /* ========== STIMULI DEFINITIONS ========== */
@@ -766,4 +791,4 @@ function showCompletion() {
 // Cleanup on unload
 window.addEventListener('beforeunload', () => cleanupManager.cleanupAll());
 
-console.log('Post-test script v2.4 loaded successfully — filename fixes + survey fallback ready');
+console.log('Post-test script v2.5 loaded successfully — robust sound paths enabled');
