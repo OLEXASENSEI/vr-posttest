@@ -185,22 +185,40 @@ function buildTimeline(isDelayed) {
 
 /* ========== TASK BUILDERS ========== */
 
-// Task 1: OPEN-ENDED Procedural Recall
+// Task 1: OPEN-ENDED Procedural Recall with Better Context
 function buildProceduralRecallTask() {
   return {
     type: T('jsPsychSurveyText'),
     preamble: `
-      <h3>Recipe Memory Test / レシピ記憶テスト</h3>
-      <p>Write the pancake-making steps in the correct order (1–5).</p>
-      <p>Write what you remember - spelling doesn't have to be perfect.</p>
-      <p>パンケーキの作り方を順番に書いてください（1–5）。</p>
+      <div style="max-width: 700px; margin: 0 auto; text-align: left;">
+        <h3>Recipe Memory Test / レシピ記憶テスト</h3>
+        
+        <div style="background: #f0f8ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2196F3;">
+          <p><strong>Context / 状況:</strong></p>
+          <p>Imagine that you have already purchased the ingredients and they are on the table.</p>
+          <p>すべての材料を購入済みで、テーブルの上に置いてあると想像してください。</p>
+        </div>
+        
+        <p><strong>Instructions / 指示:</strong></p>
+        <ol style="line-height: 1.8;">
+          <li><strong>Begin with the first step</strong> - What do you do first?<br/>
+              <span style="color: #666;">最初のステップから始めてください</span></li>
+          <li><strong>End with the final step before eating</strong> - What is the last thing you do before the pancakes are ready to eat?<br/>
+              <span style="color: #666;">食べる直前の最後のステップで終わってください</span></li>
+          <li><strong>Recall the steps from the VR experience</strong> - Write what you remember from the training.<br/>
+              <span style="color: #666;">VR体験で学んだ手順を思い出して書いてください</span></li>
+        </ol>
+        
+        <p style="margin-top: 20px;"><em>Note: Spelling doesn't have to be perfect. Write what you remember.</em><br/>
+        <span style="color: #666;">注: スペルは完璧でなくても構いません。覚えていることを書いてください。</span></p>
+      </div>
     `,
     questions: [
-      { prompt: '<b>Step 1 (First / 最初):</b>', name: 'step_1', placeholder: 'What happens first?', required: true },
-      { prompt: '<b>Step 2:</b>', name: 'step_2', placeholder: '', required: true },
-      { prompt: '<b>Step 3:</b>', name: 'step_3', placeholder: '', required: true },
-      { prompt: '<b>Step 4:</b>', name: 'step_4', placeholder: '', required: true },
-      { prompt: '<b>Step 5 (Last / 最後):</b>', name: 'step_5', placeholder: 'What happens last?', required: true },
+      { prompt: '<b>Step 1 (First / 最初):</b>', name: 'step_1', placeholder: 'What is the very first thing you do?', required: true, rows: 2 },
+      { prompt: '<b>Step 2:</b>', name: 'step_2', placeholder: 'What comes next?', required: true, rows: 2 },
+      { prompt: '<b>Step 3:</b>', name: 'step_3', placeholder: 'What do you do after that?', required: true, rows: 2 },
+      { prompt: '<b>Step 4:</b>', name: 'step_4', placeholder: 'What is the next step?', required: true, rows: 2 },
+      { prompt: '<b>Step 5 (Last / 最後):</b>', name: 'step_5', placeholder: 'What is the final step before eating?', required: true, rows: 2 },
     ],
     button_label: 'Submit / 送信',
     data: {
@@ -223,7 +241,7 @@ function buildProceduralRecallTask() {
   };
 }
 
-// Task 2: Foley Sound Recognition
+// Task 2: Foley Sound Recognition with Breaks
 function buildFoleyTask() {
   const tasks = [];
   
@@ -234,6 +252,7 @@ function buildFoleyTask() {
       <p>Listen to cooking sounds and identify what they represent.</p>
       <p>料理の音を聞いて、何の音かを選んでください。</p>
       <p><b>Please ensure your volume is adequate.</b></p>
+      <p style="color: #d32f2f; font-weight: bold;">⚠️ You will hear ONE sound at a time. Please listen carefully before choosing.</p>
     `,
     choices: ['Begin / 開始']
   });
@@ -242,17 +261,33 @@ function buildFoleyTask() {
     const audioFiles = SND[stim.audio];
     const chosenFile = audioFiles ? pick(audioFiles) : null;
     
+    // Add a break screen before each sound (except first)
+    if (idx > 0) {
+      tasks.push({
+        type: T('jsPsychHtmlKeyboardResponse'),
+        stimulus: `
+          <div style="text-align:center; padding: 40px;">
+            <p style="font-size: 20px; color: #666;">Ready for the next sound?</p>
+            <p style="font-size: 16px;">次の音の準備はいいですか？</p>
+            <p style="margin-top: 30px; color: #999;">Press SPACE to continue / スペースキーで続行</p>
+          </div>
+        `,
+        choices: [' '],
+        post_trial_gap: 500
+      });
+    }
+    
     tasks.push({
-      type: T('jsPsychHtmlButtonResponse'), // EXPLICITLY ADD TYPE
+      type: T('jsPsychHtmlButtonResponse'),
       stimulus: `
         <div style="text-align:center;">
-          <p>Sound ${idx + 1} of ${foley_stimuli.length}</p>
-          <div style="padding:20px; background:#f8f9fa; border-radius:10px; margin:20px auto; max-width:400px;">
-            <button id="play-sound" class="jspsych-btn" style="font-size:18px;">▶️ Play Sound</button>
-            <p id="status" style="margin-top:10px; color:#666;">Click to play</p>
+          <p style="font-size: 18px; font-weight: bold; color: #2196F3;">Sound ${idx + 1} of ${foley_stimuli.length}</p>
+          <div style="padding:30px; background:#f8f9fa; border-radius:10px; margin:20px auto; max-width:400px; border: 2px solid #e0e0e0;">
+            <button id="play-sound" class="jspsych-btn" style="font-size:20px; padding: 15px 30px;">▶️ Play Sound</button>
+            <p id="status" style="margin-top:15px; color:#666; font-weight: bold;">Click the button above to play</p>
           </div>
-          <p>What does this sound represent?</p>
-          <p style="color:#666;">この音は何を表していますか？</p>
+          <p style="font-size: 16px; margin-top: 20px;">What does this sound represent?</p>
+          <p style="color:#666; font-size: 14px;">この音は何を表していますか？</p>
         </div>
       `,
       choices: stim.options,
@@ -261,44 +296,72 @@ function buildFoleyTask() {
         audio_key: stim.audio,
         correct_answer: stim.correct,
         condition: testCondition,
-        pid: currentPID
+        pid: currentPID,
+        trial_number: idx + 1
       },
       on_load: function() {
         if (!chosenFile) return;
         
         const btn = document.getElementById('play-sound');
         const status = document.getElementById('status');
-        const audio = new Audio(asset(chosenFile));
+        let audio = new Audio(asset(chosenFile));
+        let hasPlayed = false;
         
         audio.addEventListener('canplaythrough', () => {
-          status.textContent = 'Ready to play';
+          status.textContent = 'Ready - click to play / 再生準備完了';
+          status.style.color = '#4CAF50';
         });
         
         audio.addEventListener('error', () => {
           btn.textContent = '❌ Audio unavailable';
           btn.disabled = true;
+          status.textContent = 'Audio failed to load';
+          status.style.color = '#d32f2f';
+        });
+        
+        audio.addEventListener('ended', () => {
+          status.textContent = 'Sound finished - choose your answer / 音声終了 - 答えを選んでください';
+          status.style.color = '#2196F3';
+          btn.textContent = '🔁 Play Again';
+          btn.disabled = false;
         });
         
         btn.addEventListener('click', () => {
           try {
             audio.currentTime = 0;
             audio.play();
-            status.textContent = 'Playing...';
+            hasPlayed = true;
+            status.textContent = '🔊 Playing sound... / 再生中...';
+            status.style.color = '#FF9800';
+            btn.disabled = true;
+            btn.textContent = '⏸ Playing...';
           } catch (e) {
-            status.textContent = 'Playback failed';
+            status.textContent = 'Playback failed / 再生失敗';
+            status.style.color = '#d32f2f';
           }
         });
+        
+        // Cleanup on finish
+        window.__currentAudio = audio;
       },
       on_finish: (data) => {
+        // Stop any playing audio
+        if (window.__currentAudio) {
+          try {
+            window.__currentAudio.pause();
+            window.__currentAudio = null;
+          } catch (e) {}
+        }
         data.correct = (data.response === data.correct_answer);
-      }
+      },
+      post_trial_gap: 800 // Add gap after each trial
     });
   });
 
   return tasks;
 }
 
-// Task 3: Picture Naming (Objects + Actions)
+// Task 3: Picture Naming (Objects + Actions) - FIXED IMAGES
 function buildPictureNamingTask() {
   const tasks = [];
 
@@ -331,66 +394,91 @@ function buildPictureNamingTask() {
     data: { task: 'mic_check' }
   });
 
-  // Randomize picture order
-  const randomizedStimuli = jsPsych.randomization.shuffle([...picture_naming_stimuli]);
-
-  randomizedStimuli.forEach((stim, idx) => {
-    const variants = IMG[stim.target] || [];
-    const chosen = variants.length ? pick(variants) : null;
-    const imgPath = chosen ? asset(chosen) : null;
-    const fallbackSVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200'%3E%3Crect fill='%23ddd' width='300' height='200'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle'%3EImage not found%3C/text%3E%3C/svg%3E";
-
-    // Prepare screen
-    tasks.push({
+  // Create timeline with randomization built-in
+  const naming_timeline = {
+    timeline: [{
       type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `
-        <div style="text-align:center;">
-          <p style="color:#666;">Image ${idx + 1} of ${randomizedStimuli.length}</p>
-          <img src="${imgPath || fallbackSVG}" style="width:350px; height:auto; border-radius:8px;"
-               onerror="this.src='${fallbackSVG}'">
-          <p style="margin-top:16px;">When ready, click the button to start recording.</p>
-          <p style="color:#666;">準備ができたら録音を開始してください。</p>
-        </div>
-      `,
+      stimulus: function() {
+        const stim = jsPsych.timelineVariable('stim');
+        const trialNum = jsPsych.timelineVariable('trial_num');
+        const totalTrials = picture_naming_stimuli.length;
+        
+        // Get image path
+        const variants = IMG[stim.target] || [];
+        const imgPath = variants.length > 0 ? asset(variants[0]) : null;
+        
+        const fallbackSVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200'%3E%3Crect fill='%23ddd' width='300' height='200'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' fill='%23333'%3EImage: " + stim.target + "%3C/text%3E%3C/svg%3E";
+        
+        return `
+          <div style="text-align:center;">
+            <p style="color:#666; font-size: 14px;">Image ${trialNum} of ${totalTrials}</p>
+            <img src="${imgPath || fallbackSVG}" 
+                 style="width:350px; height:auto; max-height: 400px; border-radius:8px; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"
+                 onerror="this.src='${fallbackSVG}'; console.error('Failed to load: ${imgPath}');">
+            <p style="margin-top:16px; font-size: 16px;">When ready, click the button to start recording.</p>
+            <p style="color:#666; font-size: 14px;">準備ができたら録音を開始してください。</p>
+          </div>
+        `;
+      },
       choices: ['Ready to Record / 録音開始'],
-      data: {
-        task: 'picture_naming_prepare',
-        target: stim.target,
-        category: stim.category,
-        trial_num: idx + 1
+      data: function() {
+        return {
+          task: 'picture_naming_prepare',
+          target: jsPsych.timelineVariable('stim').target,
+          category: jsPsych.timelineVariable('stim').category,
+          trial_num: jsPsych.timelineVariable('trial_num')
+        };
       }
-    });
-
-    // Record screen
-    tasks.push({
+    },
+    {
       type: T('jsPsychHtmlAudioResponse'),
-      stimulus: `
-        <div style="text-align:center;">
-          <img src="${imgPath || fallbackSVG}" style="width:350px; height:auto; border-radius:8px;"
-               onerror="this.src='${fallbackSVG}'">
-          <p style="margin-top:16px; color:#d32f2f; font-weight:bold; font-size:18px;">
-            🔴 Recording... Speak now!
-          </p>
-        </div>
-      `,
+      stimulus: function() {
+        const stim = jsPsych.timelineVariable('stim');
+        
+        // Get image path
+        const variants = IMG[stim.target] || [];
+        const imgPath = variants.length > 0 ? asset(variants[0]) : null;
+        
+        const fallbackSVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200'%3E%3Crect fill='%23ddd' width='300' height='200'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' fill='%23333'%3EImage: " + stim.target + "%3C/text%3E%3C/svg%3E";
+        
+        return `
+          <div style="text-align:center;">
+            <img src="${imgPath || fallbackSVG}" 
+                 style="width:350px; height:auto; max-height: 400px; border-radius:8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"
+                 onerror="this.src='${fallbackSVG}'; console.error('Failed to load: ${imgPath}');">
+            <p style="margin-top:16px; color:#d32f2f; font-weight:bold; font-size:18px;">
+              🔴 Recording... Speak now!
+            </p>
+          </div>
+        `;
+      },
       recording_duration: 4000,
       show_done_button: false,
-      data: {
-        task: 'picture_naming_audio',
-        target: stim.target,
-        category: stim.category,
-        condition: testCondition,
-        pid: currentPID,
-        trial_num: idx + 1,
-        phase: 'post'
+      data: function() {
+        return {
+          task: 'picture_naming_audio',
+          target: jsPsych.timelineVariable('stim').target,
+          category: jsPsych.timelineVariable('stim').category,
+          condition: testCondition,
+          pid: currentPID,
+          trial_num: jsPsych.timelineVariable('trial_num'),
+          phase: 'post'
+        };
       },
       on_finish: (d) => {
         const tgt = (d.target || 'unknown').toLowerCase();
         const idx = d.trial_num || 'x';
         d.audio_filename = `post_${currentPID}_${tgt}_${idx}.wav`;
       }
-    });
-  });
+    }],
+    timeline_variables: picture_naming_stimuli.map((stim, idx) => ({
+      stim: stim,
+      trial_num: idx + 1
+    })),
+    randomize_order: true
+  };
+
+  tasks.push(naming_timeline);
 
   return tasks;
 }
