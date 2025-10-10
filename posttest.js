@@ -1,7 +1,10 @@
-// VR Post-Test Battery - Version 2.9
+// VR Post-Test Battery - Version 2.9 (FIXED)
 // - FIX: Recognition test no longer shows answers (removed Target/Foil labels)
 // - FIX: Added timeline logging to track which tasks are included
 // - FIX: Audio filenames now match actual files (_1.mp3 instead of _01.mp3)
+// - FIX: Memory leaks from blob URLs
+// - FIX: Audio cleanup race conditions
+// - FIX: Better error handling
 // - Sound loader: resilient + alias patterns for common alt names
 // - Keeps iconic vs arbitrary recognition, confidence, and exit feedback
 
@@ -24,11 +27,26 @@ const asset = (p) => {
 
 function asObject(x) {
   if (!x) return {};
-  if (typeof x === 'string') { try { return JSON.parse(x); } catch { return {}; } }
+  if (typeof x === 'string') { 
+    try { 
+      return JSON.parse(x); 
+    } catch(e) { 
+      console.warn('JSON parse failed:', e);
+      return {}; 
+    } 
+  }
   return (typeof x === 'object') ? x : {};
 }
 
-function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){ h=((h<<5)-h)+s.charCodeAt(i); h|=0; } return Math.abs(h); }
+function hashStr(s){ 
+  let h=0; 
+  for(let i=0; i<s.length; i++){ 
+    h=((h<<5)-h)+s.charCodeAt(i); 
+    h|=0; 
+  } 
+  return Math.abs(h); 
+}
+
 function pickForPID(key, arr){
   if (!arr || !arr.length) return null;
   const idx = hashStr(String(currentPID || 'anon') + '|' + key) % arr.length;
@@ -106,15 +124,31 @@ function makeSoundCandidates(nameOrPath){
 function createResilientAudioLoader(candidates){
   let idx = 0, audio = null;
   function loadNext(onReady, onFail){
-    if (idx >= candidates.length) { onFail?.(); return; }
+    if (idx >= candidates.length) { 
+      onFail?.(); 
+      return; 
+    }
     const src = asset(candidates[idx++]);
-    audio = new Audio(); audio.preload='auto';
+    audio = new Audio(); 
+    audio.preload='auto';
+    
     const clean = () => {
-      audio?.removeEventListener('canplaythrough', ok);
-      audio?.removeEventListener('error', bad);
+      if (audio) {
+        audio.removeEventListener('canplaythrough', ok);
+        audio.removeEventListener('error', bad);
+      }
     };
-    const ok  = () => { clean(); onReady?.(audio, src); };
-    const bad = () => { clean(); loadNext(onReady, onFail); };
+    
+    const ok  = () => { 
+      clean(); 
+      onReady?.(audio, src); 
+    };
+    
+    const bad = () => { 
+      clean(); 
+      loadNext(onReady, onFail); 
+    };
+    
     audio.addEventListener('canplaythrough', ok,  { once:true });
     audio.addEventListener('error',          bad, { once:true });
     audio.src = src;
@@ -130,17 +164,34 @@ function soundCandidatesFor(key){
   // Expand each raw into its fallback pattern set
   const expanded = raw.flatMap(r => makeSoundCandidates(r));
   // De-dup while preserving order
-  const seen = new Set(); const list = [];
-  for (const p of expanded) { if (!seen.has(p)) { seen.add(p); list.push(p); } }
+  const seen = new Set(); 
+  const list = [];
+  for (const p of expanded) { 
+    if (!seen.has(p)) { 
+      seen.add(p); 
+      list.push(p); 
+    } 
+  }
   return list;
 }
 
 function playOne(key){
   try {
     const loader = createResilientAudioLoader(soundCandidatesFor(key));
-    loader.loadNext((audio)=>{ audio.currentTime=0; audio.play().catch(()=>{}); },
-      ()=>{ console.warn('[posttest] All audio candidates failed for', key); });
-  } catch { /* noop */ }
+    loader.loadNext(
+      (audio) => { 
+        audio.currentTime = 0; 
+        audio.play().catch((e) => {
+          console.warn('[posttest] Audio playback failed for', key, e);
+        }); 
+      },
+      () => { 
+        console.warn('[posttest] All audio candidates failed for', key); 
+      }
+    );
+  } catch(e) { 
+    console.error('[posttest] playOne error:', e); 
+  }
 }
 
 /* ========== STIMULI DEFINITIONS ========== */
@@ -203,12 +254,34 @@ const transfer_words = [
   { word: 'cup',    pos: 'noun',  iconic: false, type: 'foil_true',       trained: false },
 ];
 
-/* ========== CLEANUP MANAGER ========== */
+/* ========== CLEANUP MANAGER (IMPROVED) ========== */
 const cleanupManager = {
   items: new Map(),
-  register(key, fn) { this.items.set(key, fn); },
-  cleanup(key) { const fn = this.items.get(key); if (typeof fn === 'function') { try { fn(); } catch(e){ console.error(`Cleanup error [${key}]`, e); } } this.items.delete(key); },
-  cleanupAll() { for (const [k] of this.items) this.cleanup(k); }
+  
+  register(key, fn) { 
+    // Clean up old registration if exists
+    this.cleanup(key);
+    this.items.set(key, fn); 
+  },
+  
+  cleanup(key) { 
+    const fn = this.items.get(key); 
+    if (typeof fn === 'function') { 
+      try { 
+        fn(); 
+      } catch(e) { 
+        console.error(`Cleanup error [${key}]`, e); 
+      } 
+    } 
+    this.items.delete(key); 
+  },
+  
+  cleanupAll() { 
+    const keys = Array.from(this.items.keys());
+    for (const k of keys) {
+      this.cleanup(k); 
+    }
+  }
 };
 
 /* ========== MAIN ENTRY POINT ========== */
@@ -220,7 +293,10 @@ window.__START_POSTTEST = function(pid, isDelayed) {
   const picker = document.getElementById('picker');
   if (picker) picker.style.display = 'none';
 
-  if (!have('initJsPsych')) { alert('jsPsych not loaded. Please refresh.'); return; }
+  if (!have('initJsPsych')) { 
+    alert('jsPsych not loaded. Please refresh.'); 
+    return; 
+  }
 
   cleanupManager.cleanupAll();
 
@@ -228,8 +304,16 @@ window.__START_POSTTEST = function(pid, isDelayed) {
     display_element: 'jspsych-target',
     show_progress_bar: true,
     message_progress_bar: 'Progress / 進捗',
-    on_trial_finish: () => cleanupManager.cleanupAll(),
-    on_finish: () => { saveData(); showCompletion(); }
+    on_trial_finish: (data) => {
+      // Cleanup trial-specific resources
+      if (data.cleanup_key) {
+        cleanupManager.cleanup(data.cleanup_key);
+      }
+    },
+    on_finish: () => { 
+      saveData(); 
+      showCompletion(); 
+    }
   });
 
   const timeline = buildTimeline(isDelayed);
@@ -264,7 +348,11 @@ function buildTimeline(isDelayed) {
     tl.push(...buildPictureNamingTask());
     console.log('✓ Added picture naming task');
   } else {
-    tl.push({ type: T('jsPsychHtmlButtonResponse'), stimulus: '<p>Picture naming skipped (microphone not available)</p>', choices: ['Continue'] });
+    tl.push({ 
+      type: T('jsPsychHtmlButtonResponse'), 
+      stimulus: '<p>Picture naming skipped (microphone not available)</p>', 
+      choices: ['Continue'] 
+    });
     console.log('⚠ Picture naming unavailable');
   }
 
@@ -303,10 +391,21 @@ function buildProceduralRecallTask() {
       { prompt: '<b>Step 5 (Last / 最後):</b>', name: 'step_5', required: true, rows: 2 },
     ],
     button_label: 'Submit / 送信',
-    data: { task: 'procedural_recall_open_ended', condition: testCondition, pid: currentPID, correct_steps: PROCEDURE_STEPS },
+    data: { 
+      task: 'procedural_recall_open_ended', 
+      condition: testCondition, 
+      pid: currentPID, 
+      correct_steps: PROCEDURE_STEPS 
+    },
     on_finish: (data) => {
       const r = asObject(data.response ?? data.responses);
-      data.recalled_steps = [r.step_1||'', r.step_2||'', r.step_3||'', r.step_4||'', r.step_5||''];
+      data.recalled_steps = [
+        r.step_1 || '', 
+        r.step_2 || '', 
+        r.step_3 || '', 
+        r.step_4 || '', 
+        r.step_5 || ''
+      ];
       data.needs_manual_scoring = true;
     }
   };
@@ -337,6 +436,8 @@ function buildFoleyTask() {
       }
     }
 
+    const cleanupKey = `foley_${idx}`;
+    
     tasks.push({
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `
@@ -349,8 +450,16 @@ function buildFoleyTask() {
           <p style="color:#666;margin-top:4px;">この音は何を表していますか？</p>
         </div>`,
       choices: stim.options,
-      data: { task:'foley_recognition', audio_key: stim.audio, correct_answer: stim.correct, pid: currentPID, condition: testCondition, trial_number: idx+1 },
-      on_load: function(){
+      data: { 
+        task: 'foley_recognition', 
+        audio_key: stim.audio, 
+        correct_answer: stim.correct, 
+        pid: currentPID, 
+        condition: testCondition, 
+        trial_number: idx + 1,
+        cleanup_key: cleanupKey
+      },
+      on_load: function() {
         const btn = document.getElementById(`play-sound-${idx}`);
         const status = document.getElementById(`status-${idx}`);
         const candidates = soundCandidatesFor(stim.audio);
@@ -359,25 +468,81 @@ function buildFoleyTask() {
         btn.disabled = true;
         status.textContent = 'Loading audio…';
 
-        loader.loadNext((audio)=>{
-          status.textContent='Ready - click to play'; btn.disabled=false;
-          const click = ()=>{ btn.disabled=true; status.textContent='🔊 Playing…'; audio.currentTime=0; audio.play().then(()=>{ audio.onended=()=>{ btn.disabled=false; status.textContent='Finished - choose your answer'; }; }).catch(()=>{ btn.disabled=false; status.textContent='Playback failed'; }); };
-          btn.addEventListener('click', click);
-          cleanupManager.register(`foley_${idx}`, ()=>{ btn.removeEventListener('click', click); try{ audio.pause(); audio.src=''; audio.load(); }catch{} });
-        }, ()=>{
-          console.warn('[posttest] All candidates failed for', stim.audio, candidates);
-          btn.textContent='❌ Audio unavailable'; btn.disabled=true; status.textContent='Please answer without audio';
-        });
+        loader.loadNext(
+          (audio) => {
+            status.textContent = 'Ready - click to play'; 
+            btn.disabled = false;
+            
+            let clickHandler = null;
+            let endHandler = null;
+            
+            clickHandler = () => { 
+              btn.disabled = true; 
+              status.textContent = '🔊 Playing…'; 
+              audio.currentTime = 0; 
+              
+              audio.play().then(() => { 
+                endHandler = () => { 
+                  btn.disabled = false; 
+                  status.textContent = 'Finished - choose your answer'; 
+                };
+                audio.addEventListener('ended', endHandler, { once: true });
+              }).catch((e) => { 
+                console.warn('[posttest] Audio playback error:', e);
+                btn.disabled = false; 
+                status.textContent = 'Playback failed - please try again'; 
+              }); 
+            };
+            
+            btn.addEventListener('click', clickHandler);
+            
+            // Register cleanup
+            cleanupManager.register(cleanupKey, () => {
+              if (clickHandler) {
+                btn.removeEventListener('click', clickHandler);
+              }
+              try {
+                if (audio) {
+                  audio.pause();
+                  audio.currentTime = 0;
+                  if (endHandler) {
+                    audio.removeEventListener('ended', endHandler);
+                  }
+                  audio.src = '';
+                  audio.load();
+                }
+              } catch(e) {
+                console.warn('[posttest] Audio cleanup error:', e);
+              }
+            });
+          }, 
+          () => {
+            console.warn('[posttest] All candidates failed for', stim.audio, candidates);
+            btn.textContent = '❌ Audio unavailable'; 
+            btn.disabled = true; 
+            status.textContent = 'Please answer without audio';
+          }
+        );
       },
-      on_finish: d => { cleanupManager.cleanup(`foley_${idx}`); d.correct = (d.response === d.correct_answer); }
+      on_finish: (d) => { 
+        d.correct = (d.response === d.correct_answer); 
+      }
     });
   });
+  
   return tasks;
 }
 
 function buildPictureNamingTask() {
   const tasks = [];
-  tasks.push({ type: T('jsPsychInitializeMicrophone'), data:{task:'mic_init'}, on_finish:()=>{ microphoneAvailable=true; console.log('Microphone initialized'); } });
+  tasks.push({ 
+    type: T('jsPsychInitializeMicrophone'), 
+    data: { task: 'mic_init' }, 
+    on_finish: () => { 
+      microphoneAvailable = true; 
+      console.log('Microphone initialized'); 
+    } 
+  });
 
   tasks.push({
     type: T('jsPsychHtmlButtonResponse'),
@@ -388,13 +553,17 @@ function buildPictureNamingTask() {
         <p>できるだけ詳しく（物、動き、音、匂い）英語で説明してください。</p>
         <p style="margin-top:12px;background:#e3f2fd;border-radius:8px;padding:12px;">⏱️ 4 seconds per picture.</p>
       </div>`,
-    choices:['Start / 開始']
+    choices: ['Start / 開始']
   });
 
   tasks.push({
     type: T('jsPsychHtmlAudioResponse'),
     stimulus: `<div style="text-align:center;"><h4>Microphone check</h4><p>Say "test" for 2 seconds.</p></div>`,
-    recording_duration: 2000, show_done_button: true, allow_playback: true, accept_button_text: 'OK', data:{task:'mic_check'}
+    recording_duration: 2000, 
+    show_done_button: true, 
+    allow_playback: true, 
+    accept_button_text: 'OK', 
+    data: { task: 'mic_check' }
   });
 
   const naming_timeline = {
@@ -406,9 +575,14 @@ function buildPictureNamingTask() {
         const fb   = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='350' height='300'%3E%3Crect fill='%23f5f5f5' width='350' height='300'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' fill='%23666' font-size='16'%3EImage not available:%20${stim.target}%3C/text%3E%3C/svg%3E`;
         return `<div style="text-align:center;"><img src="${img||fb}" style="width:350px;border-radius:8px" onerror="this.src='${fb}'" /><p style="margin-top:12px;">Click to record for 4 seconds.</p></div>`;
       },
-      choices:['Start recording / 録音開始'],
-      data: () => ({ task:'picture_naming_prepare', target: jsPsych.timelineVariable('stim').target, category: jsPsych.timelineVariable('stim').category })
-    },{
+      choices: ['Start recording / 録音開始'],
+      data: () => ({ 
+        task: 'picture_naming_prepare', 
+        target: jsPsych.timelineVariable('stim').target, 
+        category: jsPsych.timelineVariable('stim').category,
+        trial_index: jsPsych.timelineVariable('idx')
+      })
+    }, {
       type: T('jsPsychHtmlAudioResponse'),
       stimulus: () => {
         const stim = jsPsych.timelineVariable('stim');
@@ -416,19 +590,50 @@ function buildPictureNamingTask() {
         const fb   = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='350' height='300'%3E%3Crect fill='%23f5f5f5' width='350' height='300'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' fill='%23666' font-size='16'%3EImage not available:%20${stim.target}%3C/text%3E%3C/svg%3E`;
         return `<div style="text-align:center;"><img src="${img||fb}" style="width:350px;border-radius:8px" onerror="this.src='${fb}'" /><div style="margin-top:10px;background:#ffebee;border-radius:8px;padding:10px;"><b>🔴 Recording…</b> Describe the picture (objects, actions, sounds, smells).</div></div>`;
       },
-      recording_duration: 4000, show_done_button: false,
-      data: () => ({ task:'picture_naming_audio', target: jsPsych.timelineVariable('stim').target, category: jsPsych.timelineVariable('stim').category, pid: currentPID, phase:'post' }),
+      recording_duration: 4000, 
+      show_done_button: false,
+      data: () => {
+        const stim = jsPsych.timelineVariable('stim');
+        const idx = jsPsych.timelineVariable('idx');
+        return { 
+          task: 'picture_naming_audio', 
+          target: stim.target, 
+          category: stim.category, 
+          pid: currentPID, 
+          phase: 'post',
+          trial_index: idx,
+          cleanup_key: `blob_${currentPID}_${idx}`
+        };
+      },
       on_finish: (d) => {
-        const tgt = (d.target||'unknown').toLowerCase();
-        const idx = jsPsych.timelineVariable('idx') || 'x';
+        const tgt = (d.target || 'unknown').toLowerCase();
+        const idx = d.trial_index || 'x';
         d.audio_filename = `post_${currentPID}_${tgt}_${idx}.wav`;
+        
         try {
           const rec = d.response && (d.response instanceof Blob ? d.response : d.response.recording);
-          if (rec instanceof Blob) d.audio_blob_url = URL.createObjectURL(rec);
-        } catch {}
+          if (rec instanceof Blob) {
+            d.audio_blob_url = URL.createObjectURL(rec);
+            
+            // Register cleanup for this blob URL
+            const cleanupKey = d.cleanup_key;
+            cleanupManager.register(cleanupKey, () => {
+              try {
+                if (d.audio_blob_url) {
+                  URL.revokeObjectURL(d.audio_blob_url);
+                  console.log(`Revoked blob URL for ${cleanupKey}`);
+                }
+              } catch(e) {
+                console.warn('[posttest] Blob cleanup error:', e);
+              }
+            });
+          }
+        } catch(e) {
+          console.error('[posttest] Error processing audio blob:', e);
+        }
       }
     }],
-    timeline_variables: picture_naming_stimuli.map((s,i)=>({ stim:s, idx:i+1 })),
+    timeline_variables: picture_naming_stimuli.map((s, i) => ({ stim: s, idx: i + 1 })),
     randomize_order: true
   };
 
@@ -462,7 +667,9 @@ function buildTransferTask() {
       stimulus: `<div style="text-align:center;"><p>How confident are you?</p><p>どのくらい自信がありますか？</p></div>`,
       choices: ['1 (Guess)', '2', '3', '4 (Very sure)'],
       data: { task: 'transfer_confidence' },
-      on_finish: (d) => { d.confidence = (d.response ?? null) !== null ? (d.response + 1) : null; }
+      on_finish: (d) => { 
+        d.confidence = (d.response ?? null) !== null ? (d.response + 1) : null; 
+      }
     }],
     timeline_variables: transfer_words.map(item => ({
       word_display: `
@@ -500,16 +707,59 @@ function buildPostQuestionnaire() {
         showCompletedPage: false,
         pages: [{
           elements: [
-            { type: 'rating', name: 'confidence_vocabulary',  title: 'Vocabulary confidence?', isRequired: true, rateMin: 1, rateMax: 5 },
-            { type: 'rating', name: 'confidence_procedure',   title: 'Procedure confidence?',  isRequired: true, rateMin: 1, rateMax: 5 },
-            { type: 'rating', name: 'training_helpfulness',   title: 'Training helpfulness?',  isRequired: true, rateMin: 1, rateMax: 5 },
-            { type: 'comment', name: 'learning_strategies',   title: 'Strategies used (optional)', isRequired: false, rows: 3 },
-            { type: 'comment', name: 'difficulties',          title: 'Most difficult part (optional)', isRequired: false, rows: 3 },
-            { type: 'comment', name: 'additional_comments',   title: 'Anything else? (optional)', isRequired: false, rows: 3 },
+            { 
+              type: 'rating', 
+              name: 'confidence_vocabulary',  
+              title: 'Vocabulary confidence?', 
+              isRequired: true, 
+              rateMin: 1, 
+              rateMax: 5 
+            },
+            { 
+              type: 'rating', 
+              name: 'confidence_procedure',   
+              title: 'Procedure confidence?',  
+              isRequired: true, 
+              rateMin: 1, 
+              rateMax: 5 
+            },
+            { 
+              type: 'rating', 
+              name: 'training_helpfulness',   
+              title: 'Training helpfulness?',  
+              isRequired: true, 
+              rateMin: 1, 
+              rateMax: 5 
+            },
+            { 
+              type: 'comment', 
+              name: 'learning_strategies',   
+              title: 'Strategies used (optional)', 
+              isRequired: false, 
+              rows: 3 
+            },
+            { 
+              type: 'comment', 
+              name: 'difficulties',          
+              title: 'Most difficult part (optional)', 
+              isRequired: false, 
+              rows: 3 
+            },
+            { 
+              type: 'comment', 
+              name: 'additional_comments',   
+              title: 'Anything else? (optional)', 
+              isRequired: false, 
+              rows: 3 
+            },
           ]
         }]
       },
-      data: { task: 'post_questionnaire', condition: testCondition, pid: currentPID }
+      data: { 
+        task: 'post_questionnaire', 
+        condition: testCondition, 
+        pid: currentPID 
+      }
     };
   }
   return {
@@ -520,18 +770,31 @@ function buildPostQuestionnaire() {
 }
 
 /* Final open-ended feedback */
-function buildExitOpenQuestion(){
+function buildExitOpenQuestion() {
   if (!have('jsPsychSurveyText')) {
-    return { type: T('jsPsychHtmlButtonResponse'), stimulus: '<p>Feedback form unavailable.</p>', choices: ['Finish'] };
+    return { 
+      type: T('jsPsychHtmlButtonResponse'), 
+      stimulus: '<p>Feedback form unavailable.</p>', 
+      choices: ['Finish'] 
+    };
   }
   return {
     type: T('jsPsychSurveyText'),
     preamble: `<div style="text-align:center;"><h3>Final Comments / 最後のコメント</h3><p>Please share any questions, concerns, or issues you had with the test.</p><p>テストについての質問・懸念・問題点があればご記入ください。</p></div>`,
     questions: [
-      { prompt: 'Your feedback (optional) / フィードバック（任意）', name: 'exit_feedback', rows: 5, required: false }
+      { 
+        prompt: 'Your feedback (optional) / フィードバック（任意）', 
+        name: 'exit_feedback', 
+        rows: 5, 
+        required: false 
+      }
     ],
     button_label: 'Submit & Finish / 送信して終了',
-    data: { task: 'exit_feedback', condition: testCondition, pid: currentPID }
+    data: { 
+      task: 'exit_feedback', 
+      condition: testCondition, 
+      pid: currentPID 
+    }
   };
 }
 
@@ -542,37 +805,50 @@ function saveData() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `posttest_${testCondition}_${currentPID}_${timestamp}.json`;
 
-    localStorage.setItem('posttest_latest', JSON.stringify({ filename, condition: testCondition, pid: currentPID, timestamp, data }));
+    localStorage.setItem('posttest_latest', JSON.stringify({ 
+      filename, 
+      condition: testCondition, 
+      pid: currentPID, 
+      timestamp, 
+      data 
+    }));
 
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click();
+    a.href = url; 
+    a.download = filename;
+    document.body.appendChild(a); 
+    a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
     console.log(`Data saved: ${filename}`);
   } catch (e) {
     console.error('Error saving data:', e);
-    alert('There was an error saving your data.');
+    alert('There was an error saving your data. Please contact the researcher.');
   }
 }
 
 function showCompletion() {
   const el = document.getElementById('jspsych-target');
   if (!el) return;
+  
   cleanupManager.cleanupAll();
+  
   el.innerHTML = `
     <div style="max-width:600px; margin:50px auto; text-align:center; padding:40px;
                 background:white; border-radius:12px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
       <h2 style="color:#4CAF50;">✅ Post-Test Complete!</h2>
       <p>Your data has been downloaded automatically.</p>
       <p>データは自動的にダウンロードされました。</p>
-      <button onclick="location.reload()" style="margin-top:20px;padding:12px 24px;border:none;border-radius:8px;background:#4CAF50;color:#fff;cursor:pointer;">Run Another Test / 別のテストを実行</button>
+      <button onclick="location.reload()" style="margin-top:20px;padding:12px 24px;border:none;border-radius:8px;background:#4CAF50;color:#fff;cursor:pointer;font-size:16px;">Run Another Test / 別のテストを実行</button>
     </div>`;
 }
 
-window.addEventListener('beforeunload', () => cleanupManager.cleanupAll());
-console.log('Post-test script v2.9 loaded — fixed: hidden answers in recognition + timeline logging');
+window.addEventListener('beforeunload', () => {
+  cleanupManager.cleanupAll();
+});
+
+console.log('Post-test script v2.9 (FIXED) loaded — improved error handling, memory leak fixes, and audio cleanup');
