@@ -1,11 +1,8 @@
 /**
- * posttest.js — VERSION 4.0.0 (Blueprint-aligned)
- * - Counterbalanced alt assets (image/foley) with per-participant versioning
- * - Added word→picture speeded match block
- * - Shortened delayed battery (trimmed item counts)
- * - Sequencing scored with Kendall’s τ
- * - All tasks log set/token version metadata
- * - Survey bridge now handled in HTML; no blank-screen freezes
+ * posttest.js — VERSION 4.0.1
+ * - Blueprint-aligned tasks with safe fallbacks for missing alt assets
+ * - Restored createResilientAudioLoader
+ * - Survey render bug fixed (KO expects ID string)
  */
 
 (function(){
@@ -30,12 +27,6 @@
     const sep = clean.includes('?') ? '&' : '?';
     return clean + sep + 'v=' + ASSET_BUST;
   };
-
-  function asObject(x) {
-    if (!x) return {};
-    if (typeof x === 'string') { try { return JSON.parse(x); } catch(e) { return {}; } }
-    return (typeof x === 'object') ? x : {};
-  }
 
   function pidHash(str){
     let h = 0;
@@ -74,43 +65,17 @@
     }
   };
 
-  /* ========== COUNTERBALANCED ASSET MAPS ==========
-     Replace placeholder filenames with your alt assets. If an alt is missing,
-     code falls back to IMG/SND variants. */
+  /* ========== OPTIONAL ALT ASSET MAPS ==========
+     Provide real alternate paths if you have them. Leaving these empty
+     simply falls back to the base stimuli in picture_naming_stimuli. */
   const ALT_IMAGE_SETS = {
-    bowl:     { A: 'img/bowl_altA.png',     B: 'img/bowl_altB.png' },
-    butter:   { A: 'img/butter_altA.png',   B: 'img/butter_altB.png' },
-    egg:      { A: 'img/egg_altA.png',      B: 'img/egg_altB.png' },
-    flour:    { A: 'img/flour_altA.png',    B: 'img/flour_altB.png' },
-    milk:     { A: 'img/milk_altA.png',     B: 'img/milk_altB.png' },
-    pan:      { A: 'img/pan_altA.png',      B: 'img/pan_altB.png' },
-    pancake:  { A: 'img/pancake_altA.png',  B: 'img/pancake_altB.png' },
-    spatula:  { A: 'img/spatula_altA.png',  B: 'img/spatula_altB.png' },
-    sugar:    { A: 'img/sugar_altA.png',    B: 'img/sugar_altB.png' },
-    whisk:    { A: 'img/whisk_altA.png',    B: 'img/whisk_altB.png' },
-    mixing:   { A: 'img/mixing_altA.png',   B: 'img/mixing_altB.png' },
-    cracking: { A: 'img/cracking_altA.png', B: 'img/cracking_altB.png' },
-    pouring:  { A: 'img/pouring_altA.png',  B: 'img/pouring_altB.png' },
-    flipping: { A: 'img/flipping_altA.png', B: 'img/flipping_altB.png' },
-    sizzling: { A: 'img/sizzling_altA.png', B: 'img/sizzling_altB.png' },
+    // Example: bowl: { A: 'img/bowl_altA.jpg', B: 'img/bowl_altB.jpg' }
   };
-
   const ALT_FOLEY_TOKENS = {
-    crack:  { A: ['sounds/crack_altA1.mp3', 'sounds/crack_altA2.mp3'],
-              B: ['sounds/crack_altB1.mp3', 'sounds/crack_altB2.mp3'] },
-    whisk:  { A: ['sounds/whisk_altA1.mp3', 'sounds/whisk_altA2.mp3'],
-              B: ['sounds/whisk_altB1.mp3', 'sounds/whisk_altB2.mp3'] },
-    pour:   { A: ['sounds/pour_altA1.mp3',  'sounds/pour_altA2.mp3'],
-              B: ['sounds/pour_altB1.mp3',  'sounds/pour_altB2.mp3'] },
-    sizzle: { A: ['sounds/sizzle_altA1.mp3','sounds/sizzle_altA2.mp3'],
-              B: ['sounds/sizzle_altB1.mp3','sounds/sizzle_altB2.mp3'] },
-    spread: { A: ['sounds/spread_altA1.mp3','sounds/spread_altA2.mp3'],
-              B: ['sounds/spread_altB1.mp3','sounds/spread_altB2.mp3'] },
-    flip:   { A: ['sounds/flip_altA1.mp3',  'sounds/flip_altA2.mp3'],
-              B: ['sounds/flip_altB1.mp3',  'sounds/flip_altB2.mp3'] },
+    // Example: crack: { A: ['sounds/crack_A1.mp3'], B: ['sounds/crack_B1.mp3'] }
   };
 
-  /* ========== ASSET DEFINITIONS (defaults) ========== */
+  /* ========== BASE ASSET LISTS ========== */
   const IMG = {
     bowl:     ['img/bowl_01.png', 'img/bowl_02.png'],
     butter:   ['img/butter_01.png', 'img/butter_02.png'],
@@ -149,30 +114,30 @@
 
   /* ========== STIMULI BASE LISTS ========== */
   const picture_naming_stimuli = [
-        { target: 'bowl',    category: 'utensil',    image: 'img/bowl.jpg' },
-        { target: 'butter',  category: 'ingredient', image: 'img/butter.jpg' },
-        { target: 'egg',     category: 'ingredient', image: 'img/egg.jpg' },
-        { target: 'flour',   category: 'ingredient', image: 'img/flour.jpg' },
-        { target: 'milk',    category: 'ingredient', image: 'img/milk.jpg' },
-        { target: 'pan',     category: 'utensil',    image: 'img/pan.jpg' },
-        { target: 'pancake', category: 'food',       image: 'img/pancake.jpg' },
-        { target: 'spatula', category: 'utensil',    image: 'img/spatula.jpg' },
-        { target: 'sugar',   category: 'ingredient', image: 'img/sugar.jpg' },
-        { target: 'whisk',   category: 'utensil',    image: 'img/whisk.jpg' },
-        { target: 'mixing',   category: 'action',    image: 'img/mixing.jpeg' },
-        { target: 'cracking', category: 'action',    image: 'img/cracking.jpeg' },
-        { target: 'pouring',  category: 'action',    image: 'img/pouring.jpeg' },
-        { target: 'flipping', category: 'action',    image: 'img/flipping.jpg' },
-        { target: 'sizzling', category: 'process',   image: 'img/sizzling.jpeg' },
+    { target: 'bowl',    category: 'utensil',    image: 'img/bowl.jpg' },
+    { target: 'butter',  category: 'ingredient', image: 'img/butter.jpg' },
+    { target: 'egg',     category: 'ingredient', image: 'img/egg.jpg' },
+    { target: 'flour',   category: 'ingredient', image: 'img/flour.jpg' },
+    { target: 'milk',    category: 'ingredient', image: 'img/milk.jpg' },
+    { target: 'pan',     category: 'utensil',    image: 'img/pan.jpg' },
+    { target: 'pancake', category: 'food',       image: 'img/pancake.jpg' },
+    { target: 'spatula', category: 'utensil',    image: 'img/spatula.jpg' },
+    { target: 'sugar',   category: 'ingredient', image: 'img/sugar.jpg' },
+    { target: 'whisk',   category: 'utensil',    image: 'img/whisk.jpg' },
+    { target: 'mixing',   category: 'action',    image: 'img/mixing.jpeg' },
+    { target: 'cracking', category: 'action',    image: 'img/cracking.jpeg' },
+    { target: 'pouring',  category: 'action',    image: 'img/pouring.jpeg' },
+    { target: 'flipping', category: 'action',    image: 'img/flipping.jpg' },
+    { target: 'sizzling', category: 'process',   image: 'img/sizzling.jpeg' },
   ];
 
   const foley_stimuli = [
-        { audio: 'crack',  options: ['stirring', 'cracking'],               correct: 1, mapping_type: 'action' },
-        { audio: 'whisk',  options: ['mixing (whisking)', 'pouring'],       correct: 0, mapping_type: 'texture' },
-        { audio: 'pour',   options: ['pouring', 'flipping'],                correct: 0, mapping_type: 'texture' },
-        { audio: 'sizzle', options: ['spreading butter', 'cooking on pan'], correct: 1, mapping_type: 'process' },
-        { audio: 'flip',   options: ['turning pancake', 'cracking egg'],    correct: 0, mapping_type: 'action' },
-        { audio: 'spread', options: ['spreading butter', 'cracking egg'],   correct: 0, mapping_type: 'texture' },
+    { audio: 'crack',  options: ['stirring', 'cracking'],               correct: 1, mapping_type: 'action' },
+    { audio: 'whisk',  options: ['mixing (whisking)', 'pouring'],       correct: 0, mapping_type: 'texture' },
+    { audio: 'pour',   options: ['pouring', 'flipping'],                correct: 0, mapping_type: 'texture' },
+    { audio: 'sizzle', options: ['spreading butter', 'cooking on pan'], correct: 1, mapping_type: 'process' },
+    { audio: 'flip',   options: ['turning pancake', 'cracking egg'],    correct: 0, mapping_type: 'action' },
+    { audio: 'spread', options: ['spreading butter', 'cracking egg'],   correct: 0, mapping_type: 'texture' },
   ];
 
   /* ========== RANDOMIZATION HELPERS ========== */
@@ -190,18 +155,48 @@
     return shuffled.slice(0, Math.min(size, array.length)).filter(Boolean);
   }
 
-  /* ========== ASSET PICKERS WITH VERSIONING ========== */
+  /* ========== RESILIENT AUDIO LOADER ========== */
+  function createResilientAudioLoader(candidates){
+    let idx = 0, audio = null;
+    function loadNext(onReady, onFail){
+      if (idx >= candidates.length) { onFail?.(); return; }
+      const src = asset(candidates[idx++]);
+
+      audio = new Audio();
+      audio.preload = 'auto';
+
+      const clean = () => {
+        if (audio) {
+          audio.removeEventListener('canplaythrough', ok);
+          audio.removeEventListener('error', bad);
+        }
+      };
+      const ok  = () => { clean(); onReady?.(audio, src); };
+      const bad = () => { clean(); loadNext(onReady, onFail); };
+      audio.addEventListener('canplaythrough', ok,  { once:true });
+      audio.addEventListener('error', bad, { once:true });
+      audio.src = src;
+      audio.load?.();
+    }
+    return { loadNext };
+  }
+
+  /* ========== ASSET PICKERS WITH SAFE FALLBACKS ========== */
   function imageSrcFor(key){
-    const alt = ALT_IMAGE_SETS[key]?.[imageSetVersion];
-    if (alt) return asset(alt);
+    const altPath = ALT_IMAGE_SETS[key]?.[imageSetVersion];
+    if (altPath) return asset(altPath);
+
+    const baseStim = picture_naming_stimuli.find(s => s.target === key);
+    if (baseStim?.image) return asset(baseStim.image);
+
     const variants = IMG[key];
     const chosen = pickForPID(key + imageSetVersion, variants);
-    return chosen ? asset(chosen) : null;
+    return chosen ? asset(chosen) : '';
   }
 
   function soundCandidatesFor(key){
-    const base = ALT_FOLEY_TOKENS[key]?.[foleyTokenVersion] ?? [];
-    const raw = [...base, ...(SND[key] || []), ...(SND_ALIASES[key] || [])];
+    const alt = ALT_FOLEY_TOKENS[key]?.[foleyTokenVersion] ?? [];
+    const raw = [...alt, ...(SND[key] || []), ...(SND_ALIASES[key] || [])];
     const expanded = raw.flatMap(r => {
       const basePath = (r.includes('/') ? r : ('sounds/' + r)).replace(/\\/g,'/');
       const noBust = basePath.replace(/\?.*$/, '');
@@ -217,7 +212,7 @@
     return Array.from(new Set(expanded));
   }
 
-  /* ========== SCORING HELPERS ========== */
+  /* ========== KENDALL'S TAU ========== */
   function kendallTau(target, response) {
     let concordant = 0;
     let discordant = 0;
@@ -235,7 +230,7 @@
     return denom ? (concordant - discordant) / denom : 0;
   }
 
-  /* ========== MAIN ENTRY POINT ========== */
+  /* ========== MAIN ENTRY ========== */
   window.__START_POSTTEST = function(pid, isDelayed) {
     currentPID = pid || 'unknown';
     testCondition = isDelayed ? 'delayed' : 'immediate';
@@ -278,9 +273,9 @@
     const delayed = Boolean(isDelayed);
 
     const selectItems = (arr, count) => arr.slice(0, Math.min(count, arr.length));
-    const vocabItems  = delayed ? selectItems(picture_naming_stimuli, 6)  : picture_naming_stimuli;
-    const namingItems = delayed ? selectItems(picture_naming_stimuli, 6)  : picture_naming_stimuli;
-    const foleyItems  = delayed ? selectItems(foley_stimuli, 6)           : foley_stimuli;
+    const vocabItems  = delayed ? selectItems(picture_naming_stimuli, 6) : picture_naming_stimuli;
+    const namingItems = delayed ? selectItems(picture_naming_stimuli, 6) : picture_naming_stimuli;
+    const foleyItems  = delayed ? selectItems(foley_stimuli, 6)              : foley_stimuli;
 
     if (!have('jsPsychHtmlButtonResponse')) {
       console.error('Required plugin jsPsychHtmlButtonResponse not found');
@@ -382,22 +377,23 @@
   }
 
   function buildWordPictureMatchTask(items) {
-    const stimuli = shuffle(items).map((item) => {
+    const baseStimuli = shuffle(items).map((item) => {
       const image = imageSrcFor(item.target);
       return { word: item.target, image };
     });
 
-    const mismatches = stimuli.map((stim) => {
-      const other = pickForPID(stim.word + '_foil', stimuli.filter(s => s.word !== stim.word));
-      return other ? { word: stim.word, image: other.image, match: false } : null;
-    }).filter(Boolean);
+    const combos = [];
+    baseStimuli.forEach((stim, idx) => {
+      combos.push({ ...stim, match: true });
 
-    const combined = shuffle([
-      ...stimuli.map(s => ({ word: s.word, image: s.image, match: true })),
-      ...mismatches
-    ]).slice(0, stimuli.length * 2);
+      const others = baseStimuli.filter((s, i) => i !== idx && s.image);
+      if (others.length) {
+        const foil = others[pidHash(stim.word) % others.length];
+        combos.push({ word: stim.word, image: foil.image, match: false });
+      }
+    });
 
-    const trials = combined.map((stim) => ({
+    const trials = shuffle(combos).map((stim) => ({
       type: T('jsPsychHtmlKeyboardResponse'),
       stimulus: `<div style="text-align:center;">
                    <h3>${stim.word.toUpperCase()}</h3>
@@ -656,27 +652,31 @@
               };
 
               clickHandler = () => {
-                btn.disabled = true;
+                btn_disabled_state(true);
                 status.textContent = '🔊 Playing…';
                 audio.currentTime = 0;
                 audio.play().then(() => {
                   endHandler = () => {
-                    btn.disabled = false;
-                    btn.textContent = '🔁 Play Again';
+                    btn_disabled_state(false, '🔁 Play Again');
                     status.textContent = 'Finished - choose your answer';
                     enableAnswerButtons();
                   };
                   audio.addEventListener('ended', endHandler, { once: true });
                 }).catch((e) => {
                   console.warn('[posttest] Audio playback error:', e);
-                  btn.disabled = false;
+                  btn_disabled_state(false);
                   status.textContent = 'Playback failed - please try again';
                 });
               };
 
+              const btn_disabled_state = (flag, text) => {
+                btn.disabled = flag;
+                if (text) btn.textContent = text;
+              };
+
               btn.addEventListener('click', clickHandler);
               cleanupManager.register(cleanupKey, () => {
-                if (clickHandler) { btn.removeEventListener('click', clickHandler); }
+                btn.removeEventListener('click', clickHandler);
                 if (endHandler) { audio.removeEventListener('ended', endHandler); }
                 try { audio.pause(); audio.src = ''; audio.load(); } catch(e) {}
               });

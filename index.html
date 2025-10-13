@@ -145,10 +145,10 @@
 
               if (typeof surveyInstance.render === 'function') {
                 console.log('[jsPsychSurvey] Rendering via surveyInstance.render');
-                surveyInstance.render(container);
+                surveyInstance.render('surveyContainer');
               } else if (SurveyNamespace.SurveyNG?.render) {
                 console.log('[jsPsychSurvey] Rendering via Survey.SurveyNG.render');
-                SurveyNamespace.SurveyNG.render(container, { model: surveyInstance });
+                SurveyNamespace.SurveyNG.render('surveyContainer', { model: surveyInstance });
               } else {
                 throw new Error('SurveyJS render API not available');
               }
@@ -178,10 +178,10 @@
     })();
   </script>
 
-  <!-- Your posttest logic -->
+  <!-- post-test logic -->
   <script src="posttest.js"></script>
 
-  <!-- Library check + button wiring -->
+  <!-- Library check + start buttons -->
   <script>
     window.addEventListener('load', () => {
       const el = document.getElementById('lib-check');
@@ -218,11 +218,11 @@
       });
 
       document.getElementById('btn-delayed')?.addEventListener('click', () => {
-        if (typeof window.__START_POSTTEST !== 'function') {
+        if (typeof __START_POSTTEST !== 'function') {
           alert('posttest.js not loaded yet.');
           return;
         }
-        window.__START_POSTTEST(getPid(), true);
+        __START_POSTTEST(getPid(), true);
       });
     });
   </script>
