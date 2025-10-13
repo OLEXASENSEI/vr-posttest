@@ -1,18 +1,16 @@
 /**
- * posttest.js — jsPsych-only version, category-matched foils, bilingual naming prompt.
- * This build auto-downloads the full dataset at the end (JSON).
+ * posttest.js — jsPsych-only, category-matched foils, bilingual naming prompt,
+ * automatic JSON download on completion, and refined formatting.
  */
-
 (function () {
   let jsPsych = null;
   let currentPID = 'unknown';
   let testCondition = 'immediate';
-  let microphoneAvailable = false;
 
   const have = (name) => typeof window[name] !== 'undefined';
   const T = (name) => window[name];
 
-  /* ========== STIMULI WITH CATEGORIES ========== */
+  /* ---------- Stimuli ---------- */
   const PICTURES = [
     { word: 'bowl',     category: 'object',     variants: ['img/bowl_01.png',     'img/bowl_02.png'] },
     { word: 'butter',   category: 'object',     variants: ['img/butter_01.png',   'img/butter_02.png'] },
@@ -80,7 +78,7 @@
     'Crack eggs', 'Mix flour and eggs', 'Heat the pan', 'Pour batter on pan', 'Flip when ready'
   ];
 
-  /* ========== UTILITIES ========== */
+  /* ---------- Utilities ---------- */
   const shuffle = (arr) => {
     const copy = arr.slice();
     for (let i = copy.length - 1; i > 0; i--) {
@@ -90,6 +88,7 @@
     return copy;
   };
   const sample = (arr, n) => shuffle(arr).slice(0, Math.min(n, arr.length));
+  const choiceMap = Object.fromEntries(PICTURES.map(p => [p.word, p.variants]));
   const randomVariant = (mapping, key) => {
     const list = mapping[key];
     if (!list || !list.length) return null;
@@ -101,17 +100,16 @@
     return (typeof x === 'object') ? x : {};
   };
   const makeImageCard = (word) => {
-    const mapping = Object.fromEntries(PICTURES.map(p => [p.word, p.variants]));
-    const src = randomVariant(mapping, word);
+    const src = randomVariant(choiceMap, word);
     if (!src) {
-      return `<div style="width:200px;height:140px;border-radius:10px;border:1px dashed #90caf9;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-size:15px;color:#1565c0;">
+      return `<div style="width:220px;height:150px;border-radius:10px;border:1px dashed #90caf9;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-size:15px;color:#1565c0;">
         ${word}
       </div>`;
     }
-    return `<div style="width:200px;text-align:center;">
+    return `<div style="width:220px;text-align:center;">
       <img src="${src}" alt="${word}"
          onerror="this.onerror=null;this.src='data:image/svg+xml,${PLACEHOLDER_IMG}';"
-         style="width:200px;height:140px;object-fit:cover;border-radius:10px;border:1px solid #ccc;">
+         style="width:220px;height:150px;object-fit:cover;border-radius:10px;border:1px solid #ccc;">
     </div>`;
   };
   const getAudio = (key) =>
@@ -134,9 +132,7 @@
     return denom ? (concordant - discordant) / denom : 0;
   }
 
-  const getPicture = (word) => PICTURES.find(p => p.word === word);
-
-  /* ========== ENTRY POINT ========== */
+  /* ---------- Entry ---------- */
   window.__START_POSTTEST = (pid, delayed) => {
     currentPID = pid || 'unknown';
     testCondition = delayed ? 'delayed' : 'immediate';
@@ -145,7 +141,6 @@
     document.querySelectorAll('.start').forEach(btn => btn.disabled = true);
 
     jsPsych?.terminate?.();
-
     jsPsych = T('initJsPsych')({
       display_element: 'jspsych-target',
       show_progress_bar: true,
@@ -160,7 +155,7 @@
     try { jsPsych?.terminate?.(); } catch {}
   });
 
-  /* ========== TIMELINE ========== */
+  /* ---------- Timeline ---------- */
   function buildTimeline(delayed) {
     const tl = [];
 
@@ -188,7 +183,6 @@
     }
     tl.push(buildLikert());
     tl.push(buildExit());
-
     return tl;
   }
 
@@ -204,8 +198,8 @@
       return {
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `<div style="text-align:center;">
-          <h3>Which picture is <em>${targetPic.word}</em>?</h3>
-          <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:18px;">
+          <h3 style="margin-bottom:20px;">Which picture is <em>${targetPic.word}</em>?</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:18px;justify-content:center;margin-bottom:24px;">
             ${choices.map(c => makeImageCard(c.word)).join('')}
           </div>
         </div>`,
@@ -239,7 +233,7 @@
       type: T('jsPsychHtmlKeyboardResponse'),
       stimulus: `<div style="text-align:center;">
         <h3>${stim.word.toUpperCase()}</h3>
-        ${stim.card}
+        <div style="display:flex;justify-content:center;margin:18px 0;">${stim.card}</div>
         <p style="margin-top:12px;color:#666;">F = match, J = not match</p>
       </div>`,
       choices: ['f', 'j'],
@@ -280,7 +274,7 @@
         let html = '<div style="text-align:center;"><h3>Select the steps in order</h3>';
         html += '<div id="seq-container" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;">';
         shuffled.forEach(step => {
-          html += `<button class="jspsych-btn seq-btn" data-step="${step}" style="width:200px;">${step}</button>`;
+          html += `<button class="jspsych-btn seq-btn" data-step="${step}" style="width:220px;">${step}</button>`;
         });
         html += '</div><div id="seq-output" style="margin-top:20px;min-height:40px;color:#1565c0;font-weight:600;"></div></div>';
         return html;
@@ -366,7 +360,7 @@
       {
         timeline: pool.map((pic, i) => ({
           type: T('jsPsychHtmlButtonResponse'),
-          stimulus: `<div style="text-align:center;">
+          stimulus: `<div style="max-width:520px;margin:0 auto;text-align:center;">
             ${makeImageCard(pic.word)}
             <p style="margin-top:12px;">Click to start recording (4 seconds).</p>
           </div>`,
@@ -377,7 +371,7 @@
       {
         timeline: pool.map((pic, i) => ({
           type: T('jsPsychHtmlAudioResponse'),
-          stimulus: `<div style="text-align:center;">
+          stimulus: `<div style="max-width:520px;margin:0 auto;text-align:center;">
             ${makeImageCard(pic.word)}
             <p style="margin-top:12px;color:#d32f2f;font-weight:bold;">
               Recording… describe the object, action, sounds, smells in English.<br/>
@@ -432,11 +426,11 @@
   function buildLikert() {
     return {
       type: T('jsPsychSurveyLikert'),
-      preamble: '<h3>Training Feedback</h3>',
+      preamble: '<h3>Language Training Feedback</h3><p>Please rate your experience with the text/2D/VR training.</p>',
       questions: [
-        { prompt: 'Confidence with vocabulary', labels: ['1', '2', '3', '4', '5'], required: true, name: 'confidence_vocab' },
-        { prompt: 'Confidence with procedure', labels: ['1', '2', '3', '4', '5'], required: true, name: 'confidence_proc' },
-        { prompt: 'Training helpfulness', labels: ['1', '2', '3', '4', '5'], required: true, name: 'helpfulness' }
+        { prompt: 'Did your confidence in the vocabulary increase?', labels: ['1', '2', '3', '4', '5'], required: true, name: 'confidence_vocab' },
+        { prompt: 'How confident are you with the learning procedure?', labels: ['1', '2', '3', '4', '5'], required: true, name: 'confidence_proc' },
+        { prompt: 'How helpful was the training for your language learning?', labels: ['1', '2', '3', '4', '5'], required: true, name: 'helpfulness' }
       ],
       button_label: 'Submit',
       data: { task: 'likert_feedback', pid: currentPID, condition: testCondition }
@@ -446,14 +440,14 @@
   function buildExit() {
     return {
       type: T('jsPsychSurveyText'),
-      preamble: '<h3>Final Comments</h3><p>Any questions, concerns, or issues to share?</p>',
-      questions: [{ prompt: 'Your comments (optional)', name: 'comments', rows: 4, required: false }],
+      preamble: '<h3>Final Comments</h3><p>Please share your experience with the training. Do you have any comments, concerns, or suggestions?</p>',
+      questions: [{ prompt: 'Your comments / ご意見', name: 'comments', rows: 4, required: false }],
       button_label: 'Finish',
       data: { task: 'exit_comments', pid: currentPID, condition: testCondition }
     };
   }
 
-  /* ========== SAVE & COMPLETION (WITH DOWNLOAD) ========== */
+  /* ---------- Save & download ---------- */
   function saveData() {
     const allData = jsPsych.data.get().values();
     console.log('[posttest] Trials collected:', allData.length);
