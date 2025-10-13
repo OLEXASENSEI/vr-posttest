@@ -1,8 +1,6 @@
-/**VERSION 3.1
- * posttest.js — FINAL COMPLETE AND ROBUST VERSION
- * - FIX: Define mic_plugins_available() and gate mic tasks correctly.
- * - FIX: Sequencing task now reliably captures chosen order (no DOM scraping).
- * - TWEAK: asset() minor cleanup; safer fallbacks; consistent cleanup.
+/**
+ * posttest.js — VERSION 3.2 FIXED
+ * Complete post-test battery with proper library checks
  */
 
 (function(){
@@ -13,7 +11,7 @@
   let microphoneAvailable = false;
 
   const have = (name) => typeof window[name] !== 'undefined';
-  const T    = (name) => window[name];
+  const T = (name) => window[name];
   const mic_plugins_available = () => have('jsPsychInitializeMicrophone') && have('jsPsychHtmlAudioResponse');
 
   const ASSET_BUST = Math.floor(Math.random() * 100000);
@@ -34,6 +32,7 @@
     let h=0; for(let i=0; i<s.length; i++){ h=((h<<5)-h)+s.charCodeAt(i); h|=0; }
     return Math.abs(h);
   }
+  
   function pickForPID(key, arr){
     if (!arr || !arr.length) return null;
     const idx = hashStr(String(currentPID || 'anon') + '|' + key) % arr.length;
@@ -56,20 +55,32 @@
 
   /* ========== ASSET DEFINITIONS ========== */
   const IMG = {
-    bowl:     ['img/bowl_01.png', 'img/bowl_02.png'], butter:   ['img/butter_01.png', 'img/butter_02.png'],
-    egg:      ['img/egg_01.png', 'img/egg_02.png'],   flour:    ['img/flour_01.png', 'img/flour_02.png'],
-    milk:     ['img/milk_01.png', 'img/milk_02.png'], pan:      ['img/pan_01.png', 'img/pan_02.png'],
-    pancake:  ['img/pancake_01.png', 'img/pancake_02.png'], spatula:  ['img/spatula_01.png', 'img/spatula_02.png'],
-    sugar:    ['img/sugar_01.png', 'img/sugar_02.png'], whisk:    ['img/whisk_01.png', 'img/whisk_02.png'],
-    mixing:   ['img/mixing_01.png',   'img/mixing_02.png'], cracking: ['img/cracking_01.png', 'img/cracking_02.png'],
-    pouring:  ['img/pouring_01.png',  'img/pouring_02.png'], flipping: ['img/flipping_01.png', 'img/flipping_02.png'],
+    bowl:     ['img/bowl_01.png', 'img/bowl_02.png'], 
+    butter:   ['img/butter_01.png', 'img/butter_02.png'],
+    egg:      ['img/egg_01.png', 'img/egg_02.png'],   
+    flour:    ['img/flour_01.png', 'img/flour_02.png'],
+    milk:     ['img/milk_01.png', 'img/milk_02.png'], 
+    pan:      ['img/pan_01.png', 'img/pan_02.png'],
+    pancake:  ['img/pancake_01.png', 'img/pancake_02.png'], 
+    spatula:  ['img/spatula_01.png', 'img/spatula_02.png'],
+    sugar:    ['img/sugar_01.png', 'img/sugar_02.png'], 
+    whisk:    ['img/whisk_01.png', 'img/whisk_02.png'],
+    mixing:   ['img/mixing_01.png',   'img/mixing_02.png'], 
+    cracking: ['img/cracking_01.png', 'img/cracking_02.png'],
+    pouring:  ['img/pouring_01.png',  'img/pouring_02.png'], 
+    flipping: ['img/flipping_01.png', 'img/flipping_02.png'],
     sizzling: ['img/sizzling_01.png', 'img/sizzling_02.png'],
   };
+  
   const SND = {
-    crack:  ['crack_1.mp3',  'crack_2.mp3'], flip:   ['flip_1.mp3',   'flip_2.mp3'],
-    pour:   ['pour_1.mp3',   'pour_2.mp3'],  sizzle: ['sizzle_1.mp3', 'sizzle_2.mp3'],
-    spread: ['spread_1.mp3', 'spread_2.mp3'], whisk:  ['whisk_1.mp3',  'whisk_2.mp3'],
+    crack:  ['crack_1.mp3',  'crack_2.mp3'], 
+    flip:   ['flip_1.mp3',   'flip_2.mp3'],
+    pour:   ['pour_1.mp3',   'pour_2.mp3'],  
+    sizzle: ['sizzle_1.mp3', 'sizzle_2.mp3'],
+    spread: ['spread_1.mp3', 'spread_2.mp3'], 
+    whisk:  ['whisk_1.mp3',  'whisk_2.mp3'],
   };
+  
   const SND_ALIASES = {
     crack:  ['egg_crack.mp3', 'cracking.mp3'],
     whisk:  ['circular_whir.mp3', 'whisk.mp3'],
@@ -78,6 +89,7 @@
     flip:   ['pan_flip.mp3', 'flip.mp3'],
     spread: ['butter_spread.mp3', 'spread.mp3'],
   };
+  
   const soundCandidatesFor = (key) => {
     const raw = [...(SND[key] || []), ...(SND_ALIASES[key] || [])];
     const expanded = raw.flatMap(r => {
@@ -93,21 +105,33 @@
     });
     return Array.from(new Set(expanded));
   };
+  
   function createResilientAudioLoader(candidates){
     let idx = 0, audio = null;
     function loadNext(onReady, onFail){
       if (idx >= candidates.length) { onFail?.(); return; }
-      const src = asset(candidates[idx++]); audio = new Audio(); audio.preload='auto';
-      const clean = () => { if (audio) { audio.removeEventListener('canplaythrough', ok); audio.removeEventListener('error', bad); } };
+      const src = asset(candidates[idx++]); 
+      audio = new Audio(); 
+      audio.preload='auto';
+      const clean = () => { 
+        if (audio) { 
+          audio.removeEventListener('canplaythrough', ok); 
+          audio.removeEventListener('error', bad); 
+        } 
+      };
       const ok  = () => { clean(); onReady?.(audio, src); };
       const bad = () => { clean(); loadNext(onReady, onFail); };
-      audio.addEventListener('canplaythrough', ok,  { once:true }); audio.addEventListener('error', bad, { once:true });
+      audio.addEventListener('canplaythrough', ok,  { once:true }); 
+      audio.addEventListener('error', bad, { once:true });
       audio.src = src;
     }
     return { loadNext };
   }
+  
   function imageSrcFor(key){
-    const variants = IMG[key]; const chosen = pickForPID(key, variants); return chosen ? asset(chosen) : null;
+    const variants = IMG[key]; 
+    const chosen = pickForPID(key, variants); 
+    return chosen ? asset(chosen) : null;
   }
 
   /* ========== STIMULI DEFINITIONS ========== */
@@ -128,15 +152,18 @@
     { target: 'flipping', category: 'action',    image: 'img/flipping.jpg' },
     { target: 'sizzling', category: 'process',   image: 'img/sizzling.jpeg' },
   ];
+  
   const foley_stimuli = [
     { audio: 'crack',  options: ['stirring', 'cracking'],               correct: 1 },
     { audio: 'whisk',  options: ['mixing (whisking)', 'pouring'],       correct: 0 },
     { audio: 'pour',   options: ['pouring', 'flipping'],                correct: 0 },
     { audio: 'sizzle', options: ['spreading butter', 'cooking on pan'], correct: 1 },
   ];
+  
   const PROCEDURE_STEPS = [
     'Crack eggs', 'Mix flour and eggs', 'Heat the pan', 'Pour batter on pan', 'Flip when ready',
   ];
+  
   const transfer_words = [
     { word: 'sizzle', pos: 'verb',  iconic: true,  type: 'target_iconic',   trained: true  },
     { word: 'crack',  pos: 'verb',  iconic: true,  type: 'target_iconic',   trained: true  },
@@ -155,6 +182,28 @@
     { word: 'cup',    pos: 'noun',  iconic: false, type: 'foil_true',       trained: false },
   ];
 
+  /* ========== RANDOMIZATION HELPERS ========== */
+  function shuffle(array) {
+    // Use jsPsych randomization if available, otherwise fallback
+    if (jsPsych && jsPsych.randomization && jsPsych.randomization.shuffle) {
+      return jsPsych.randomization.shuffle(array);
+    }
+    const arr = array.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function sampleWithoutReplacement(array, size) {
+    if (jsPsych && jsPsych.randomization && jsPsych.randomization.sampleWithoutReplacement) {
+      return jsPsych.randomization.sampleWithoutReplacement(array, size);
+    }
+    const shuffled = shuffle(array);
+    return shuffled.slice(0, Math.min(size, array.length));
+  }
+
   /* ========== MAIN ENTRY POINT ========== */
   window.__START_POSTTEST = function(pid, isDelayed) {
     currentPID = pid || 'unknown';
@@ -164,7 +213,10 @@
     const picker = document.getElementById('picker');
     if (picker) picker.style.display = 'none';
 
-    if (!have('initJsPsych')) { alert('jsPsych not loaded. Please refresh.'); return; }
+    if (!have('initJsPsych')) { 
+      alert('jsPsych not loaded. Please refresh.'); 
+      return; 
+    }
 
     cleanupManager.cleanupAll();
 
@@ -172,8 +224,15 @@
       display_element: 'jspsych-target',
       show_progress_bar: true,
       message_progress_bar: 'Progress / 進捗',
-      on_trial_finish: (data) => { if (data.cleanup_key) { cleanupManager.cleanup(data.cleanup_key); } },
-      on_finish: () => { saveData(); showCompletion(); }
+      on_trial_finish: (data) => { 
+        if (data.cleanup_key) { 
+          cleanupManager.cleanup(data.cleanup_key); 
+        } 
+      },
+      on_finish: () => { 
+        saveData(); 
+        showCompletion(); 
+      }
     });
 
     const timeline = buildTimeline(isDelayed);
@@ -184,7 +243,10 @@
   function buildTimeline(isDelayed) {
     const tl = [];
 
-    if (!have('jsPsychHtmlButtonResponse')) { console.error('Required plugin jsPsychHtmlButtonResponse not found'); return tl; }
+    if (!have('jsPsychHtmlButtonResponse')) { 
+      console.error('Required plugin jsPsychHtmlButtonResponse not found'); 
+      return tl; 
+    }
 
     tl.push({
       type: T('jsPsychHtmlButtonResponse'),
@@ -193,27 +255,36 @@
     });
 
     // 4AFC receptive vocabulary
-    if (have('jsPsychHtmlButtonResponse') && have('jsPsychRandomization')) {
-      tl.push(...build4AFCVocabularyTask());
-    }
+    tl.push(...build4AFCVocabularyTask());
 
     // Open-ended procedural recall
-    if (have('jsPsychSurveyText')) { tl.push(buildProceduralRecallTask()); }
+    if (have('jsPsychSurveyText')) { 
+      tl.push(buildProceduralRecallTask()); 
+    }
 
     // Click-to-order sequencing (objective scoring)
-    if (!isDelayed && have('jsPsychHtmlButtonResponse')) { tl.push(...buildSequencingTask()); }
+    if (!isDelayed && have('jsPsychHtmlButtonResponse')) { 
+      tl.push(...buildSequencingTask()); 
+    }
 
     // Foley recognition
     tl.push(...buildFoleyTask());
 
     // Picture description (free speech) — gated on mic plugins
-    if (mic_plugins_available()) { tl.push(...buildPictureNamingTask()); }
-    else {
-      tl.push({ type: T('jsPsychHtmlButtonResponse'), stimulus: '<p>Picture naming skipped (microphone not available)</p>', choices: ['Continue'] });
+    if (mic_plugins_available()) { 
+      tl.push(...buildPictureNamingTask()); 
+    } else {
+      tl.push({ 
+        type: T('jsPsychHtmlButtonResponse'), 
+        stimulus: '<p>Picture naming skipped (microphone not available)</p>', 
+        choices: ['Continue'] 
+      });
     }
 
     // Transfer (seen in VR?) + confidence
-    if (!isDelayed) { tl.push(buildTransferTask()); }
+    if (!isDelayed) { 
+      tl.push(buildTransferTask()); 
+    }
 
     // Post questionnaire + exit feedback
     tl.push(buildPostQuestionnaire());
@@ -231,8 +302,8 @@
 
     allItems.forEach((targetStim) => {
       const pool = allItems.filter(s => s.target !== targetStim.target);
-      const foils = jsPsych.randomization.sampleWithoutReplacement(pool, Math.min(3, pool.length));
-      const choices = jsPsych.randomization.shuffle([targetStim, ...foils]);
+      const foils = sampleWithoutReplacement(pool, Math.min(3, pool.length));
+      const choices = shuffle([targetStim, ...foils]);
       const correctIndex = choices.findIndex(c => c.target === targetStim.target);
       const buttonLabels = ['1', '2', '3', '4'];
 
@@ -263,22 +334,29 @@
     });
 
     return [
-      { type: T('jsPsychHtmlButtonResponse'), stimulus: '<h2>Vocabulary Check</h2><p>Choose the picture that matches the word shown.</p>', choices: ['Begin'] },
+      { 
+        type: T('jsPsychHtmlButtonResponse'), 
+        stimulus: '<h2>Vocabulary Check</h2><p>Choose the picture that matches the word shown.</p>', 
+        choices: ['Begin'] 
+      },
       ...trials
     ];
   }
 
-  // Structured Sequencing Task (click steps in order)
+  // Structured Sequencing Task
   function buildSequencingTask() {
     const canonicalOrder = PROCEDURE_STEPS.slice();
-    const shuffledSteps = jsPsych.randomization.shuffle([...PROCEDURE_STEPS]);
+    const shuffledSteps = shuffle([...PROCEDURE_STEPS]);
 
-    // Shared map to persist the sequence for this trial
     const seqKey = `seq_${Date.now()}_${Math.floor(Math.random()*1e6)}`;
     window.__seq_map = window.__seq_map || new Map();
 
     return [
-      { type: T('jsPsychHtmlButtonResponse'), stimulus: '<h2>Sequencing Test</h2><p>Click the steps in the correct order to make pancakes.</p>', choices: ['Begin'] },
+      { 
+        type: T('jsPsychHtmlButtonResponse'), 
+        stimulus: '<h2>Sequencing Test</h2><p>Click the steps in the correct order to make pancakes.</p>', 
+        choices: ['Begin'] 
+      },
       {
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: () => {
@@ -313,11 +391,12 @@
               `<span style="background:#2196F3; color:white; padding: 5px 10px; border-radius:4px; margin:0 5px;">${i + 1}. ${step}</span>`
             ).join('');
             if (sequence.length === canonicalOrder.length) {
-              submitBtn.disabled = false; submitBtn.style.opacity = '1';
+              submitBtn.disabled = false; 
+              submitBtn.style.opacity = '1';
             } else {
-              submitBtn.disabled = true; submitBtn.style.opacity = '0.5';
+              submitBtn.disabled = true; 
+              submitBtn.style.opacity = '0.5';
             }
-            // Persist current sequence
             window.__seq_map.set(seqKey, sequence.slice());
           };
 
@@ -356,26 +435,49 @@
         { prompt: '<b>Step 5 (Last / 最後):</b>', name: 'step_5', required: true, rows: 2 },
       ],
       button_label: 'Submit / 送信',
-      data: { task: 'procedural_recall_open_ended', condition: testCondition, pid: currentPID, correct_steps: PROCEDURE_STEPS },
+      data: { 
+        task: 'procedural_recall_open_ended', 
+        condition: testCondition, 
+        pid: currentPID, 
+        correct_steps: PROCEDURE_STEPS 
+      },
       on_finish: (data) => {
         const r = asObject(data.response ?? data.responses);
-        data.recalled_steps = [r.step_1 || '', r.step_2 || '', r.step_3 || '', r.step_4 || '', r.step_5 || ''];
+        data.recalled_steps = [
+          r.step_1 || '', 
+          r.step_2 || '', 
+          r.step_3 || '', 
+          r.step_4 || '', 
+          r.step_5 || ''
+        ];
         data.needs_manual_scoring = true;
       }
     };
   }
 
-  // Foley Sound Recognition (with button lock + resilient loader)
+  // Foley Sound Recognition
   function buildFoleyTask() {
     const tasks = [];
-    tasks.push({ type: T('jsPsychHtmlButtonResponse'), stimulus: `<div style="text-align:center;"><h3>Sound Recognition / 音の認識</h3><p>Listen and choose what the sound represents.</p></div>`, choices: ['Begin / 開始'] });
+    tasks.push({ 
+      type: T('jsPsychHtmlButtonResponse'), 
+      stimulus: `<div style="text-align:center;"><h3>Sound Recognition / 音の認識</h3><p>Listen and choose what the sound represents.</p></div>`, 
+      choices: ['Begin / 開始'] 
+    });
 
     foley_stimuli.forEach((stim, idx) => {
       if (idx > 0) {
         if (have('jsPsychHtmlKeyboardResponse')) {
-          tasks.push({ type: T('jsPsychHtmlKeyboardResponse'), stimulus: `<div style="text-align:center;padding:20px;">Press SPACE for next sound</div>`, choices: [' '] });
+          tasks.push({ 
+            type: T('jsPsychHtmlKeyboardResponse'), 
+            stimulus: `<div style="text-align:center;padding:20px;">Press SPACE for next sound</div>`, 
+            choices: [' '] 
+          });
         } else {
-          tasks.push({ type: T('jsPsychHtmlButtonResponse'), stimulus: `<div style="text-align:center;padding:20px;">Ready for the next sound?</div>`, choices: ['Continue / 続行'] });
+          tasks.push({ 
+            type: T('jsPsychHtmlButtonResponse'), 
+            stimulus: `<div style="text-align:center;padding:20px;">Ready for the next sound?</div>`, 
+            choices: ['Continue / 続行'] 
+          });
         }
       }
 
@@ -385,12 +487,24 @@
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `
           <div style="text-align:center;">
-            <div style="padding:20px;"><button id="play-sound-${idx}" class="jspsych-btn">▶️ Play Sound</button><div id="status-${idx}" style="font-size:13px;color:#666;margin-top:8px;">Loading…</div></div>
-            <p>What does this sound represent?</p><p style="color:#666;margin-top:4px;">この音は何を表していますか？</p>
+            <div style="padding:20px;">
+              <button id="play-sound-${idx}" class="jspsych-btn">▶️ Play Sound</button>
+              <div id="status-${idx}" style="font-size:13px;color:#666;margin-top:8px;">Loading…</div>
+            </div>
+            <p>What does this sound represent?</p>
+            <p style="color:#666;margin-top:4px;">この音は何を表していますか？</p>
           </div>`,
         choices: stim.options,
         button_html: stim.options.map((_, i) => `<button class="jspsych-btn answer-btn" id="answer-btn-${idx}-${i}">%s</button>`),
-        data: { task: 'foley_recognition', audio_key: stim.audio, correct_answer: stim.correct, pid: currentPID, condition: testCondition, trial_number: idx + 1, cleanup_key: cleanupKey },
+        data: { 
+          task: 'foley_recognition', 
+          audio_key: stim.audio, 
+          correct_answer: stim.correct, 
+          pid: currentPID, 
+          condition: testCondition, 
+          trial_number: idx + 1, 
+          cleanup_key: cleanupKey 
+        },
         on_load: function() {
           const btn = document.getElementById(`play-sound-${idx}`);
           const status = document.getElementById(`status-${idx}`);
@@ -398,43 +512,73 @@
           const candidates = soundCandidatesFor(stim.audio);
           const loader = createResilientAudioLoader(candidates);
 
-          answerBtns.forEach(ab => { ab.disabled = true; ab.style.opacity = '0.5'; });
+          answerBtns.forEach(ab => { 
+            ab.disabled = true; 
+            ab.style.opacity = '0.5'; 
+          });
           btn.disabled = true;
           status.textContent = 'Loading audio…';
 
           loader.loadNext(
             (audio) => {
-              status.textContent = 'Ready - click to play'; btn.disabled = false;
-              let clickHandler = null; let endHandler = null;
-              const enableAnswerButtons = () => { answerBtns.forEach(ab => { ab.disabled = false; ab.style.opacity = '1'; }); };
+              status.textContent = 'Ready - click to play'; 
+              btn.disabled = false;
+              let clickHandler = null; 
+              let endHandler = null;
+              const enableAnswerButtons = () => { 
+                answerBtns.forEach(ab => { 
+                  ab.disabled = false; 
+                  ab.style.opacity = '1'; 
+                }); 
+              };
 
               clickHandler = () => {
-                btn.disabled = true; status.textContent = '🔊 Playing…'; audio.currentTime = 0;
+                btn.disabled = true; 
+                status.textContent = '🔊 Playing…'; 
+                audio.currentTime = 0;
                 audio.play().then(() => {
                   endHandler = () => {
-                    btn.disabled = false; btn.textContent = '🔁 Play Again';
+                    btn.disabled = false; 
+                    btn.textContent = '🔁 Play Again';
                     status.textContent = 'Finished - choose your answer';
                     enableAnswerButtons();
                   };
                   audio.addEventListener('ended', endHandler, { once: true });
                 }).catch((e) => {
-                  console.warn('[posttest] Audio playback error:', e); btn.disabled = false;
+                  console.warn('[posttest] Audio playback error:', e); 
+                  btn.disabled = false;
                   status.textContent = 'Playback failed - please try again';
                 });
               };
 
               btn.addEventListener('click', clickHandler);
               cleanupManager.register(cleanupKey, () => {
-                if (clickHandler) { btn.removeEventListener('click', clickHandler); }
-                if (endHandler) { audio.removeEventListener('ended', endHandler); }
-                try { if (audio) { audio.pause(); audio.src = ''; audio.load(); } } catch(e) { console.warn('[posttest] Audio cleanup error:', e); }
+                if (clickHandler) { 
+                  btn.removeEventListener('click', clickHandler); 
+                }
+                if (endHandler) { 
+                  audio.removeEventListener('ended', endHandler); 
+                }
+                try { 
+                  if (audio) { 
+                    audio.pause(); 
+                    audio.src = ''; 
+                    audio.load(); 
+                  } 
+                } catch(e) { 
+                  console.warn('[posttest] Audio cleanup error:', e); 
+                }
               });
             },
             () => {
               console.warn('[posttest] All candidates failed for', stim.audio);
-              btn.textContent = '❌ Audio unavailable'; btn.disabled = true;
+              btn.textContent = '❌ Audio unavailable'; 
+              btn.disabled = true;
               status.textContent = 'Audio failed. Please select an answer now.';
-              answerBtns.forEach(ab => { ab.disabled = false; ab.style.opacity = '1'; });
+              answerBtns.forEach(ab => { 
+                ab.disabled = false; 
+                ab.style.opacity = '1'; 
+              });
             }
           );
         },
@@ -449,81 +593,159 @@
     return tasks;
   }
 
-  // Picture Naming / Free description (microphone)
+  // Picture Naming / Description
   function buildPictureNamingTask() {
     const tasks = [];
-    tasks.push({ type: T('jsPsychInitializeMicrophone'), data: { task: 'mic_init' }, on_finish: () => { microphoneAvailable = true; } });
+    tasks.push({ 
+      type: T('jsPsychInitializeMicrophone'), 
+      data: { task: 'mic_init' }, 
+      on_finish: () => { microphoneAvailable = true; } 
+    });
     tasks.push({
-      type: T('jsPsychHtmlButtonResponse'), stimulus: `<div style="max-width:640px;margin:0 auto;text-align:center"><h3>Picture Description / 絵の説明</h3><p>Describe the picture in English with as much detail as you can — <b>objects, actions, sounds, smells</b>.</p></div>`,
+      type: T('jsPsychHtmlButtonResponse'), 
+      stimulus: `<div style="max-width:640px;margin:0 auto;text-align:center"><h3>Picture Description / 絵の説明</h3><p>Describe the picture in English with as much detail as you can — <b>objects, actions, sounds, smells</b>.</p></div>`,
       choices: ['Start / 開始']
     });
-    tasks.push({ type: T('jsPsychHtmlAudioResponse'), stimulus: `<div style="text-align:center;"><h4>Microphone check</h4><p>Say "test" for 2 seconds.</p></div>`, recording_duration: 2000, show_done_button: true, allow_playback: true, accept_button_text: 'OK', data: { task: 'mic_check' } });
+    tasks.push({ 
+      type: T('jsPsychHtmlAudioResponse'), 
+      stimulus: `<div style="text-align:center;"><h4>Microphone check</h4><p>Say "test" for 2 seconds.</p></div>`, 
+      recording_duration: 2000, 
+      show_done_button: true, 
+      allow_playback: true, 
+      accept_button_text: 'OK', 
+      data: { task: 'mic_check' } 
+    });
 
     const naming_timeline = {
       timeline: [{
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: () => {
-          const stim = jsPsych.timelineVariable('stim'); const img = imageSrcFor(stim.target);
+          const stim = jsPsych.timelineVariable('stim'); 
+          const img = imageSrcFor(stim.target);
           const fb = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='350' height='300'%3E%3Crect fill='%23f5f5f5' width='350' height='300'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' fill='%23666' font-size='16'%3EImage not available:%20${stim.target}%3C/text%3E%3C/svg%3E`;
           return `<div style="text-align:center;"><img src="${img||fb}" style="width:350px;border-radius:8px" onerror="this.src='${fb}'" /><p style="margin-top:12px;">Click to record for 4 seconds.</p></div>`;
         },
         choices: ['Start recording / 録音開始'],
-        data: () => ({ task: 'picture_naming_prepare', target: jsPsych.timelineVariable('stim').target, category: jsPsych.timelineVariable('stim').category, trial_index: jsPsych.timelineVariable('idx') })
+        data: () => ({ 
+          task: 'picture_naming_prepare', 
+          target: jsPsych.timelineVariable('stim').target, 
+          category: jsPsych.timelineVariable('stim').category, 
+          trial_index: jsPsych.timelineVariable('idx') 
+        })
       }, {
         type: T('jsPsychHtmlAudioResponse'),
         stimulus: () => {
-          const stim = jsPsych.timelineVariable('stim'); const img = imageSrcFor(stim.target);
+          const stim = jsPsych.timelineVariable('stim'); 
+          const img = imageSrcFor(stim.target);
           const fb = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='350' height='300'%3E%3Crect fill='%23f5f5f5' width='350' height='300'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' fill='%23666' font-size='16'%3EImage not available:%20${stim.target}%3C/text%3E%3C/svg%3E`;
           return `<div style="text-align:center;"><img src="${img||fb}" style="width:350px;border-radius:8px" onerror="this.src='${fb}'" /><div style="margin-top:10px;background:#ffebee;border-radius:8px;padding:10px;"><b>🔴 Recording…</b> Describe the picture (objects, actions, sounds, smells).</div></div>`;
         },
-        recording_duration: 4000, show_done_button: false,
+        recording_duration: 4000, 
+        show_done_button: false,
         data: () => {
-          const stim = jsPsych.timelineVariable('stim'); const idx = jsPsych.timelineVariable('idx');
-          return { task: 'picture_naming_audio', target: stim.target, category: stim.category, pid: currentPID, phase: 'post', trial_index: idx, cleanup_key: `blob_${currentPID}_${idx}` };
+          const stim = jsPsych.timelineVariable('stim'); 
+          const idx = jsPsych.timelineVariable('idx');
+          return { 
+            task: 'picture_naming_audio', 
+            target: stim.target, 
+            category: stim.category, 
+            pid: currentPID, 
+            phase: 'post', 
+            trial_index: idx, 
+            cleanup_key: `blob_${currentPID}_${idx}` 
+          };
         },
         on_finish: (d) => {
-          const tgt = (d.target || 'unknown').toLowerCase(); const idx = d.trial_index || 'x'; d.audio_filename = `post_${currentPID}_${tgt}_${idx}.wav`;
+          const tgt = (d.target || 'unknown').toLowerCase(); 
+          const idx = d.trial_index || 'x'; 
+          d.audio_filename = `post_${currentPID}_${tgt}_${idx}.wav`;
           try {
             const rec = d.response && (d.response instanceof Blob ? d.response : d.response.recording);
-            if (rec instanceof Blob) { d.audio_blob_url = URL.createObjectURL(rec); cleanupManager.register(d.cleanup_key, () => { if (d.audio_blob_url) { URL.revokeObjectURL(d.audio_blob_url); } }); }
-          } catch(e) { console.error('[posttest] Error processing audio blob:', e); }
+            if (rec instanceof Blob) { 
+              d.audio_blob_url = URL.createObjectURL(rec); 
+              cleanupManager.register(d.cleanup_key, () => { 
+                if (d.audio_blob_url) { 
+                  URL.revokeObjectURL(d.audio_blob_url); 
+                } 
+              }); 
+            }
+          } catch(e) { 
+            console.error('[posttest] Error processing audio blob:', e); 
+          }
         }
       }],
       timeline_variables: picture_naming_stimuli.map((s, i) => ({ stim: s, idx: i + 1 })),
       randomize_order: true
     };
-    tasks.push(naming_timeline); return tasks;
+    tasks.push(naming_timeline); 
+    return tasks;
   }
 
+  // Transfer Recognition Task
   function buildTransferTask() {
-    const intro = { type: T('jsPsychHtmlButtonResponse'), stimulus: `<div style="text-align:center;"><h3>Recognition Test / 認識テスト</h3><p>Did this word appear in the VR training?</p></div>`, choices: ['Begin / 開始'] };
+    const intro = { 
+      type: T('jsPsychHtmlButtonResponse'), 
+      stimulus: `<div style="text-align:center;"><h3>Recognition Test / 認識テスト</h3><p>Did this word appear in the VR training?</p></div>`, 
+      choices: ['Begin / 開始'] 
+    };
+    
     const trial = {
       timeline: [{
-        type: T('jsPsychHtmlButtonResponse'), stimulus: jsPsych.timelineVariable('word_display'), choices: ['YES - I saw this', 'NO - I did not see this'], data: jsPsych.timelineVariable('trial_data'),
+        type: T('jsPsychHtmlButtonResponse'), 
+        stimulus: jsPsych.timelineVariable('word_display'), 
+        choices: ['YES - I saw this', 'NO - I did not see this'], 
+        data: jsPsych.timelineVariable('trial_data'),
         on_finish: (d) => {
-          const yes = (d.response === 0); d.response_label = yes ? 'yes' : 'no'; d.correct = (yes === d.correct_answer);
+          const yes = (d.response === 0); 
+          d.response_label = yes ? 'yes' : 'no'; 
+          d.correct = (yes === d.correct_answer);
           d.signal_type = d.correct_answer ? (yes ? 'hit' : 'miss') : (yes ? 'false_alarm' : 'correct_rejection');
         }
       },
       {
-        type: T('jsPsychHtmlButtonResponse'), stimulus: `<div style="text-align:center;"><p>How confident are you?</p><p>どのくらい自信がありますか？</p></div>`, choices: ['1 (Guess)', '2', '3', '4 (Very sure)'], data: { task: 'transfer_confidence' },
-        on_finish: (d) => { d.confidence = (d.response ?? null) !== null ? (d.response + 1) : null; }
+        type: T('jsPsychHtmlButtonResponse'), 
+        stimulus: `<div style="text-align:center;"><p>How confident are you?</p><p>どのくらい自信がありますか？</p></div>`, 
+        choices: ['1 (Guess)', '2', '3', '4 (Very sure)'], 
+        data: { task: 'transfer_confidence' },
+        on_finish: (d) => { 
+          d.confidence = (d.response ?? null) !== null ? (d.response + 1) : null; 
+        }
       }],
       timeline_variables: transfer_words.map(item => ({
         word_display: `<div style="text-align:center; padding:28px;"><div style="padding: 22px; background: #f8f9fa; border-radius: 10px; border: 2px solid #e0e0e0;"><p style="font-size:32px; font-weight:bold; margin:10px 0; color:#333">${item.word}</p></div><p style="font-size:14px; color:#666; margin-top:16px;">Did you see this word in the VR training?</p></div>`,
-        trial_data: { task: 'transfer_test', word: item.word, pos: item.pos, iconic: item.iconic, word_type_label: item.type, correct_answer: item.trained, condition: testCondition, pid: currentPID }
+        trial_data: { 
+          task: 'transfer_test', 
+          word: item.word, 
+          pos: item.pos, 
+          iconic: item.iconic, 
+          word_type_label: item.type, 
+          correct_answer: item.trained, 
+          condition: testCondition, 
+          pid: currentPID 
+        }
       })),
       randomize_order: true
     };
+    
     return { timeline: [intro, trial] };
   }
 
+  // Post-Training Questionnaire
   function buildPostQuestionnaire() {
-    if (!have('jsPsychSurvey')) { return { type: T('jsPsychHtmlButtonResponse'), stimulus: '<p>Survey plugin not available - skipping questionnaire</p>', choices: ['Continue'] }; }
+    if (!have('jsPsychSurvey')) { 
+      return { 
+        type: T('jsPsychHtmlButtonResponse'), 
+        stimulus: '<p>Survey plugin not available - skipping questionnaire</p>', 
+        choices: ['Continue'] 
+      }; 
+    }
+    
     return {
       type: T('jsPsychSurvey'),
       survey_json: {
-        title: 'Post-Training Questionnaire / 訓練後アンケート', showQuestionNumbers: 'off', showCompletedPage: false,
+        title: 'Post-Training Questionnaire / 訓練後アンケート', 
+        showQuestionNumbers: 'off', 
+        showCompletedPage: false,
         pages: [{
           elements: [
             { type: 'rating', name: 'confidence_vocabulary', title: 'Vocabulary confidence?', isRequired: true, rateMin: 1, rateMax: 5 },
@@ -535,24 +757,65 @@
           ]
         }]
       },
-      data: { task: 'post_questionnaire', condition: testCondition, pid: currentPID }
+      data: { 
+        task: 'post_questionnaire', 
+        condition: testCondition, 
+        pid: currentPID 
+      }
     };
   }
 
+  // Exit Feedback
   function buildExitOpenQuestion() {
-    if (!have('jsPsychSurveyText')) { return { type: T('jsPsychHtmlButtonResponse'), stimulus: '<p>Feedback form unavailable.</p>', choices: ['Finish'] }; }
+    if (!have('jsPsychSurveyText')) { 
+      return { 
+        type: T('jsPsychHtmlButtonResponse'), 
+        stimulus: '<p>Feedback form unavailable.</p>', 
+        choices: ['Finish'] 
+      }; 
+    }
+    
     return {
       type: T('jsPsychSurveyText'),
       preamble: `<div style="text-align:center;"><h3>Final Comments / 最後のコメント</h3><p>Please share any questions, concerns, or issues you had with the test.</p><p>テストについての質問・懸念・問題点があればご記入ください。</p></div>`,
-      questions: [{ prompt: 'Your feedback (optional) / フィードバック（任意）', name: 'exit_feedback', rows: 5, required: false }],
+      questions: [{ 
+        prompt: 'Your feedback (optional) / フィードバック（任意）', 
+        name: 'exit_feedback', 
+        rows: 5, 
+        required: false 
+      }],
       button_label: 'Submit & Finish / 送信して終了',
-      data: { task: 'exit_feedback', condition: testCondition, pid: currentPID }
+      data: { 
+        task: 'exit_feedback', 
+        condition: testCondition, 
+        pid: currentPID 
+      }
     };
   }
 
-  /* Final Completion Functions (stubs) */
-  function saveData() { /* TODO: implement POST to server */ }
-  function showCompletion() { /* TODO: show debrief/thanks */ }
+  /* ========== FINAL COMPLETION ========== */
+  function saveData() { 
+    console.log('[posttest] Saving data for', currentPID);
+    const allData = jsPsych.data.get().values();
+    console.log('[posttest] Total trials:', allData.length);
+    // TODO: implement POST to server
+  }
+  
+  function showCompletion() { 
+    const target = document.getElementById('jspsych-target');
+    if (target) {
+      target.innerHTML = `
+        <div style="max-width:600px; margin:60px auto; text-align:center; padding:40px; background:#f5f5f5; border-radius:12px;">
+          <h2 style="color:#4CAF50;">✓ Test Complete!</h2>
+          <p><strong>Participant:</strong> ${currentPID}</p>
+          <p><strong>Condition:</strong> ${testCondition}</p>
+          <p style="margin-top:20px;">Thank you for participating!</p>
+          <p>ご参加ありがとうございました！</p>
+        </div>`;
+    }
+  }
 
-  window.addEventListener('beforeunload', () => { cleanupManager.cleanupAll(); });
+  window.addEventListener('beforeunload', () => { 
+    cleanupManager.cleanupAll(); 
+  });
 })();
