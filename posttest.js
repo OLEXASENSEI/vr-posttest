@@ -1,8 +1,9 @@
 /**
- * posttest.js — VERSION 3.3 FIXED
- * - Flattens nested timelines so flow always continues
- * - Adds extra logging + guards around SurveyJS and mic tasks
- * - Minor robustness tweaks to audio loader and image helpers
+ * posttest.js — VERSION 3.3.1
+ * - FIX: correct Fisher–Yates shuffle (prevents undefined entries)
+ * - Harden 4AFC choices with .filter(Boolean)
+ * - Flatten transfer task so flow continues
+ * - SurveyJS bridge assumed present as window.jsPsychSurvey (from index.html)
  */
 
 (function(){
@@ -126,7 +127,6 @@
       audio.addEventListener('canplaythrough', ok,  { once:true }); 
       audio.addEventListener('error', bad, { once:true });
       audio.src = src;
-      // Chrome sometimes needs a kick:
       audio.load?.();
     }
     return { loadNext };
@@ -186,19 +186,19 @@
     { word: 'cup',    pos: 'noun',  iconic: false, type: 'foil_true',       trained: false },
   ];
 
-  /* ========== RANDOMIZATION HELPERS ========== */
+  /* ========== RANDOMIZATION HELPERS (FIXED) ========== */
   function shuffle(array) {
     const arr = array.slice();
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j]];
+      [arr[i], arr[j]] = [arr[j], arr[i]]; // correct swap
     }
     return arr;
   }
 
   function sampleWithoutReplacement(array, size) {
     const shuffled = shuffle(array);
-    return shuffled.slice(0, Math.min(size, array.length));
+    return shuffled.slice(0, Math.min(size, array.length)).filter(Boolean);
   }
 
   /* ========== MAIN ENTRY POINT ========== */
@@ -279,14 +279,14 @@
       });
     }
 
-    // Transfer (seen in VR?) + confidence (FLATTENED)
+    // Transfer (seen in VR?) + confidence — FLATTENED
     if (!isDelayed) { 
       const transfer = buildTransferTask();
       tl.push(transfer.intro);
       tl.push(...transfer.trials);
     }
 
-    // Post questionnaire + exit feedback (use hardened Survey bridge)
+    // Post questionnaire + exit feedback (SurveyJS bridge provided in index.html)
     tl.push(buildPostQuestionnaire());
     tl.push(buildExitOpenQuestion());
 
@@ -303,8 +303,8 @@
     allItems.forEach((targetStim) => {
       const pool = allItems.filter(s => s.target !== targetStim.target);
       const foils = sampleWithoutReplacement(pool, Math.min(3, pool.length));
-      const choicesArr = shuffle([targetStim, ...foils]);
-      const correctIndex = choicesArr.findIndex(c => c.target === targetStim.target);
+      const choicesArr = shuffle([targetStim, ...foils]).filter(Boolean);
+      const correctIndex = choicesArr.findIndex(c => c && c.target === targetStim.target);
       const buttonLabels = ['1', '2', '3', '4'];
 
       const imgStrip = choicesArr.map((c) => {
@@ -540,7 +540,9 @@
         on_load: function() {
           const btn = document.getElementById(`play-sound-${idx}`);
           const status = document.getElementById(`status-${idx}`);
-          const answerBtns = Array.from(document.querySelectorAll('.jspsych-btn')).filter(b => b !== btn);
+          // all jspsych-btn on this trial includes choice buttons + the play button; filter the play button out:
+          const allBtns = Array.from(document.querySelectorAll('.jspsych-btn'));
+          const answerBtns = allBtns.filter(b => b !== btn);
           const candidates = soundCandidatesFor(stim.audio);
           const loader = createResilientAudioLoader(candidates);
 
@@ -586,21 +588,9 @@
 
               btn.addEventListener('click', clickHandler);
               cleanupManager.register(cleanupKey, () => {
-                if (clickHandler) { 
-                  btn.removeEventListener('click', clickHandler); 
-                }
-                if (endHandler) { 
-                  audio.removeEventListener('ended', endHandler); 
-                }
-                try { 
-                  if (audio) { 
-                    audio.pause(); 
-                    audio.src = ''; 
-                    audio.load(); 
-                  } 
-                } catch(e) { 
-                  console.warn('[posttest] Audio cleanup error:', e); 
-                }
+                if (clickHandler) { btn.removeEventListener('click', clickHandler); }
+                if (endHandler) { audio.removeEventListener('ended', endHandler); }
+                try { audio.pause(); audio.src = ''; audio.load(); } catch(e) {}
               });
             },
             () => {
@@ -697,9 +687,7 @@
             if (rec instanceof Blob) { 
               d.audio_blob_url = URL.createObjectURL(rec); 
               cleanupManager.register(d.cleanup_key, () => { 
-                if (d.audio_blob_url) { 
-                  URL.revokeObjectURL(d.audio_blob_url); 
-                } 
+                if (d.audio_blob_url) { URL.revokeObjectURL(d.audio_blob_url); } 
               }); 
             }
           } catch(e) { 
@@ -722,50 +710,41 @@
       choices: ['Begin / 開始'] 
     };
     
-    const trials = transfer_words.map(item => ({
-      timeline: [
-        {
-          type: T('jsPsychHtmlButtonResponse'), 
-          stimulus: `<div style="text-align:center; padding:28px;"><div style="padding: 22px; background: #f8f9fa; border-radius: 10px; border: 2px solid #e0e0e0;"><p style="font-size:32px; font-weight:bold; margin:10px 0; color:#333">${item.word}</p></div><p style="font-size:14px; color:#666; margin-top:16px;">Did you see this word in the VR training?</p></div>`, 
-          choices: ['YES - I saw this', 'NO - I did not see this'], 
-          data: { 
-            task: 'transfer_test', 
-            word: item.word, 
-            pos: item.pos, 
-            iconic: item.iconic, 
-            word_type_label: item.type, 
-            correct_answer: item.trained, 
-            condition: testCondition, 
-            pid: currentPID 
-          },
-          on_finish: (d) => {
-            const yes = (d.response === 0); 
-            d.response_label = yes ? 'yes' : 'no'; 
-            d.correct = (yes === d.correct_answer);
-            d.signal_type = d.correct_answer ? (yes ? 'hit' : 'miss') : (yes ? 'false_alarm' : 'correct_rejection');
-          }
+    const flatTrials = transfer_words.flatMap(item => ([
+      {
+        type: T('jsPsychHtmlButtonResponse'), 
+        stimulus: `<div style="text-align:center; padding:28px;"><div style="padding: 22px; background: #f8f9fa; border-radius: 10px; border: 2px solid #e0e0e0;"><p style="font-size:32px; font-weight:bold; margin:10px 0; color:#333">${item.word}</p></div><p style="font-size:14px; color:#666; margin-top:16px;">Did you see this word in the VR training?</p></div>`, 
+        choices: ['YES - I saw this', 'NO - I did not see this'], 
+        data: { 
+          task: 'transfer_test', 
+          word: item.word, 
+          pos: item.pos, 
+          iconic: item.iconic, 
+          word_type_label: item.type, 
+          correct_answer: item.trained, 
+          condition: testCondition, 
+          pid: currentPID 
         },
-        {
-          type: T('jsPsychHtmlButtonResponse'), 
-          stimulus: `<div style="text-align:center;"><p>How confident are you?</p><p>どのくらい自信がありますか？</p></div>`, 
-          choices: ['1 (Guess)', '2', '3', '4 (Very sure)'], 
-          data: { task: 'transfer_confidence' },
-          on_finish: (d) => { 
-            d.confidence = (d.response ?? null) !== null ? (d.response + 1) : null; 
-          }
+        on_finish: (d) => {
+          const yes = (d.response === 0); 
+          d.response_label = yes ? 'yes' : 'no'; 
+          d.correct = (yes === d.correct_answer);
+          d.signal_type = d.correct_answer ? (yes ? 'hit' : 'miss') : (yes ? 'false_alarm' : 'correct_rejection');
         }
-      ],
-      randomize_order: false
-    }));
-
-    // Flatten each two-step mini-timeline later via tl.push(...transfer.trials.map(...))
-    const flatTrials = [];
-    trials.forEach(t => flatTrials.push(...t.timeline));
+      },
+      {
+        type: T('jsPsychHtmlButtonResponse'), 
+        stimulus: `<div style="text-align:center;"><p>How confident are you?</p><p>どのくらい自信がありますか？</p></div>`, 
+        choices: ['1 (Guess)', '2', '3', '4 (Very sure)'], 
+        data: { task: 'transfer_confidence' },
+        on_finish: (d) => { d.confidence = (d.response ?? null) !== null ? (d.response + 1) : null; }
+      }
+    ]));
 
     return { intro, trials: flatTrials };
   }
 
-  // Post-Training Questionnaire (SurveyJS bridge)
+  // Post-Training Questionnaire (expects jsPsychSurvey in index.html)
   function buildPostQuestionnaire() {
     if (!have('jsPsychSurvey')) { 
       return { 
@@ -775,7 +754,7 @@
       }; 
     }
 
-    // Defensive render: tiny pre-trial to ensure DOM is “hot”
+    // tiny pre-trial to “warm” the DOM
     const pre = {
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: '<div style="text-align:center;color:#666">Loading questionnaire…</div>',
@@ -800,14 +779,10 @@
           ]
         }]
       },
-      data: { 
-        task: 'post_questionnaire', 
-        condition: testCondition, 
-        pid: currentPID 
-      }
+      data: { task: 'post_questionnaire', condition: testCondition, pid: currentPID }
     };
 
-    // Return the two trials together
+    // return a single trial object that contains a small inner timeline
     return { timeline: [pre, surveyTrial] };
   }
 
@@ -831,11 +806,7 @@
         required: false 
       }],
       button_label: 'Submit & Finish / 送信して終了',
-      data: { 
-        task: 'exit_feedback', 
-        condition: testCondition, 
-        pid: currentPID 
-      }
+      data: { task: 'exit_feedback', condition: testCondition, pid: currentPID }
     };
   }
 
