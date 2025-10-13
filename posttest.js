@@ -140,6 +140,25 @@
     { audio: 'spread', options: ['spreading butter', 'cracking egg'],   correct: 0, mapping_type: 'texture' },
   ];
 
+  const transfer_words = [
+  { word: 'sizzle', pos: 'verb',  iconic: true,  type: 'target_iconic',     trained: true  },
+  { word: 'crack',  pos: 'verb',  iconic: true,  type: 'target_iconic',     trained: true  },
+  { word: 'flip',   pos: 'verb',  iconic: false, type: 'target_arbitrary',  trained: true  },
+  { word: 'pour',   pos: 'verb',  iconic: false, type: 'target_arbitrary',  trained: true  },
+  { word: 'whisk',  pos: 'verb',  iconic: false, type: 'target_arbitrary',  trained: true  },
+  { word: 'bowl',   pos: 'noun',  iconic: false, type: 'target_arbitrary',  trained: true  },
+  { word: 'spatula',pos: 'noun',  iconic: false, type: 'target_arbitrary',  trained: true  },
+  { word: 'flour',  pos: 'noun',  iconic: false, type: 'target_arbitrary',  trained: true  },
+  { word: 'glug',   pos: 'verb',  iconic: true,  type: 'foil_iconic',       trained: false },
+  { word: 'splash', pos: 'verb',  iconic: true,  type: 'foil_iconic',       trained: false },
+  { word: 'tss',    pos: 'interj',iconic: true,  type: 'foil_iconic',       trained: false },
+  { word: 'fork',   pos: 'noun',  iconic: false, type: 'foil_true',         trained: false },
+  { word: 'knife',  pos: 'noun',  iconic: false, type: 'foil_true',         trained: false },
+  { word: 'salt',   pos: 'noun',  iconic: false, type: 'foil_true',         trained: false },
+  { word: 'cup',    pos: 'noun',  iconic: false, type: 'foil_true',         trained: false },
+];
+
+
   /* ========== RANDOMIZATION HELPERS ========== */
   function shuffle(array) {
     const arr = array.slice();
