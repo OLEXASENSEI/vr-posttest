@@ -4,33 +4,25 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>VR Post-Test</title>
-  <meta name="description" content="Immediate vs Delayed post-test"/>
+  <meta name="description" content="VR Post-Test (jsPsych only)"/>
   <link rel="icon" href="data:,">
-
-  <!-- jsPsych CSS -->
   <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css">
 
-  <!-- SurveyJS CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/survey-core@1.11.7/defaultV2.min.css">
-
   <style>
-    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-    .wrap { max-width: 980px; margin: 24px auto; padding: 0 16px; }
-    header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; }
-    header h1 { font-size: 20px; margin: 0; }
-    #jspsych-target { min-height: 60vh; }
+    body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial; background:#f5f5f5; }
+    .wrap { max-width: 920px; margin: 24px auto; padding: 0 16px; }
+    header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px; }
+    header h1 { font-size: 22px; margin: 0; }
+    #jspsych-target { min-height: 65vh; background:white; border-radius:12px; box-shadow:0 4px 26px rgba(0,0,0,.12); padding:24px; }
     .precheck { font-size: 12px; color:#666; margin-bottom:12px; }
     .warn { color:#c1272d; font-weight:600; }
-    .success { color:#2e7d32; font-weight:600; }
-    .controls { display:flex; gap:8px; align-items:center; margin: 12px 0 20px; flex-wrap: wrap; }
-    input[type="text"] { padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:14px; }
-    button { padding:8px 12px; border-radius:6px; border:1px solid transparent; background:#1976d2; color:white; font-weight:600; cursor:pointer; }
-    button:disabled { opacity:0.55; cursor:not-allowed; }
-    details { position: fixed; bottom: 10px; right: 10px; background: white; padding: 10px; border: 1px solid #ccc; border-radius: 6px; max-width: 300px; z-index: 1000; }
-    details summary { cursor: pointer; font-weight: 600; }
+    .controls { display:flex; gap:10px; align-items:center; margin: 12px 0 28px; flex-wrap: wrap; }
+    input[type="text"] { padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:15px; min-width: 180px; }
+    button.start { padding:10px 18px; border-radius:6px; border: none; font-weight:600; cursor:pointer; background:#1976d2; color:white; }
+    button.start:disabled { opacity:0.4; cursor:not-allowed; }
 
-    #surveyContainer { display: block !important; width: 100% !important; min-height: 400px !important; background:white; }
-    .sd-root-modern { display: block !important; visibility: visible !important; }
+    details { margin-top:18px; font-size:14px; }
+    details summary { cursor:pointer; font-weight:600; }
   </style>
 </head>
 <body>
@@ -40,11 +32,11 @@
       <div class="precheck" id="lib-check">Loading libraries…</div>
     </header>
 
-    <div class="controls" id="picker">
+    <div class="controls">
       <label for="pid">Participant ID:</label>
       <input id="pid" type="text" placeholder="e.g., S123"/>
-      <button id="btn-immediate">Start Immediate</button>
-      <button id="btn-delayed">Start Delayed</button>
+      <button class="start" id="btn-immediate">Start Immediate</button>
+      <button class="start" id="btn-delayed">Start Delayed</button>
     </div>
 
     <div id="jspsych-target"></div>
@@ -52,9 +44,9 @@
     <details>
       <summary>Help / Requirements</summary>
       <ul>
-        <li>Assets required: <code>sounds/*.mp3</code>, <code>img/*.jpg|jpeg|svg|png</code>, <code>pron/*.mp3</code></li>
-        <li>All libraries load from CDN</li>
-        <li>Select immediate or delayed condition above</li>
+        <li>All tasks run with jsPsych’s built-in plugins (no SurveyJS required).</li>
+        <li>Image/audio placeholders are included so it runs even without assets.</li>
+        <li>Update <code>IMAGE_PATHS</code> and <code>AUDIO_PATHS</code> in <code>posttest.js</code> when you have real files.</li>
       </ul>
     </details>
   </div>
@@ -68,146 +60,31 @@
   <script src="https://unpkg.com/@jspsych/plugin-survey-likert@1.1.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-initialize-microphone@1.0.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.3"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-audio-button-response@1.1.3"></script>
 
-  <!-- SurveyJS + Knockout -->
-  <script src="https://unpkg.com/knockout@3.5.1/build/output/knockout-latest.js"></script>
-  <script src="https://unpkg.com/survey-core@1.11.7/survey.core.min.js"></script>
-  <script src="https://unpkg.com/survey-knockout-ui@1.11.7"></script>
-
-  <!-- jsPsych ↔ SurveyJS bridge (patched) -->
-  <script>
-    (function () {
-      'use strict';
-
-      const SurveyPlugin = (function () {
-        const info = {
-          name: 'survey',
-          parameters: {
-            survey_json: { type: 'complex', default: {} },
-            survey_function: { type: 'function', default: () => ({}) }
-          }
-        };
-
-        class Plugin {
-          constructor(jsPsych) {
-            this.jsPsych = jsPsych;
-          }
-
-          trial(display_element, trial) {
-            console.log('[jsPsychSurvey] trial() called');
-
-            const SurveyNamespace =
-              (window.Survey && window.Survey.default)
-                ? window.Survey.default
-                : window.Survey;
-
-            if (!SurveyNamespace) {
-              console.error('[jsPsychSurvey] SurveyJS library not loaded');
-              this.jsPsych.finishTrial({ error: 'SurveyJS not loaded' });
-              return;
-            }
-
-            window.Survey = SurveyNamespace;
-
-            let surveyJson = trial.survey_json;
-            if (!surveyJson || Object.keys(surveyJson).length === 0) {
-              if (typeof trial.survey_function === 'function') {
-                surveyJson = trial.survey_function();
-              }
-            }
-
-            display_element.innerHTML =
-              '<div id="surveyContainer" style="width:100%;min-height:400px;"></div>';
-
-            const container = display_element.querySelector('#surveyContainer');
-            if (!container) {
-              console.error('[jsPsychSurvey] surveyContainer not found');
-              this.jsPsych.finishTrial({ error: 'Survey container missing' });
-              return;
-            }
-
-            const finish = (sender) => {
-              console.log('[jsPsychSurvey] Survey completed');
-              const trial_data = {
-                response: sender.data,
-                rt: null,
-                question_order:
-                  (surveyJson.pages?.[0]?.elements || []).map(e => e.name)
-              };
-              display_element.innerHTML = '';
-              this.jsPsych.finishTrial(trial_data);
-            };
-
-            try {
-              const surveyInstance = new SurveyNamespace.Model(surveyJson);
-              surveyInstance.onComplete.add(finish);
-
-              if (typeof surveyInstance.render === 'function') {
-                console.log('[jsPsychSurvey] Rendering via surveyInstance.render');
-                surveyInstance.render('surveyContainer');
-              } else if (SurveyNamespace.SurveyNG?.render) {
-                console.log('[jsPsychSurvey] Rendering via Survey.SurveyNG.render');
-                SurveyNamespace.SurveyNG.render('surveyContainer', { model: surveyInstance });
-              } else {
-                throw new Error('SurveyJS render API not available');
-              }
-
-              window.currentSurvey = surveyInstance;
-
-              setTimeout(() => {
-                console.log('[jsPsychSurvey] Container children:',
-                  container.children.length);
-                console.log('[jsPsychSurvey] Container innerHTML length:',
-                  container.innerHTML.length);
-              }, 100);
-            } catch (error) {
-              console.error('[jsPsychSurvey] Error rendering survey:', error);
-              this.jsPsych.finishTrial({ error: error?.message || String(error) });
-            }
-          }
-        }
-
-        Plugin.info = info;
-        return Plugin;
-      })();
-
-      if (typeof window !== 'undefined') {
-        window.jsPsychSurvey = SurveyPlugin;
-      }
-    })();
-  </script>
-
-  <!-- post-test logic -->
+  <!-- Your post-test script -->
   <script src="posttest.js"></script>
 
-  <!-- Library check + start buttons -->
   <script>
     window.addEventListener('load', () => {
       const el = document.getElementById('lib-check');
       const checks = [
         ['initJsPsych', typeof window.initJsPsych === 'function'],
         ['HtmlButton', typeof window.jsPsychHtmlButtonResponse === 'function'],
+        ['HtmlKeyboard', typeof window.jsPsychHtmlKeyboardResponse === 'function'],
         ['SurveyText', typeof window.jsPsychSurveyText === 'function'],
         ['SurveyLikert', typeof window.jsPsychSurveyLikert === 'function'],
-        ['Knockout', typeof window.ko === 'object'],
-        ['Survey(core)', typeof (window.Survey?.Model || window.Survey?.default?.Model) === 'function'],
-        ['Survey KO UI', !!window.Survey],
-        ['jsPsychSurvey', typeof window.jsPsychSurvey === 'function'],
         ['MicInit', typeof window.jsPsychInitializeMicrophone === 'function'],
         ['HtmlAudioResp', typeof window.jsPsychHtmlAudioResponse === 'function'],
-        ['AudioBtnResp', typeof window.jsPsychAudioButtonResponse === 'function'],
       ];
-      const missing = checks.filter(([_, v]) => !v).map(([k]) => k);
+      const missing = checks.filter(([_, ok]) => !ok).map(([k]) => k);
       if (missing.length) {
         el.innerHTML = 'Missing: <span class="warn">' + missing.join(', ') + '</span>';
-        el.style.color = '#c1272d';
       } else {
-        el.innerHTML = '<span class="success">✓ All components loaded</span>';
+        el.textContent = '✓ All jsPsych plugins loaded';
+        el.style.color = '#2e7d32';
       }
 
-      const getPid = () =>
-        document.getElementById('pid')?.value.trim() || `S_${Date.now()}`;
+      const getPid = () => document.getElementById('pid')?.value.trim() || `S_${Date.now()}`;
 
       document.getElementById('btn-immediate')?.addEventListener('click', () => {
         if (typeof window.__START_POSTTEST !== 'function') {
@@ -218,11 +95,11 @@
       });
 
       document.getElementById('btn-delayed')?.addEventListener('click', () => {
-        if (typeof __START_POSTTEST !== 'function') {
+        if (typeof window.__START_POSTTEST !== 'function') {
           alert('posttest.js not loaded yet.');
           return;
         }
-        __START_POSTTEST(getPid(), true);
+        window.__START_POSTTEST(getPid(), true);
       });
     });
   </script>
