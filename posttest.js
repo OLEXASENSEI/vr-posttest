@@ -717,9 +717,9 @@
     const trial = {
       timeline: [{
         type: T('jsPsychHtmlButtonResponse'), 
-        stimulus: jsPsych.timelineVariable('word_display'), 
+        stimulus: () => jsPsych.timelineVariable('word_display'), 
         choices: ['YES - I saw this', 'NO - I did not see this'], 
-        data: jsPsych.timelineVariable('trial_data'),
+        data: () => jsPsych.timelineVariable('trial_data'),
         on_finish: (d) => {
           const yes = (d.response === 0); 
           d.response_label = yes ? 'yes' : 'no'; 
