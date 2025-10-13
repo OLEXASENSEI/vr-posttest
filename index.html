@@ -10,7 +10,7 @@
   <!-- jsPsych CSS -->
   <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css">
 
-  <!-- SurveyJS CSS -->
+  <!-- SurveyJS CSS (theme) -->
   <link rel="stylesheet" href="https://unpkg.com/survey-core@1.11.7/defaultV2.min.css">
 
   <style>
@@ -64,22 +64,21 @@
   <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-audio-button-response@1.1.3"></script>
   
-  <!-- SurveyJS -->
+  <!-- SurveyJS (core + UI layer) -->
   <script src="https://unpkg.com/survey-core@1.11.7/survey.core.min.js"></script>
+  <!-- IMPORTANT: UI renderer (Knockout). This makes survey.render(...) actually draw UI -->
+  <script src="https://unpkg.com/survey-knockout-ui@1.11.7/survey-knockout-ui.min.js"></script>
 
-  <!-- Embedded jsPsych-Survey Bridge Plugin (hardened) -->
+  <!-- Embedded jsPsych-Survey Bridge Plugin (same as before, with a small guard) -->
   <script>
     (function() {
       'use strict';
 
-      // Apply a visible theme so the page isn't "blank-canvas" white.
       try {
         if (window.Survey && Survey.StylesManager && Survey.StylesManager.applyTheme) {
           Survey.StylesManager.applyTheme("defaultV2");
         }
-      } catch(e) {
-        console.warn('SurveyJS theme apply failed (non-fatal):', e);
-      }
+      } catch(e) { /* non-fatal */ }
       
       var jsPsychSurvey = (function() {
         const info = {
@@ -91,34 +90,23 @@
         };
 
         class SurveyPlugin {
-          constructor(jsPsych) {
-            this.jsPsych = jsPsych;
-          }
+          constructor(jsPsych) { this.jsPsych = jsPsych; }
 
           trial(display_element, trial) {
-            if (!window.Survey) {
-              console.error('SurveyJS library not loaded');
-              display_element.innerHTML = '<div style="padding:20px;color:#c1272d;">SurveyJS failed to load.</div>';
-              this.jsPsych.finishTrial({ error: 'SurveyJS not loaded' });
+            if (!window.Survey || !Survey.Model || !Survey.KnockoutRenderer) {
+              display_element.innerHTML = '<div style="padding:20px;color:#c1272d;">SurveyJS UI not loaded.</div>';
+              this.jsPsych.finishTrial({ error: 'SurveyJS UI not loaded' });
               return;
             }
 
-            // Get survey JSON
-            let surveyJson;
-            if (trial.survey_json) {
-              surveyJson = trial.survey_json;
-            } else if (trial.survey_function && typeof trial.survey_function === 'function') {
-              surveyJson = trial.survey_function();
-            } else {
-              surveyJson = { pages: [{ elements: [] }] };
-            }
+            let surveyJson = trial.survey_json
+              || (typeof trial.survey_function === 'function' ? trial.survey_function() : null)
+              || { pages: [{ elements: [] }] };
 
-            // Ensure minimal shape
             if (!surveyJson.pages && !surveyJson.elements) {
               surveyJson.pages = [{ elements: [] }];
             }
 
-            // Mount point
             display_element.innerHTML = '<div id="surveyContainer" style="padding:10px;"></div>';
 
             const survey = new Survey.Model(surveyJson);
@@ -136,10 +124,8 @@
               this.jsPsych.finishTrial(trial_data);
             });
 
-            // Render and guard against silent render failures
             try {
               survey.render('surveyContainer');
-              // If render silently fails (rare), show a fallback
               setTimeout(() => {
                 const holder = document.getElementById('surveyContainer');
                 if (holder && holder.children.length === 0) {
@@ -147,7 +133,6 @@
                 }
               }, 100);
             } catch (e) {
-              console.error('Survey render error:', e);
               display_element.innerHTML = '<div style="padding:20px;color:#c1272d;">Survey render error.</div>';
               this.jsPsych.finishTrial({ error: 'Survey render exception' });
             }
@@ -174,6 +159,7 @@
       const checks = [
         ['initJsPsych', typeof window.initJsPsych === 'function'],
         ['Survey', typeof window.Survey === 'object'],
+        ['Survey UI', typeof window.Survey !== 'undefined' && !!Survey.KnockoutRenderer],
         ['jsPsychSurvey', typeof window.jsPsychSurvey === 'function'],
         ['jsPsychHtmlButtonResponse', typeof window.jsPsychHtmlButtonResponse === 'function']
       ];
@@ -190,18 +176,12 @@
       const getPid = () => document.getElementById('pid')?.value.trim() || `S_${Date.now()}`;
       
       document.getElementById('btn-immediate')?.addEventListener('click', () => {
-        if (typeof window.__START_POSTTEST !== 'function') {
-          alert('posttest.js not loaded yet.');
-          return;
-        }
+        if (typeof window.__START_POSTTEST !== 'function') { alert('posttest.js not loaded yet.'); return; }
         window.__START_POSTTEST(getPid(), false);
       });
       
       document.getElementById('btn-delayed')?.addEventListener('click', () => {
-        if (typeof window.__START_POSTTEST !== 'function') {
-          alert('posttest.js not loaded yet.');
-          return;
-        }
+        if (typeof window.__START_POSTTEST !== 'function') { alert('posttest.js not loaded yet.'); return; }
         window.__START_POSTTEST(getPid(), true);
       });
     });
