@@ -1,6 +1,8 @@
 /**
- * posttest.js — VERSION 3.2 FIXED
- * Complete post-test battery with proper library checks
+ * posttest.js — VERSION 3.3 FIXED
+ * - Flattens nested timelines so flow always continues
+ * - Adds extra logging + guards around SurveyJS and mic tasks
+ * - Minor robustness tweaks to audio loader and image helpers
  */
 
 (function(){
@@ -124,6 +126,8 @@
       audio.addEventListener('canplaythrough', ok,  { once:true }); 
       audio.addEventListener('error', bad, { once:true });
       audio.src = src;
+      // Chrome sometimes needs a kick:
+      audio.load?.();
     }
     return { loadNext };
   }
@@ -187,7 +191,7 @@
     const arr = array.slice();
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
+      [arr[i], arr[j]] = [arr[j]];
     }
     return arr;
   }
@@ -241,6 +245,7 @@
       return tl; 
     }
 
+    // Welcome
     tl.push({
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `<div style="max-width: 600px; margin: 0 auto; text-align: center;"><h2>Post-Test / ポストテスト</h2><p><strong>Participant:</strong> ${currentPID}</p><p><strong>Condition:</strong> ${testCondition}</p><p>Focus on: <b>Recall, Retention, and Pronunciation</b></p></div>`,
@@ -274,12 +279,14 @@
       });
     }
 
-    // Transfer (seen in VR?) + confidence
+    // Transfer (seen in VR?) + confidence (FLATTENED)
     if (!isDelayed) { 
-      tl.push(buildTransferTask()); 
+      const transfer = buildTransferTask();
+      tl.push(transfer.intro);
+      tl.push(...transfer.trials);
     }
 
-    // Post questionnaire + exit feedback
+    // Post questionnaire + exit feedback (use hardened Survey bridge)
     tl.push(buildPostQuestionnaire());
     tl.push(buildExitOpenQuestion());
 
@@ -296,11 +303,11 @@
     allItems.forEach((targetStim) => {
       const pool = allItems.filter(s => s.target !== targetStim.target);
       const foils = sampleWithoutReplacement(pool, Math.min(3, pool.length));
-      const choices = shuffle([targetStim, ...foils]);
-      const correctIndex = choices.findIndex(c => c.target === targetStim.target);
+      const choicesArr = shuffle([targetStim, ...foils]);
+      const correctIndex = choicesArr.findIndex(c => c.target === targetStim.target);
       const buttonLabels = ['1', '2', '3', '4'];
 
-      const imgStrip = choices.map((c) => {
+      const imgStrip = choicesArr.map((c) => {
         const img = imageSrcFor(c.target);
         const fb = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' font-size='12'%3E${c.target}%3C/text%3E%3C/svg%3E`;
         return `<div style="display:inline-block;margin:6px;"><img src="${img || fb}" style="width:140px;height:140px;border:1px solid #ccc;border-radius:4px;" onerror="this.src='${fb}'"></div>`;
@@ -318,7 +325,7 @@
           task: '4afc_vocabulary',
           word: targetStim.target,
           correct_index: correctIndex,
-          all_choices: choices.map(c => c.target),
+          all_choices: choicesArr.map(c => c.target),
           pid: currentPID,
           condition: testCondition
         },
@@ -533,10 +540,11 @@
         on_load: function() {
           const btn = document.getElementById(`play-sound-${idx}`);
           const status = document.getElementById(`status-${idx}`);
-          const answerBtns = document.querySelectorAll('.answer-btn');
+          const answerBtns = Array.from(document.querySelectorAll('.jspsych-btn')).filter(b => b !== btn);
           const candidates = soundCandidatesFor(stim.audio);
           const loader = createResilientAudioLoader(candidates);
 
+          // Lock answers until first play
           answerBtns.forEach(ab => { 
             ab.disabled = true; 
             ab.style.opacity = '0.5'; 
@@ -706,7 +714,7 @@
     return tasks;
   }
 
-  // Transfer Recognition Task
+  // Transfer Recognition Task (returns a FLAT-ready structure)
   function buildTransferTask() {
     const intro = { 
       type: T('jsPsychHtmlButtonResponse'), 
@@ -714,48 +722,50 @@
       choices: ['Begin / 開始'] 
     };
     
-    const trial = {
-      timeline: [{
-        type: T('jsPsychHtmlButtonResponse'), 
-        stimulus: () => jsPsych.timelineVariable('word_display'), 
-        choices: ['YES - I saw this', 'NO - I did not see this'], 
-        data: () => jsPsych.timelineVariable('trial_data'),
-        on_finish: (d) => {
-          const yes = (d.response === 0); 
-          d.response_label = yes ? 'yes' : 'no'; 
-          d.correct = (yes === d.correct_answer);
-          d.signal_type = d.correct_answer ? (yes ? 'hit' : 'miss') : (yes ? 'false_alarm' : 'correct_rejection');
+    const trials = transfer_words.map(item => ({
+      timeline: [
+        {
+          type: T('jsPsychHtmlButtonResponse'), 
+          stimulus: `<div style="text-align:center; padding:28px;"><div style="padding: 22px; background: #f8f9fa; border-radius: 10px; border: 2px solid #e0e0e0;"><p style="font-size:32px; font-weight:bold; margin:10px 0; color:#333">${item.word}</p></div><p style="font-size:14px; color:#666; margin-top:16px;">Did you see this word in the VR training?</p></div>`, 
+          choices: ['YES - I saw this', 'NO - I did not see this'], 
+          data: { 
+            task: 'transfer_test', 
+            word: item.word, 
+            pos: item.pos, 
+            iconic: item.iconic, 
+            word_type_label: item.type, 
+            correct_answer: item.trained, 
+            condition: testCondition, 
+            pid: currentPID 
+          },
+          on_finish: (d) => {
+            const yes = (d.response === 0); 
+            d.response_label = yes ? 'yes' : 'no'; 
+            d.correct = (yes === d.correct_answer);
+            d.signal_type = d.correct_answer ? (yes ? 'hit' : 'miss') : (yes ? 'false_alarm' : 'correct_rejection');
+          }
+        },
+        {
+          type: T('jsPsychHtmlButtonResponse'), 
+          stimulus: `<div style="text-align:center;"><p>How confident are you?</p><p>どのくらい自信がありますか？</p></div>`, 
+          choices: ['1 (Guess)', '2', '3', '4 (Very sure)'], 
+          data: { task: 'transfer_confidence' },
+          on_finish: (d) => { 
+            d.confidence = (d.response ?? null) !== null ? (d.response + 1) : null; 
+          }
         }
-      },
-      {
-        type: T('jsPsychHtmlButtonResponse'), 
-        stimulus: `<div style="text-align:center;"><p>How confident are you?</p><p>どのくらい自信がありますか？</p></div>`, 
-        choices: ['1 (Guess)', '2', '3', '4 (Very sure)'], 
-        data: { task: 'transfer_confidence' },
-        on_finish: (d) => { 
-          d.confidence = (d.response ?? null) !== null ? (d.response + 1) : null; 
-        }
-      }],
-      timeline_variables: transfer_words.map(item => ({
-        word_display: `<div style="text-align:center; padding:28px;"><div style="padding: 22px; background: #f8f9fa; border-radius: 10px; border: 2px solid #e0e0e0;"><p style="font-size:32px; font-weight:bold; margin:10px 0; color:#333">${item.word}</p></div><p style="font-size:14px; color:#666; margin-top:16px;">Did you see this word in the VR training?</p></div>`,
-        trial_data: { 
-          task: 'transfer_test', 
-          word: item.word, 
-          pos: item.pos, 
-          iconic: item.iconic, 
-          word_type_label: item.type, 
-          correct_answer: item.trained, 
-          condition: testCondition, 
-          pid: currentPID 
-        }
-      })),
-      randomize_order: true
-    };
-    
-    return { timeline: [intro, trial] };
+      ],
+      randomize_order: false
+    }));
+
+    // Flatten each two-step mini-timeline later via tl.push(...transfer.trials.map(...))
+    const flatTrials = [];
+    trials.forEach(t => flatTrials.push(...t.timeline));
+
+    return { intro, trials: flatTrials };
   }
 
-  // Post-Training Questionnaire
+  // Post-Training Questionnaire (SurveyJS bridge)
   function buildPostQuestionnaire() {
     if (!have('jsPsychSurvey')) { 
       return { 
@@ -764,13 +774,21 @@
         choices: ['Continue'] 
       }; 
     }
+
+    // Defensive render: tiny pre-trial to ensure DOM is “hot”
+    const pre = {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: '<div style="text-align:center;color:#666">Loading questionnaire…</div>',
+      choices: ['Continue']
+    };
     
-    return {
+    const surveyTrial = {
       type: T('jsPsychSurvey'),
       survey_json: {
         title: 'Post-Training Questionnaire / 訓練後アンケート', 
         showQuestionNumbers: 'off', 
         showCompletedPage: false,
+        completeText: 'Submit / 送信',
         pages: [{
           elements: [
             { type: 'rating', name: 'confidence_vocabulary', title: 'Vocabulary confidence?', isRequired: true, rateMin: 1, rateMax: 5 },
@@ -788,6 +806,9 @@
         pid: currentPID 
       }
     };
+
+    // Return the two trials together
+    return { timeline: [pre, surveyTrial] };
   }
 
   // Exit Feedback

@@ -47,7 +47,7 @@
     <details>
       <summary>Help / Requirements</summary>
       <ul>
-        <li>Assets required: <code>sounds/*.mp3</code>, <code>img/*.jpg|jpeg|svg</code>, <code>pron/*.mp3</code></li>
+        <li>Assets required: <code>sounds/*.mp3</code>, <code>img/*.jpg|jpeg|svg|png</code>, <code>pron/*.mp3</code></li>
         <li>All libraries loaded from CDN</li>
         <li>Choose immediate or delayed condition above</li>
       </ul>
@@ -67,23 +67,26 @@
   <!-- SurveyJS -->
   <script src="https://unpkg.com/survey-core@1.11.7/survey.core.min.js"></script>
 
-  <!-- Embedded jsPsych-Survey Bridge Plugin -->
+  <!-- Embedded jsPsych-Survey Bridge Plugin (hardened) -->
   <script>
     (function() {
       'use strict';
+
+      // Apply a visible theme so the page isn't "blank-canvas" white.
+      try {
+        if (window.Survey && Survey.StylesManager && Survey.StylesManager.applyTheme) {
+          Survey.StylesManager.applyTheme("defaultV2");
+        }
+      } catch(e) {
+        console.warn('SurveyJS theme apply failed (non-fatal):', e);
+      }
       
       var jsPsychSurvey = (function() {
         const info = {
           name: 'survey',
           parameters: {
-            survey_json: {
-              type: 'complex',
-              default: null
-            },
-            survey_function: {
-              type: 'function',
-              default: null
-            }
+            survey_json: { type: 'complex', default: null },
+            survey_function: { type: 'function', default: null }
           }
         };
 
@@ -95,34 +98,59 @@
           trial(display_element, trial) {
             if (!window.Survey) {
               console.error('SurveyJS library not loaded');
+              display_element.innerHTML = '<div style="padding:20px;color:#c1272d;">SurveyJS failed to load.</div>';
               this.jsPsych.finishTrial({ error: 'SurveyJS not loaded' });
               return;
             }
 
-            // Get survey JSON from either parameter
+            // Get survey JSON
             let surveyJson;
             if (trial.survey_json) {
               surveyJson = trial.survey_json;
             } else if (trial.survey_function && typeof trial.survey_function === 'function') {
               surveyJson = trial.survey_function();
             } else {
-              surveyJson = {};
+              surveyJson = { pages: [{ elements: [] }] };
             }
 
+            // Ensure minimal shape
+            if (!surveyJson.pages && !surveyJson.elements) {
+              surveyJson.pages = [{ elements: [] }];
+            }
+
+            // Mount point
+            display_element.innerHTML = '<div id="surveyContainer" style="padding:10px;"></div>';
+
             const survey = new Survey.Model(surveyJson);
-            
+            let finished = false;
+
             survey.onComplete.add((sender) => {
+              if (finished) return;
+              finished = true;
               const trial_data = {
                 response: sender.data,
                 rt: null,
-                question_order: surveyJson.pages?.[0]?.elements?.map(e => e.name) || []
+                question_order: (surveyJson.pages?.[0]?.elements || surveyJson.elements || []).map(e => e.name)
               };
               display_element.innerHTML = '';
               this.jsPsych.finishTrial(trial_data);
             });
 
-            display_element.innerHTML = '<div id="surveyContainer"></div>';
-            survey.render('surveyContainer');
+            // Render and guard against silent render failures
+            try {
+              survey.render('surveyContainer');
+              // If render silently fails (rare), show a fallback
+              setTimeout(() => {
+                const holder = document.getElementById('surveyContainer');
+                if (holder && holder.children.length === 0) {
+                  holder.innerHTML = '<div style="color:#c1272d;">Survey failed to render. Please click Continue.</div>';
+                }
+              }, 100);
+            } catch (e) {
+              console.error('Survey render error:', e);
+              display_element.innerHTML = '<div style="padding:20px;color:#c1272d;">Survey render error.</div>';
+              this.jsPsych.finishTrial({ error: 'Survey render exception' });
+            }
           }
         }
 
@@ -135,8 +163,6 @@
       }
     })();
   </script>
-
-  <!-- NOTE: randomization is handled in posttest.js, not here -->
 
   <!-- Your posttest logic -->
   <script src="posttest.js"></script>
