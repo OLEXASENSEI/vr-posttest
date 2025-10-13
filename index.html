@@ -6,11 +6,13 @@
   <title>VR Post-Test</title>
   <meta name="description" content="Immediate vs Delayed post-test"/>
   <link rel="icon" href="data:,">
+
+  <!-- jsPsych CSS -->
   <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css">
-  
-  <!-- SurveyJS CSS for questionnaires -->
+
+  <!-- SurveyJS CSS (requested) -->
   <link rel="stylesheet" href="https://unpkg.com/survey-core@1.11.7/defaultV2.min.css">
-  
+
   <style>
     body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
     .wrap { max-width: 980px; margin: 24px auto; padding: 0 16px; }
@@ -25,7 +27,7 @@
     button { padding:8px 12px; }
     details { position: fixed; bottom: 10px; right: 10px; background: white; padding: 10px; border: 1px solid #ccc; border-radius: 6px; max-width: 300px; z-index: 1000; }
     details summary { cursor: pointer; font-weight: 600; }
-    
+
     /* Survey visibility */
     #surveyContainer { display: block !important; width: 100% !important; min-height: 400px !important; }
     .sd-root-modern { display: block !important; visibility: visible !important; }
@@ -69,7 +71,7 @@
   <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-audio-button-response@1.1.3"></script>
 
-  <!-- SurveyJS (for advanced questionnaires) -->
+  <!-- SurveyJS + Knockout (requested) -->
   <script src="https://unpkg.com/knockout@3.5.1/build/output/knockout-latest.js"></script>
   <script src="https://unpkg.com/survey-core@1.11.7/survey.core.min.js"></script>
   <script src="https://unpkg.com/survey-knockout-ui@1.11.7"></script>
@@ -93,8 +95,9 @@
           }
 
           trial(display_element, trial) {
-            const SurveyNamespace = (window.Survey && window.Survey.default) ? window.Survey.default : window.Survey;
-            if (!SurveyNamespace) {
+            // Try to resolve Survey namespace (survey-core + knockout UI)
+            const S = (window.Survey && (window.Survey.default || window.Survey)) || window.Survey;
+            if (!S) {
               console.error('[jsPsychSurvey] SurveyJS not loaded');
               this.jsPsych.finishTrial({ error: 'SurveyJS not loaded' });
               return;
@@ -121,21 +124,29 @@
             };
 
             try {
-              let surveyInstance = null;
-              if (typeof SurveyNamespace.Survey === 'function') {
-                surveyInstance = new SurveyNamespace.Survey(surveyJson);
-              } else if (typeof SurveyNamespace.Model === 'function') {
-                surveyInstance = new SurveyNamespace.Model(surveyJson);
-              } else {
-                throw new Error('SurveyJS API not available');
+              // Create model from survey-core
+              const modelCtor = (S.Model || (S.Survey && S.Survey)); // fallback
+              if (typeof modelCtor !== 'function') throw new Error('SurveyJS Model not available');
+
+              const surveyInstance = new S.Model(surveyJson);
+              if (surveyInstance.onComplete && surveyInstance.onComplete.add) {
+                surveyInstance.onComplete.add(finish);
               }
 
-              surveyInstance.onComplete.add(finish);
-
+              // Render using knockout UI (it decorates global Survey to support render)
               if (typeof surveyInstance.render === 'function') {
                 surveyInstance.render(container);
-              } else if (SurveyNamespace.SurveyNG?.render) {
-                SurveyNamespace.SurveyNG.render(container, { model: surveyInstance });
+              } else if (S.Survey && typeof S.SurveyNG?.render === 'function') {
+                S.SurveyNG.render(container, { model: surveyInstance });
+              } else {
+                // Mount via KO binding if available
+                container.id = container.id || 'surveyContainer';
+                if (S.Survey && typeof S.Survey.mount === 'function') {
+                  S.Survey.mount('#' + container.id, { model: surveyInstance });
+                } else {
+                  // Last resort: inject div and call render again
+                  surveyInstance.render(container);
+                }
               }
 
               window.currentSurvey = surveyInstance;
@@ -168,7 +179,9 @@
         ['HtmlButton', typeof window.jsPsychHtmlButtonResponse === 'function'],
         ['SurveyText', typeof window.jsPsychSurveyText === 'function'],
         ['SurveyLikert', typeof window.jsPsychSurveyLikert === 'function'],
-        ['Survey (SurveyJS)', typeof (window.Survey?.default || window.Survey) === 'object'],
+        ['Knockout', typeof window.ko === 'object'],
+        ['Survey(core)', typeof (window.Survey?.Model || window.Survey?.default?.Model) === 'function'],
+        ['Survey KO UI', !!window.Survey],
         ['jsPsychSurvey', typeof window.jsPsychSurvey === 'function'],
         ['MicInit', typeof window.jsPsychInitializeMicrophone === 'function'],
         ['HtmlAudioResp', typeof window.jsPsychHtmlAudioResponse === 'function'],
@@ -185,17 +198,17 @@
       const getPid = () => document.getElementById('pid')?.value.trim() || `S_${Date.now()}`;
 
       document.getElementById('btn-immediate')?.addEventListener('click', () => {
-        if (typeof window.__START_POSTTEST !== 'function') { 
-          alert('posttest.js not loaded yet.'); 
-          return; 
+        if (typeof window.__START_POSTTEST !== 'function') {
+          alert('posttest.js not loaded yet.');
+          return;
         }
         window.__START_POSTTEST(getPid(), false);
       });
 
       document.getElementById('btn-delayed')?.addEventListener('click', () => {
-        if (typeof window.__START_POSTTEST !== 'function') { 
-          alert('posttest.js not loaded yet.'); 
-          return; 
+        if (typeof window.__START_POSTTEST !== 'function') {
+          alert('posttest.js not loaded yet.');
+          return;
         }
         window.__START_POSTTEST(getPid(), true);
       });
