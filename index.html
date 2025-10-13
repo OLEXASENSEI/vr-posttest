@@ -24,6 +24,8 @@
     .controls { display:flex; gap:8px; align-items:center; margin: 12px 0 20px; }
     input[type="text"] { padding:8px 10px; border:1px solid #ccc; border-radius:6px; }
     button { padding:8px 12px; }
+    details { position: fixed; bottom: 10px; right: 10px; background: white; padding: 10px; border: 1px solid #ccc; border-radius: 6px; max-width: 300px; z-index: 1000; }
+    details summary { cursor: pointer; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -75,12 +77,12 @@
           name: 'survey',
           parameters: {
             survey_json: {
-              type: window.jsPsych?.plugins?.parameterType?.COMPLEX || 'complex',
-              default: undefined
+              type: 'complex',
+              default: null
             },
             survey_function: {
-              type: window.jsPsych?.plugins?.parameterType?.FUNCTION || 'function',
-              default: undefined
+              type: 'function',
+              default: null
             }
           }
         };
@@ -97,7 +99,16 @@
               return;
             }
 
-            const surveyJson = trial.survey_json || {};
+            // Get survey JSON from either parameter
+            let surveyJson;
+            if (trial.survey_json) {
+              surveyJson = trial.survey_json;
+            } else if (trial.survey_function && typeof trial.survey_function === 'function') {
+              surveyJson = trial.survey_function();
+            } else {
+              surveyJson = {};
+            }
+
             const survey = new Survey.Model(surveyJson);
             
             survey.onComplete.add((sender) => {
@@ -125,26 +136,7 @@
     })();
   </script>
 
-  <!-- jsPsych randomization utility -->
-  <script>
-    // Add randomization helper if not available
-    if (typeof window.jsPsych !== 'undefined' && !window.jsPsych.randomization) {
-      window.jsPsych.randomization = {
-        shuffle: function(array) {
-          const arr = array.slice();
-          for (let i = arr.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [arr[i], arr[j]] = [arr[j], arr[i]];
-          }
-          return arr;
-        },
-        sampleWithoutReplacement: function(array, size) {
-          const shuffled = this.shuffle(array);
-          return shuffled.slice(0, Math.min(size, array.length));
-        }
-      };
-    }
-  </script>
+  <!-- NOTE: randomization is handled in posttest.js, not here -->
 
   <!-- Your posttest logic -->
   <script src="posttest.js"></script>

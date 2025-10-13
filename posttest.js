@@ -184,10 +184,6 @@
 
   /* ========== RANDOMIZATION HELPERS ========== */
   function shuffle(array) {
-    // Use jsPsych randomization if available, otherwise fallback
-    if (jsPsych && jsPsych.randomization && jsPsych.randomization.shuffle) {
-      return jsPsych.randomization.shuffle(array);
-    }
     const arr = array.slice();
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -197,9 +193,6 @@
   }
 
   function sampleWithoutReplacement(array, size) {
-    if (jsPsych && jsPsych.randomization && jsPsych.randomization.sampleWithoutReplacement) {
-      return jsPsych.randomization.sampleWithoutReplacement(array, size);
-    }
     const shuffled = shuffle(array);
     return shuffled.slice(0, Math.min(size, array.length));
   }
@@ -363,16 +356,17 @@
           let html = '<div style="max-width: 600px; margin: 0 auto; text-align: center;"><h3>Select the Steps in Order (1-5)</h3>';
           html += '<div id="step-pool" style="display:flex; flex-wrap:wrap; justify-content:center; gap:10px; margin-bottom:20px;">';
           shuffledSteps.forEach((step, index) => {
-            html += `<button class="jspsych-btn step-pool-btn" data-step="${step}" data-index="${index}" style="width: 180px; height: 50px; background:#f0f0f0; color:#333; border: 1px solid #ccc;">${step}</button>`;
+            html += `<button class="jspsych-btn step-pool-btn" data-step="${step}" data-index="${index}" style="width: 180px; height: 60px; background:#f0f0f0; color:#333; border: 1px solid #ccc; font-size: 13px;">${step}</button>`;
           });
           html += '</div>';
+          html += '<div style="margin:10px 0;"><button id="undo-btn" class="jspsych-btn" disabled style="opacity:0.5;">↶ Undo Last</button></div>';
           html += '<div id="selected-order" style="border: 2px dashed #999; padding: 15px; min-height: 50px; margin-top:20px;">' +
                   '<p style="margin:0;color:#666;">Click the steps above in the correct sequence.</p>' +
                   '</div>';
           return html + '</div>';
         },
         choices: ['Submit Sequence / 送信'],
-        button_html: ['<button class="jspsych-btn" id="submit-btn" disabled>%s</button>'],
+        button_html: ['<button class="jspsych-btn" id="submit-btn" disabled style="opacity:0.5;">%s</button>'],
         data: {
           task: 'procedural_sequencing',
           correct_order: canonicalOrder,
@@ -384,12 +378,18 @@
           const poolBtns = document.querySelectorAll('.step-pool-btn');
           const orderDiv = document.getElementById('selected-order');
           const submitBtn = document.getElementById('submit-btn');
+          const undoBtn = document.getElementById('undo-btn');
           let sequence = [];
 
           const updateDisplay = () => {
-            orderDiv.innerHTML = sequence.map((step, i) =>
-              `<span style="background:#2196F3; color:white; padding: 5px 10px; border-radius:4px; margin:0 5px;">${i + 1}. ${step}</span>`
-            ).join('');
+            if (sequence.length === 0) {
+              orderDiv.innerHTML = '<p style="margin:0;color:#666;">Click the steps above in the correct sequence.</p>';
+            } else {
+              orderDiv.innerHTML = sequence.map((step, i) =>
+                `<span style="background:#2196F3; color:white; padding: 5px 10px; border-radius:4px; margin:0 5px; display:inline-block;">${i + 1}. ${step}</span>`
+              ).join('');
+            }
+            
             if (sequence.length === canonicalOrder.length) {
               submitBtn.disabled = false; 
               submitBtn.style.opacity = '1';
@@ -397,6 +397,15 @@
               submitBtn.disabled = true; 
               submitBtn.style.opacity = '0.5';
             }
+
+            if (sequence.length > 0) {
+              undoBtn.disabled = false;
+              undoBtn.style.opacity = '1';
+            } else {
+              undoBtn.disabled = true;
+              undoBtn.style.opacity = '0.5';
+            }
+
             window.__seq_map.set(seqKey, sequence.slice());
           };
 
@@ -407,10 +416,27 @@
                 sequence.push(step);
                 btn.disabled = true;
                 btn.style.background = '#ccc';
+                btn.style.opacity = '0.5';
                 updateDisplay();
               }
             });
           });
+
+          undoBtn.addEventListener('click', () => {
+            if (sequence.length > 0) {
+              const lastStep = sequence.pop();
+              poolBtns.forEach(btn => {
+                if (btn.getAttribute('data-step') === lastStep) {
+                  btn.disabled = false;
+                  btn.style.background = '#f0f0f0';
+                  btn.style.opacity = '1';
+                }
+              });
+              updateDisplay();
+            }
+          });
+
+          updateDisplay();
         },
         on_finish: function(data) {
           const seq = (window.__seq_map && window.__seq_map.get(seqKey)) || [];
@@ -495,7 +521,6 @@
             <p style="color:#666;margin-top:4px;">この音は何を表していますか？</p>
           </div>`,
         choices: stim.options,
-        button_html: stim.options.map((_, i) => `<button class="jspsych-btn answer-btn" id="answer-btn-${idx}-${i}">%s</button>`),
         data: { 
           task: 'foley_recognition', 
           audio_key: stim.audio, 
