@@ -29,8 +29,7 @@
     details { position: fixed; bottom: 10px; right: 10px; background: white; padding: 10px; border: 1px solid #ccc; border-radius: 6px; max-width: 300px; z-index: 1000; }
     details summary { cursor: pointer; font-weight: 600; }
 
-    /* Survey visibility */
-    #surveyContainer { display: block !important; width: 100% !important; min-height: 400px !important; }
+    #surveyContainer { display: block !important; width: 100% !important; min-height: 400px !important; background:white; }
     .sd-root-modern { display: block !important; visibility: visible !important; }
   </style>
 </head>
@@ -54,8 +53,8 @@
       <summary>Help / Requirements</summary>
       <ul>
         <li>Assets required: <code>sounds/*.mp3</code>, <code>img/*.jpg|jpeg|svg|png</code>, <code>pron/*.mp3</code></li>
-        <li>All libraries loaded from CDN</li>
-        <li>Choose immediate or delayed condition above</li>
+        <li>All libraries load from CDN</li>
+        <li>Select immediate or delayed condition above</li>
       </ul>
     </details>
   </div>
@@ -109,7 +108,6 @@
               return;
             }
 
-            // normalise namespace for other scripts
             window.Survey = SurveyNamespace;
 
             let surveyJson = trial.survey_json;
