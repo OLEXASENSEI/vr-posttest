@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css">
 
   <!-- SurveyJS CSS (theme) -->
-  <link rel="stylesheet" href="https://unpkg.com/survey-core@1.11.7/defaultV2.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/survey-core@1.11.7/defaultV2.min.css">
 
   <style>
     body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
@@ -64,32 +64,23 @@
   <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-audio-button-response@1.1.3"></script>
   
-  <!-- SurveyJS (core + Knockout runtime + UI layer) -->
-  <script src="https://unpkg.com/survey-core@1.11.7/survey.core.min.js"></script>
-  <!-- NEW: Knockout dependency for the Knockout UI renderer -->
-  <script src="https://unpkg.com/knockout@3.5.1/build/output/knockout-latest.js"></script>
-  <!-- UI renderer (Knockout) -->
-  <script src="https://unpkg.com/survey-knockout-ui@1.11.7/survey-knockout-ui.min.js"></script>
+  <!-- SurveyJS (core + Knockout runtime + UI layer, from jsDelivr) -->
+  <script src="https://cdn.jsdelivr.net/npm/survey-core@1.11.7/survey.core.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/knockout@3.5.1/build/output/knockout-latest.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/survey-knockout-ui@1.11.7/survey-knockout-ui.min.js"></script>
 
   <!-- Embedded jsPsych-Survey Bridge Plugin -->
   <script>
     (function() {
       'use strict';
 
-      try {
-        if (window.Survey && Survey.StylesManager?.applyTheme) {
-          Survey.StylesManager.applyTheme("defaultV2");
-        }
-      } catch(e) {}
+      try { if (window.Survey?.StylesManager?.applyTheme) Survey.StylesManager.applyTheme("defaultV2"); } catch(e) {}
 
       var jsPsychSurvey = (function() {
-        const info = {
-          name: 'survey',
-          parameters: {
-            survey_json: { type: 'complex', default: null },
-            survey_function: { type: 'function', default: null }
-          }
-        };
+        const info = { name: 'survey', parameters: {
+          survey_json: { type: 'complex', default: null },
+          survey_function: { type: 'function', default: null }
+        }};
 
         class SurveyPlugin {
           constructor(jsPsych) { this.jsPsych = jsPsych; }
@@ -104,9 +95,7 @@
             let surveyJson = trial.survey_json
               || (typeof trial.survey_function === 'function' ? trial.survey_function() : null)
               || { pages: [{ elements: [] }] };
-            if (!surveyJson.pages && !surveyJson.elements) {
-              surveyJson.pages = [{ elements: [] }];
-            }
+            if (!surveyJson.pages && !surveyJson.elements) surveyJson.pages = [{ elements: [] }];
 
             display_element.innerHTML = '<div id="surveyContainer" style="padding:10px;"></div>';
 
@@ -144,9 +133,7 @@
         return SurveyPlugin;
       })();
 
-      if (typeof window !== 'undefined') {
-        window.jsPsychSurvey = jsPsychSurvey;
-      }
+      if (typeof window !== 'undefined') window.jsPsychSurvey = jsPsychSurvey;
     })();
   </script>
 
@@ -166,22 +153,14 @@
         ['HtmlButton plugin', typeof window.jsPsychHtmlButtonResponse === 'function']
       ];
       const missing = checks.filter(([_, v]) => !v).map(([k]) => k);
-      
-      if (missing.length) {
-        el.innerHTML = 'Missing: <span class="warn">' + missing.join(', ') + '</span>';
-        el.style.color = '#c1272d';
-      } else {
-        el.textContent = '✓ All components loaded';
-        el.style.color = '#2e7d32';
-      }
+      if (missing.length) { el.innerHTML = 'Missing: <span class="warn">' + missing.join(', ') + '</span>'; el.style.color = '#c1272d'; }
+      else { el.textContent = '✓ All components loaded'; el.style.color = '#2e7d32'; }
 
       const getPid = () => document.getElementById('pid')?.value.trim() || `S_${Date.now()}`;
-      
       document.getElementById('btn-immediate')?.addEventListener('click', () => {
         if (typeof window.__START_POSTTEST !== 'function') { alert('posttest.js not loaded yet.'); return; }
         window.__START_POSTTEST(getPid(), false);
       });
-      
       document.getElementById('btn-delayed')?.addEventListener('click', () => {
         if (typeof window.__START_POSTTEST !== 'function') { alert('posttest.js not loaded yet.'); return; }
         window.__START_POSTTEST(getPid(), true);
