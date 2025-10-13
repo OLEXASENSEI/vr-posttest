@@ -7,6 +7,10 @@
   <meta name="description" content="Immediate vs Delayed post-test"/>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css">
+  
+  <!-- SurveyJS CSS for questionnaires -->
+  <link rel="stylesheet" href="https://unpkg.com/survey-core@1.11.7/defaultV2.min.css">
+  
   <style>
     body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
     .wrap { max-width: 980px; margin: 24px auto; padding: 0 16px; }
@@ -15,11 +19,16 @@
     #jspsych-target { min-height: 60vh; }
     .precheck { font-size: 12px; color:#666; margin-bottom:12px; }
     .warn { color:#c1272d; font-weight:600; }
+    .success { color:#2e7d32; font-weight:600; }
     .controls { display:flex; gap:8px; align-items:center; margin: 12px 0 20px; }
     input[type="text"] { padding:8px 10px; border:1px solid #ccc; border-radius:6px; }
     button { padding:8px 12px; }
     details { position: fixed; bottom: 10px; right: 10px; background: white; padding: 10px; border: 1px solid #ccc; border-radius: 6px; max-width: 300px; z-index: 1000; }
     details summary { cursor: pointer; font-weight: 600; }
+    
+    /* Survey visibility */
+    #surveyContainer { display: block !important; width: 100% !important; min-height: 400px !important; }
+    .sd-root-modern { display: block !important; visibility: visible !important; }
   </style>
 </head>
 <body>
@@ -41,9 +50,10 @@
     <details>
       <summary>Help / Requirements</summary>
       <ul>
-        <li>Assets required: <code>sounds/*.mp3</code>, <code>img/*.jpg|jpeg|svg|png</code>, <code>pron/*.mp3</code></li>
+        <li>Assets required: <code>sounds/*.mp3</code>, <code>img/*.jpg|jpeg|svg|png</code></li>
         <li>All libraries loaded from CDN</li>
         <li>Choose immediate or delayed condition above</li>
+        <li>Data will be logged to console (check F12)</li>
       </ul>
     </details>
   </div>
@@ -59,6 +69,93 @@
   <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-audio-button-response@1.1.3"></script>
 
+  <!-- SurveyJS (for advanced questionnaires) -->
+  <script src="https://unpkg.com/knockout@3.5.1/build/output/knockout-latest.js"></script>
+  <script src="https://unpkg.com/survey-core@1.11.7/survey.core.min.js"></script>
+  <script src="https://unpkg.com/survey-knockout-ui@1.11.7"></script>
+
+  <!-- SurveyJS Bridge Plugin -->
+  <script>
+    (function() {
+      'use strict';
+      const SurveyPlugin = (function() {
+        const info = {
+          name: 'survey',
+          parameters: {
+            survey_json: { type: 'complex', default: {} },
+            survey_function: { type: 'function', default: () => ({}) }
+          }
+        };
+
+        class Plugin {
+          constructor(jsPsych) {
+            this.jsPsych = jsPsych;
+          }
+
+          trial(display_element, trial) {
+            const SurveyNamespace = (window.Survey && window.Survey.default) ? window.Survey.default : window.Survey;
+            if (!SurveyNamespace) {
+              console.error('[jsPsychSurvey] SurveyJS not loaded');
+              this.jsPsych.finishTrial({ error: 'SurveyJS not loaded' });
+              return;
+            }
+
+            let surveyJson = trial.survey_json;
+            if (!surveyJson || Object.keys(surveyJson).length === 0) {
+              if (typeof trial.survey_function === 'function') {
+                surveyJson = trial.survey_function();
+              }
+            }
+
+            display_element.innerHTML = '<div id="surveyContainer" style="display:block;width:100%;min-height:400px;"></div>';
+            const container = display_element.querySelector('#surveyContainer');
+
+            const finish = (sender) => {
+              const trial_data = {
+                response: sender.data,
+                rt: null,
+                question_order: (surveyJson.pages?.[0]?.elements || []).map(e => e.name)
+              };
+              display_element.innerHTML = '';
+              this.jsPsych.finishTrial(trial_data);
+            };
+
+            try {
+              let surveyInstance = null;
+              if (typeof SurveyNamespace.Survey === 'function') {
+                surveyInstance = new SurveyNamespace.Survey(surveyJson);
+              } else if (typeof SurveyNamespace.Model === 'function') {
+                surveyInstance = new SurveyNamespace.Model(surveyJson);
+              } else {
+                throw new Error('SurveyJS API not available');
+              }
+
+              surveyInstance.onComplete.add(finish);
+
+              if (typeof surveyInstance.render === 'function') {
+                surveyInstance.render(container);
+              } else if (SurveyNamespace.SurveyNG?.render) {
+                SurveyNamespace.SurveyNG.render(container, { model: surveyInstance });
+              }
+
+              window.currentSurvey = surveyInstance;
+            } catch (error) {
+              console.error('[jsPsychSurvey] Error:', error);
+              this.jsPsych.finishTrial({ error: error?.message || String(error) });
+            }
+          }
+        }
+
+        Plugin.info = info;
+        return Plugin;
+      })();
+
+      if (typeof window !== 'undefined') {
+        window.jsPsychSurvey = SurveyPlugin;
+      }
+    })();
+  </script>
+
   <!-- Your posttest logic -->
   <script src="posttest.js"></script>
 
@@ -71,6 +168,8 @@
         ['HtmlButton', typeof window.jsPsychHtmlButtonResponse === 'function'],
         ['SurveyText', typeof window.jsPsychSurveyText === 'function'],
         ['SurveyLikert', typeof window.jsPsychSurveyLikert === 'function'],
+        ['Survey (SurveyJS)', typeof (window.Survey?.default || window.Survey) === 'object'],
+        ['jsPsychSurvey', typeof window.jsPsychSurvey === 'function'],
         ['MicInit', typeof window.jsPsychInitializeMicrophone === 'function'],
         ['HtmlAudioResp', typeof window.jsPsychHtmlAudioResponse === 'function'],
         ['AudioBtnResp', typeof window.jsPsychAudioButtonResponse === 'function'],
@@ -80,8 +179,7 @@
         el.innerHTML = 'Missing: <span class="warn">' + missing.join(', ') + '</span>';
         el.style.color = '#c1272d';
       } else {
-        el.textContent = '✓ All components loaded';
-        el.style.color = '#2e7d32';
+        el.innerHTML = '<span class="success">✓ All components loaded</span>';
       }
 
       const getPid = () => document.getElementById('pid')?.value.trim() || `S_${Date.now()}`;
