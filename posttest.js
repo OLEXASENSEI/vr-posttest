@@ -1,6 +1,6 @@
 /**
- * posttest.js — jsPsych-only version using your actual asset names.
- * No SurveyJS. Picture naming prompt includes English + Japanese guidance.
+ * posttest.js — jsPsych-only version, category-matched foils, bilingual naming prompt.
+ * This build auto-downloads the full dataset at the end (JSON).
  */
 
 (function () {
@@ -12,24 +12,24 @@
   const have = (name) => typeof window[name] !== 'undefined';
   const T = (name) => window[name];
 
-  /* ========= Asset manifests ========= */
-  const IMAGE_VARIANTS = {
-    bowl:     ['img/bowl_01.png',     'img/bowl_02.png'],
-    butter:   ['img/butter_01.png',   'img/butter_02.png'],
-    cracking: ['img/cracking_01.png', 'img/cracking_02.png'],
-    egg:      ['img/egg_01.png',      'img/egg_02.png'],
-    flipping: ['img/flipping_01.png', 'img/flipping_02.png'],
-    flour:    ['img/flour_01.png',    'img/flour_02.png'],
-    milk:     ['img/milk_01.png',     'img/milk_02.png'],
-    mixing:   ['img/mixing_01.png',   'img/mixing_02.png'],
-    pan:      ['img/pan_01.png',      'img/pan_02.png'],
-    pancake:  ['img/pancake_01.png',  'img/pancake_02.png'],
-    pouring:  ['img/pouring_01.png',  'img/pouring_02.png'],
-    sizzling: ['img/sizzling_01.png', 'img/sizzling_02.png'],
-    spatula:  ['img/spatula_01.png',  'img/spatula_02.png'],
-    sugar:    ['img/sugar_01.png',    'img/sugar_02.png'],
-    whisk:    ['img/whisk_01.png',    'img/whisk_02.png'],
-  };
+  /* ========== STIMULI WITH CATEGORIES ========== */
+  const PICTURES = [
+    { word: 'bowl',     category: 'object',     variants: ['img/bowl_01.png',     'img/bowl_02.png'] },
+    { word: 'butter',   category: 'object',     variants: ['img/butter_01.png',   'img/butter_02.png'] },
+    { word: 'cracking', category: 'action',     variants: ['img/cracking_01.png', 'img/cracking_02.png'] },
+    { word: 'egg',      category: 'object',     variants: ['img/egg_01.png',      'img/egg_02.png'] },
+    { word: 'flipping', category: 'action',     variants: ['img/flipping_01.png', 'img/flipping_02.png'] },
+    { word: 'flour',    category: 'ingredient', variants: ['img/flour_01.png',    'img/flour_02.png'] },
+    { word: 'milk',     category: 'ingredient', variants: ['img/milk_01.png',     'img/milk_02.png'] },
+    { word: 'mixing',   category: 'action',     variants: ['img/mixing_01.png',   'img/mixing_02.png'] },
+    { word: 'pan',      category: 'object',     variants: ['img/pan_01.png',      'img/pan_02.png'] },
+    { word: 'pancake',  category: 'food',       variants: ['img/pancake_01.png',  'img/pancake_02.png'] },
+    { word: 'pouring',  category: 'action',     variants: ['img/pouring_01.png',  'img/pouring_02.png'] },
+    { word: 'sizzling', category: 'process',    variants: ['img/sizzling_01.png', 'img/sizzling_02.png'] },
+    { word: 'spatula',  category: 'object',     variants: ['img/spatula_01.png',  'img/spatula_02.png'] },
+    { word: 'sugar',    category: 'ingredient', variants: ['img/sugar_01.png',    'img/sugar_02.png'] },
+    { word: 'whisk',    category: 'object',     variants: ['img/whisk_01.png',    'img/whisk_02.png'] },
+  ];
 
   const AUDIO_VARIANTS = {
     crack:  ['sounds/crack_1.mp3',  'sounds/crack_2.mp3'],
@@ -46,27 +46,8 @@
       <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
         font-family="sans-serif" font-size="26" fill="#1565c0">No image</text>
     </svg>`);
-
   const PLACEHOLDER_AUDIO =
     'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
-
-  const shuffle = (arr) => {
-    const copy = arr.slice();
-    for (let i = copy.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-  };
-  const sample = (arr, n) => shuffle(arr).slice(0, Math.min(n, arr.length));
-
-  const randomVariant = (mapping, key) => {
-    const list = mapping[key];
-    if (!list || !list.length) return null;
-    return list[Math.floor(Math.random() * list.length)];
-  };
-
-  const picture_words = Object.keys(IMAGE_VARIANTS);
 
   const transfer_words = [
     { word: 'sizzle', pos: 'verb',  iconic: true,  type: 'target_iconic',     trained: true  },
@@ -99,25 +80,40 @@
     'Crack eggs', 'Mix flour and eggs', 'Heat the pan', 'Pour batter on pan', 'Flip when ready'
   ];
 
+  /* ========== UTILITIES ========== */
+  const shuffle = (arr) => {
+    const copy = arr.slice();
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
+  const sample = (arr, n) => shuffle(arr).slice(0, Math.min(n, arr.length));
+  const randomVariant = (mapping, key) => {
+    const list = mapping[key];
+    if (!list || !list.length) return null;
+    return list[Math.floor(Math.random() * list.length)];
+  };
   const asObject = (x) => {
     if (!x) return {};
     if (typeof x === 'string') { try { return JSON.parse(x); } catch { return {}; } }
     return (typeof x === 'object') ? x : {};
   };
-
   const makeImageCard = (word) => {
-    const src = randomVariant(IMAGE_VARIANTS, word);
+    const mapping = Object.fromEntries(PICTURES.map(p => [p.word, p.variants]));
+    const src = randomVariant(mapping, word);
     if (!src) {
-      return `<div style="width:180px;height:140px;border-radius:10px;border:1px dashed #90caf9;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-weight:600;color:#1565c0;">${word}</div>`;
+      return `<div style="width:200px;height:140px;border-radius:10px;border:1px dashed #90caf9;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-size:15px;color:#1565c0;">
+        ${word}
+      </div>`;
     }
-    return `<div style="width:180px;text-align:center;">
+    return `<div style="width:200px;text-align:center;">
       <img src="${src}" alt="${word}"
          onerror="this.onerror=null;this.src='data:image/svg+xml,${PLACEHOLDER_IMG}';"
-         style="width:180px;height:130px;object-fit:cover;border-radius:10px;border:1px solid #ccc;" />
-      <div style="margin-top:6px;color:#1565c0;font-size:13px;">${word}</div>
+         style="width:200px;height:140px;object-fit:cover;border-radius:10px;border:1px solid #ccc;">
     </div>`;
   };
-
   const getAudio = (key) =>
     randomVariant(AUDIO_VARIANTS, key) || PLACEHOLDER_AUDIO;
 
@@ -138,7 +134,9 @@
     return denom ? (concordant - discordant) / denom : 0;
   }
 
-  /* ========= ENTRY ========= */
+  const getPicture = (word) => PICTURES.find(p => p.word === word);
+
+  /* ========== ENTRY POINT ========== */
   window.__START_POSTTEST = (pid, delayed) => {
     currentPID = pid || 'unknown';
     testCondition = delayed ? 'delayed' : 'immediate';
@@ -152,18 +150,17 @@
       display_element: 'jspsych-target',
       show_progress_bar: true,
       message_progress_bar: 'Progress / 進捗',
-      on_finish: () => { saveData(); }
+      on_finish: () => saveData()
     });
 
-    const timeline = buildTimeline(delayed);
-    jsPsych.run(timeline);
+    jsPsych.run(buildTimeline(delayed));
   };
 
   window.addEventListener('beforeunload', () => {
     try { jsPsych?.terminate?.(); } catch {}
   });
 
-  /* ========= TIMELINE BUILDER ========= */
+  /* ========== TIMELINE ========== */
   function buildTimeline(delayed) {
     const tl = [];
 
@@ -196,46 +193,49 @@
   }
 
   function build4AFC(delayed) {
-    const pool = delayed ? picture_words.slice(0, 6) : picture_words;
-    const trials = pool.map(target => {
-      const foils = sample(pool.filter(w => w !== target), 3);
-      const choices = shuffle([target, ...foils]);
-      const correctIndex = choices.indexOf(target);
+    const pool = delayed ? PICTURES.slice(0, 6) : PICTURES;
+    const trials = pool.map(targetPic => {
+      const sameCategory = pool.filter(p => p.category === targetPic.category);
+      const foils = sample(sameCategory.filter(p => p.word !== targetPic.word), 3);
+      const choices = shuffle([targetPic, ...foils]);
+      const labels = choices.map(c => c.word);
+      const correctIndex = labels.indexOf(targetPic.word);
+
       return {
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `<div style="text-align:center;">
-          <h3>Which picture is <em>${target}</em>?</h3>
+          <h3>Which picture is <em>${targetPic.word}</em>?</h3>
           <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:18px;">
-            ${choices.map(makeImageCard).join('')}
+            ${choices.map(c => makeImageCard(c.word)).join('')}
           </div>
         </div>`,
-        choices: choices.map((_, i) => `Choice ${i + 1}`),
-        data: { task: '4afc', word: target, choices, correct: correctIndex, pid: currentPID, condition: testCondition },
+        choices: labels.map((_, i) => `Choice ${i + 1}`),
+        data: { task: '4afc', word: targetPic.word, choices: labels, correct: correctIndex, pid: currentPID, condition: testCondition },
         on_finish: data => { data.correct = (data.response === data.correct); }
       };
     });
 
     return [{
       type: T('jsPsychHtmlButtonResponse'),
-      stimulus: '<h2>Vocabulary Check</h2><p>Select the card that matches the word.</p>',
+      stimulus: '<h2>Vocabulary Check</h2><p>Select the picture that matches the word.</p>',
       choices: ['Start']
     }, ...trials];
   }
 
   function buildSpeededMatch() {
     const combos = [];
-    const base = shuffle(picture_words);
-    base.forEach(word => {
-      combos.push({ word, match: true, card: makeImageCard(word) });
-      const foil = base.find(w => w !== word);
-      if (foil) combos.push({ word, match: false, card: makeImageCard(foil) });
+    const shuffled = shuffle(PICTURES);
+    shuffled.forEach(pic => {
+      combos.push({ word: pic.word, match: true, card: makeImageCard(pic.word) });
+      const foil = shuffled.find(p => p !== pic && p.category === pic.category);
+      if (foil) combos.push({ word: pic.word, match: false, card: makeImageCard(foil.word) });
     });
 
     return [{
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: '<h2>Word → Picture (Speeded)</h2><p>Press <strong>F</strong> if the picture matches the word, <strong>J</strong> if it does not.</p>',
       choices: ['Begin']
-    }, ...shuffle(combos).slice(0, base.length * 2).map(stim => ({
+    }, ...shuffle(combos).slice(0, shuffled.length * 2).map(stim => ({
       type: T('jsPsychHtmlKeyboardResponse'),
       stimulus: `<div style="text-align:center;">
         <h3>${stim.word.toUpperCase()}</h3>
@@ -272,7 +272,7 @@
 
     return [{
       type: T('jsPsychHtmlButtonResponse'),
-      stimulus: '<h2>Sequencing</h2><p>Click each step in the correct order.</p>',
+      stimulus: '<h2>Sequencing</h2><p>Click the steps in the correct order.</p>',
       choices: ['Start']
     }, {
       type: T('jsPsychHtmlButtonResponse'),
@@ -351,7 +351,7 @@
   }
 
   function buildNaming(delayed) {
-    const pool = delayed ? picture_words.slice(0, 6) : picture_words;
+    const pool = delayed ? PICTURES.slice(0, 6) : PICTURES;
     return [
       {
         type: T('jsPsychInitializeMicrophone'),
@@ -360,25 +360,25 @@
       },
       {
         type: T('jsPsychHtmlButtonResponse'),
-        stimulus: '<h2>Picture Naming</h2><p>Describe the object, action, sounds, and smells in English and Japanese. / 英語で物・動作・音・匂いを説明してください。</p>',
+        stimulus: '<h2>Picture Naming</h2><p>Describe the object, action, sounds, smells in English.<br>英語で物・動作・音・匂いを説明してください。</p>',
         choices: ['Begin']
       },
       {
-        timeline: pool.map((word, i) => ({
+        timeline: pool.map((pic, i) => ({
           type: T('jsPsychHtmlButtonResponse'),
           stimulus: `<div style="text-align:center;">
-            ${makeImageCard(word)}
+            ${makeImageCard(pic.word)}
             <p style="margin-top:12px;">Click to start recording (4 seconds).</p>
           </div>`,
           choices: ['Start recording'],
-          data: { task: 'naming_prepare', target: word, trial_index: i + 1, pid: currentPID, condition: testCondition }
+          data: { task: 'naming_prepare', target: pic.word, category: pic.category, trial_index: i + 1, pid: currentPID, condition: testCondition }
         }))
       },
       {
-        timeline: pool.map((word, i) => ({
+        timeline: pool.map((pic, i) => ({
           type: T('jsPsychHtmlAudioResponse'),
           stimulus: `<div style="text-align:center;">
-            ${makeImageCard(word)}
+            ${makeImageCard(pic.word)}
             <p style="margin-top:12px;color:#d32f2f;font-weight:bold;">
               Recording… describe the object, action, sounds, smells in English.<br/>
               録音中：物・動作・音・匂いを英語で説明してください。
@@ -386,7 +386,7 @@
           </div>`,
           recording_duration: 4000,
           show_done_button: false,
-          data: { task: 'naming_audio', target: word, trial_index: i + 1, pid: currentPID, condition: testCondition },
+          data: { task: 'naming_audio', target: pic.word, category: pic.category, trial_index: i + 1, pid: currentPID, condition: testCondition },
           on_finish: data => { data.needs_audio_scoring = true; data.rubric_score = null; }
         }))
       }
@@ -453,11 +453,18 @@
     };
   }
 
-  /* ========= Save & completion ========= */
+  /* ========== SAVE & COMPLETION (WITH DOWNLOAD) ========== */
   function saveData() {
     const allData = jsPsych.data.get().values();
     console.log('[posttest] Trials collected:', allData.length);
-    console.log('[posttest] Sample:', allData.slice(0, 5));
+
+    try {
+      const filename = `posttest_${currentPID}_${testCondition}.json`;
+      jsPsych.data.get().localSave('json', filename);
+      console.log('[posttest] Data saved as', filename);
+    } catch (err) {
+      console.error('[posttest] localSave failed:', err);
+    }
 
     const target = document.getElementById('jspsych-target');
     if (target) {
@@ -466,7 +473,8 @@
           <h2>✓ Post-test complete</h2>
           <p><strong>Participant:</strong> ${currentPID}</p>
           <p><strong>Condition:</strong> ${testCondition}</p>
-          <p style="margin-top:20px;">Thank you for participating! ご参加ありがとうございました。</p>
+          <p style="margin-top:20px;">A JSON file with your responses has been downloaded automatically.</p>
+          <p>Thank you for participating! ご参加ありがとうございました。</p>
           <button class="jspsych-btn" onclick="location.reload()" style="margin-top:25px;">Run again</button>
         </div>
       `;
