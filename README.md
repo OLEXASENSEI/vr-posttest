@@ -1,68 +1,67 @@
-# vr-posttest
-posttest for iconicity in VR experiment
+#VR Post-Test Overview
 
-A. Primary learning outcomes (immediate post; ~12–15 min)
+Structure
+Single-page web app (vr-posttest/) built on jsPsych 7.
+No SurveyJS dependency; only built-in jsPsych plugins (HTML response, survey-text/likert, microphone, etc.).
+Assets (img/, sounds/) preload at start to avoid mid-task hiccups.
+Automatic JSON download (posttest_<PID>_<condition>.json) when participants finish.
+Immediate Post-Test (~12–15 minutes)
+4AFC Receptive Vocabulary
 
-Receptive form-meaning (4AFC)
+12–16 trials (all trained words + foils).
+Alternate images per word chosen at runtime (different angles/tokens).
+Records accuracy + RT (ready for trimming in analysis).
+Speeded Word→Picture Match
 
-New image set for each target word (alternate tokens/angles to avoid picture practice).
+Trained words only.
+records accuracy and RT
+Procedural Recall (Open Text)
 
-Record accuracy + RT (trim outliers).
+Five slots (“Step 1 … Step 5”), bilingual instructions.
+Sequencing (Order-of-Operations)
 
-Items: all trained words + a few foils.
+Click-to-order interface (dragless).
+Automatically computes Kendall’s τ and % steps in correct position.
+(skipped in delayed session)
+Foley→Meaning Mapping
 
-Productive naming (mic-gated)
+8–12 trials (texture/action/process, depending on block).
+Uses preloaded audio tokens; currently calling default tokens but ready for A/B variants.
+Mic-Gated Picture Naming
 
-New images or line drawings of the same items; keep the same mic-gating you use now.
+Microphone check → manual “Start recording” → 4-second auto capture; 800 ms gap between items.
+Bilingual prompt.
 
-Score with simple rubric (0=incorrect/other L1, 1=recognizable but mispronounced, 2=correct & comprehensible). Optionally add ASR for speed/latency.
+One audio file per item (ideal for intelligibility scoring).
+Flags needs_audio_scoring = true in data for downstream rubric scoring (0/1/2 scale, manual or ASR-assisted).
+Transfer Recognition + Confidence
 
-Contexted comprehension (iconicity-aligned)
+Trained vs. foil words, simple yes/no with follow-up confidence slider.
+Language Training Feedback (Likert)
 
-Foley→meaning with novel audio tokens (new sizzle/pour recordings): pick the correct action/object.
+Bilingual prompts with clarified anchors (1 = Not at all / 5 = Very much).
+Final Comments
 
-Word→picture speeded match (trained words only), RT+accuracy.
+Bilingual request for detailed experience/concerns/suggestions.
+Delayed Retention Session (D+7, ~8–10 minutes)
 
-Procedural transfer
+Participant clicks “Start Delayed.”
+Same timeline but shortened counts:
+4AFC: ~6–8 items.
+Foley: ~6 trials.
+Naming: ~6 images.
 
-Order-of-operations drag-and-drop (e.g., crack→mix→pour→flip→serve). Score with Kendall’s τ or simple % in correct order.
+Sequencing and transfer recognition are skipped.
+Data export uses posttest_<PID>_delayed.json.
 
-B. Near-/far-transfer (optional, +5–8 min)
+Data & Scoring Hints
+Every trial logs: PID, condition (immediate/delayed), RT (when applicable), and stimulus metadata.
+Naming trials each store one clip; rubric column left blank for later scoring (0/1/2).
+Sequencing block logs Kendall’s τ automatically.}
 
-Visual iconicity generalization: repeat shape–word pairing with new nonce pairs (e.g., maluma/takete variants) and one or two new utensil silhouettes to see if the iconicity benefit extends beyond trained items.
+For RT analysis: filter invalid trials, trim (e.g., 2.5 SD) and compute medians within condition.
+Compare immediate vs. delayed with mixed models / ANCOVA as outlined in the study plan, using pre-test covariates.
+Counterbalancing Hooks (Optional)
 
-Selective phoneme discrimination: only if your VR condition targeted those contrasts; otherwise keep phoneme discrimination as a pre-only covariate.
-
-C. Delayed retention (D+7 days; ~8–10 min)
-
-Shortened battery: 4AFC receptive + mic-gated naming + one foley→meaning block (novel tokens again). This captures durability without over-testing.
-
-D. Scoring & analysis plan
-
-Primary metrics: % correct and median RT (trimmed) on 4AFC/word–picture; rubric scores for naming; % correct on foley and sequence.
-
-Stats: Trial-level mixed-effects (condition × time) for accuracy/RT; ANCOVA on post with pre as covariate for any repeated constructs; report Hedges’ g for gains.
-
-Forms & counterbalancing: Prepare A/B image sets (and A/B foley tokens) and counterbalance across participants to neutralize item effects.
-
-Do not repeat MSSQ, digit/spatial span at post; they’re covariates, not outcomes.
-
-E. Concrete item blueprint (suggested counts)
-
-4AFC receptive: 12–16 items (all trained words + 4 foils), alt images.
-
-Mic-gated naming: 8–12 items (trained set).
-
-Foley mapping (novel tokens): 8–12 trials, balanced by mapping_type (size-pitch/texture/action/process).
-
-Sequence ordering: 1–2 trials of 5 steps.
-
-Delayed: half-length versions (e.g., 6–8 4AFC, 6–8 naming, 6–8 foley).
-
-F. Implementation notes (jsPsych-friendly)
-
-Reuse your current structure: preload alt images/audio, reuse mic-gate, keep early-stop logic out of outcomes (only for spans).
-
-Log set_version (A vs B), token_version (foley alt), and RTs; save JSON per trial like you already do.
-
-If you want, I can draft a posttest.js timeline that plugs into your current stack (parallel assets, A/B lists, scoring helpers, and a 1-week follow-up route).
+Current build samples a random variant per image/audio each run.
+Ready for A/B scheduling by seeding choiceMap and AUDIO_VARIANTS with version-specific lists and tagging set_version / token_version per participant (commented scaffolding already in code if you want to re-enable it).
