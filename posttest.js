@@ -1,14 +1,30 @@
 /**
- * posttest.js — jsPsych-only, category-matched foils, bilingual naming prompt,
- * automatic JSON download on completion, and refined formatting.
+ * posttest.js — jsPsych-only, aligned with VR post-test requirements.
+ * - 4AFC: image cards above buttons, category-matched foils (with fallback).
+ * - Media preload with fallbacks.
+ * - Picture naming: mic check -> auto-record 4 s per picture.
+ * - Feedback wording updated; final comments prompt refined.
+ * - Automatic JSON download on completion.
  */
 (function () {
   let jsPsych = null;
   let currentPID = 'unknown';
   let testCondition = 'immediate';
 
-  const have = (name) => typeof window[name] !== 'undefined';
   const T = (name) => window[name];
+
+  /* ---------- Styling (inject once) ---------- */
+  const styleBlock = document.createElement('style');
+  styleBlock.textContent = `
+    .choice-grid { display:flex; flex-wrap:wrap; gap:18px; justify-content:center; }
+    .choice-card { width: 220px; border:1px solid #ccc; border-radius:12px; padding:0; overflow:hidden; background:white; display:flex; flex-direction:column; align-items:center; gap:0; box-shadow:0 3px 12px rgba(0,0,0,0.08); transition:transform .15s ease; }
+    .choice-card:hover { transform:translateY(-4px); }
+    .choice-card img { width:100%; height:150px; object-fit:cover; display:block; }
+    .choice-card span { display:block; width:100%; padding:10px 0; font-size:15px; font-weight:600; color:#1a237e; text-transform:capitalize; }
+    .choice-card button { all:unset; width:100%; height:100%; cursor:pointer; }
+    .choice-card-inner { width:100%; display:flex; flex-direction:column; align-items:center; }
+  `;
+  document.head.appendChild(styleBlock);
 
   /* ---------- Stimuli ---------- */
   const PICTURES = [
@@ -38,12 +54,13 @@
     spread: ['sounds/spread_1.mp3', 'sounds/spread_2.mp3'],
   };
 
-  const PLACEHOLDER_IMG = encodeURIComponent(`
+  const PLACEHOLDER_IMG = `data:image/svg+xml,${encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" width="320" height="240">
       <rect width="320" height="240" fill="#e3f2fd"/>
       <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
-        font-family="sans-serif" font-size="26" fill="#1565c0">No image</text>
-    </svg>`);
+        font-family="sans-serif" font-size="26" fill="#1565c0">Image missing</text>
+    </svg>`)}`;
+
   const PLACEHOLDER_AUDIO =
     'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
 
@@ -78,7 +95,7 @@
     'Crack eggs', 'Mix flour and eggs', 'Heat the pan', 'Pour batter on pan', 'Flip when ready'
   ];
 
-  /* ---------- Utilities ---------- */
+  /* ---------- helpers ---------- */
   const shuffle = (arr) => {
     const copy = arr.slice();
     for (let i = copy.length - 1; i > 0; i--) {
@@ -99,21 +116,19 @@
     if (typeof x === 'string') { try { return JSON.parse(x); } catch { return {}; } }
     return (typeof x === 'object') ? x : {};
   };
-  const makeImageCard = (word) => {
-    const src = randomVariant(choiceMap, word);
-    if (!src) {
-      return `<div style="width:220px;height:150px;border-radius:10px;border:1px dashed #90caf9;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-size:15px;color:#1565c0;">
-        ${word}
-      </div>`;
-    }
-    return `<div style="width:220px;text-align:center;">
-      <img src="${src}" alt="${word}"
-         onerror="this.onerror=null;this.src='data:image/svg+xml,${PLACEHOLDER_IMG}';"
-         style="width:220px;height:150px;object-fit:cover;border-radius:10px;border:1px solid #ccc;">
-    </div>`;
-  };
-  const getAudio = (key) =>
-    randomVariant(AUDIO_VARIANTS, key) || PLACEHOLDER_AUDIO;
+  const pickImageSrc = (word) => randomVariant(choiceMap, word) || PLACEHOLDER_IMG;
+  const pickAudioSrc = (key) => randomVariant(AUDIO_VARIANTS, key) || PLACEHOLDER_AUDIO;
+
+  function choiceButton(word, src) {
+    const displaySrc = src || PLACEHOLDER_IMG;
+    return `<button class="choice-card">
+      <span class="choice-card-inner">
+        <img src="${displaySrc}" alt="${word}"
+            onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+        <span>${word}</span>
+      </span>
+    </button>`;
+  }
 
   function kendallTau(target, response) {
     let concordant = 0;
@@ -139,13 +154,13 @@
     console.log('[posttest] Starting condition:', testCondition, 'PID:', currentPID);
 
     document.querySelectorAll('.start').forEach(btn => btn.disabled = true);
-
     jsPsych?.terminate?.();
+
     jsPsych = T('initJsPsych')({
       display_element: 'jspsych-target',
       show_progress_bar: true,
       message_progress_bar: 'Progress / 進捗',
-      on_finish: () => saveData()
+      on_finish: saveData
     });
 
     jsPsych.run(buildTimeline(delayed));
@@ -158,6 +173,17 @@
   /* ---------- Timeline ---------- */
   function buildTimeline(delayed) {
     const tl = [];
+
+    // preload all assets
+    const preloadImages = [...new Set(PICTURES.flatMap(p => p.variants))];
+    const preloadAudio = [...new Set(Object.values(AUDIO_VARIANTS).flat())];
+    tl.push({
+      type: T('jsPsychPreload'),
+      auto_preload: false,
+      images: preloadImages,
+      audio: preloadAudio,
+      message: 'Loading images and sounds…'
+    });
 
     tl.push({
       type: T('jsPsychHtmlButtonResponse'),
@@ -186,24 +212,30 @@
     return tl;
   }
 
+  /* ----- 4AFC ----- */
   function build4AFC(delayed) {
     const pool = delayed ? PICTURES.slice(0, 6) : PICTURES;
     const trials = pool.map(targetPic => {
-      const sameCategory = pool.filter(p => p.category === targetPic.category);
-      const foils = sample(sameCategory.filter(p => p.word !== targetPic.word), 3);
-      const choices = shuffle([targetPic, ...foils]);
+      const sameCategory = pool.filter(p => p.category === targetPic.category && p.word !== targetPic.word);
+      let foils = sample(sameCategory, 3);
+      if (foils.length < 3) {
+        const extras = pool.filter(p => p.word !== targetPic.word && !foils.includes(p));
+        foils = foils.concat(sample(extras, 3 - foils.length));
+      }
+      const choices = shuffle([targetPic, ...foils]).slice(0, 4);
       const labels = choices.map(c => c.word);
+      const images = choices.map(c => pickImageSrc(c.word));
+      const buttonHtml = labels.map((label, idx) => choiceButton(label, images[idx]));
       const correctIndex = labels.indexOf(targetPic.word);
 
       return {
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `<div style="text-align:center;">
           <h3 style="margin-bottom:20px;">Which picture is <em>${targetPic.word}</em>?</h3>
-          <div style="display:flex;flex-wrap:wrap;gap:18px;justify-content:center;margin-bottom:24px;">
-            ${choices.map(c => makeImageCard(c.word)).join('')}
-          </div>
+          <div class="choice-grid"></div>
         </div>`,
-        choices: labels.map((_, i) => `Choice ${i + 1}`),
+        choices: labels,
+        button_html: buttonHtml,
         data: { task: '4afc', word: targetPic.word, choices: labels, correct: correctIndex, pid: currentPID, condition: testCondition },
         on_finish: data => { data.correct = (data.response === data.correct); }
       };
@@ -216,24 +248,33 @@
     }, ...trials];
   }
 
+  /* ----- Speeded match ----- */
   function buildSpeededMatch() {
     const combos = [];
     const shuffled = shuffle(PICTURES);
     shuffled.forEach(pic => {
-      combos.push({ word: pic.word, match: true, card: makeImageCard(pic.word) });
+      const srcTrue = pickImageSrc(pic.word);
+      combos.push({ word: pic.word, match: true, src: srcTrue });
       const foil = shuffled.find(p => p !== pic && p.category === pic.category);
-      if (foil) combos.push({ word: pic.word, match: false, card: makeImageCard(foil.word) });
+      if (foil) {
+        const srcFalse = pickImageSrc(foil.word);
+        combos.push({ word: pic.word, match: false, src: srcFalse });
+      }
     });
 
     return [{
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: '<h2>Word → Picture (Speeded)</h2><p>Press <strong>F</strong> if the picture matches the word, <strong>J</strong> if it does not.</p>',
       choices: ['Begin']
-    }, ...shuffle(combos).slice(0, shuffled.length * 2).map(stim => ({
+    }, ...shuffle(combos).slice(0, Math.min(combos.length, 2 * shuffled.length)).map(stim => ({
       type: T('jsPsychHtmlKeyboardResponse'),
       stimulus: `<div style="text-align:center;">
         <h3>${stim.word.toUpperCase()}</h3>
-        <div style="display:flex;justify-content:center;margin:18px 0;">${stim.card}</div>
+        <div style="display:flex;justify-content:center;margin:18px 0;">
+          <img src="${stim.src}" alt="${stim.word}"
+            style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;"
+            onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+        </div>
         <p style="margin-top:12px;color:#666;">F = match, J = not match</p>
       </div>`,
       choices: ['f', 'j'],
@@ -243,6 +284,7 @@
     }))];
   }
 
+  /* ----- Procedural recall ----- */
   function buildProceduralRecall() {
     return [{
       type: T('jsPsychSurveyText'),
@@ -255,15 +297,13 @@
       })),
       button_label: 'Submit',
       data: { task: 'procedural_free', pid: currentPID, condition: testCondition },
-      on_finish: data => {
-        data.steps = Object.values(asObject(data.response));
-      }
+      on_finish: data => { data.steps = Object.values(asObject(data.response)); }
     }];
   }
 
+  /* ----- Sequencing ----- */
   function buildSequencing() {
     const shuffled = shuffle(sequence_steps);
-
     return [{
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: '<h2>Sequencing</h2><p>Click the steps in the correct order.</p>',
@@ -311,31 +351,35 @@
     }];
   }
 
+  /* ----- Foley recognition ----- */
   function buildFoley(delayed) {
     const pool = delayed ? foley_stimuli.slice(0, 3) : foley_stimuli;
-    const trials = pool.map((stim, idx) => ({
-      type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `<div style="text-align:center;">
-        <button class="jspsych-btn" id="play-${idx}">▶️ Play sound</button>
-        <p id="status-${idx}" style="margin-top:10px;color:#666;">Listen before answering.</p>
-      </div>`,
-      choices: stim.options,
-      data: { task: 'foley', audio_key: stim.audio, correct: stim.correct, options: stim.options, pid: currentPID, condition: testCondition },
-      on_load: () => {
-        const audio = new Audio(getAudio(stim.audio));
-        const play = document.getElementById(`play-${idx}`);
-        const status = document.getElementById(`status-${idx}`);
-        play.addEventListener('click', () => {
-          status.textContent = 'Playing…';
-          audio.currentTime = 0;
-          audio.play().then(() => {
-            setTimeout(() => status.textContent = 'Choose the best option.', 500);
-          }).catch(() => status.textContent = 'Audio failed (placeholder).');
-        });
-      },
-      on_finish: data => { data.correct = (data.response === data.correct); },
-      post_trial_gap: 300
-    }));
+    const trials = pool.map((stim, idx) => {
+      const audioSrc = pickAudioSrc(stim.audio);
+      return {
+        type: T('jsPsychHtmlButtonResponse'),
+        stimulus: `<div style="text-align:center;">
+          <button class="jspsych-btn" id="play-${idx}">▶️ Play sound</button>
+          <p id="status-${idx}" style="margin-top:10px;color:#666;">Listen before answering.</p>
+        </div>`,
+        choices: stim.options,
+        data: { task: 'foley', audio_key: stim.audio, correct: stim.correct, options: stim.options, pid: currentPID, condition: testCondition, audio_src: audioSrc },
+        on_load: () => {
+          const audio = new Audio(audioSrc);
+          const play = document.getElementById(`play-${idx}`);
+          const status = document.getElementById(`status-${idx}`);
+          play.addEventListener('click', () => {
+            status.textContent = 'Playing…';
+            audio.currentTime = 0;
+            audio.play().then(() => {
+              setTimeout(() => status.textContent = 'Choose the best option.', 500);
+            }).catch(() => status.textContent = 'Audio failed (placeholder).');
+          });
+        },
+        on_finish: data => { data.correct = (data.response === data.correct); },
+        post_trial_gap: 300
+      };
+    });
 
     return [{
       type: T('jsPsychHtmlButtonResponse'),
@@ -344,49 +388,52 @@
     }, ...trials];
   }
 
+  /* ----- Picture naming (auto recording) ----- */
   function buildNaming(delayed) {
     const pool = delayed ? PICTURES.slice(0, 6) : PICTURES;
+    const namingItems = pool.map(pic => ({
+      word: pic.word,
+      category: pic.category,
+      src: pickImageSrc(pic.word)
+    }));
+
     return [
       {
         type: T('jsPsychInitializeMicrophone'),
-        data: { task: 'mic_init' },
-        on_finish: () => { microphoneAvailable = true; }
+        data: { task: 'mic_init' }
       },
       {
         type: T('jsPsychHtmlButtonResponse'),
-        stimulus: '<h2>Picture Naming</h2><p>Describe the object, action, sounds, smells in English.<br>英語で物・動作・音・匂いを説明してください。</p>',
+        stimulus: `<div style="text-align:center;">
+          <h2>Picture Naming</h2>
+          <p style="max-width:520px;margin:12px auto;">When a picture appears, recording starts immediately and lasts 4 seconds.<br>
+          Speak in English, describing the object, action, sounds, and smells.<br>
+          英語で物・動作・音・匂いを説明してください。（録音は自動的に4秒間行われます）</p>
+        </div>`,
         choices: ['Begin']
       },
       {
-        timeline: pool.map((pic, i) => ({
-          type: T('jsPsychHtmlButtonResponse'),
-          stimulus: `<div style="max-width:520px;margin:0 auto;text-align:center;">
-            ${makeImageCard(pic.word)}
-            <p style="margin-top:12px;">Click to start recording (4 seconds).</p>
-          </div>`,
-          choices: ['Start recording'],
-          data: { task: 'naming_prepare', target: pic.word, category: pic.category, trial_index: i + 1, pid: currentPID, condition: testCondition }
-        }))
-      },
-      {
-        timeline: pool.map((pic, i) => ({
+        timeline: namingItems.map(item => ({
           type: T('jsPsychHtmlAudioResponse'),
           stimulus: `<div style="max-width:520px;margin:0 auto;text-align:center;">
-            ${makeImageCard(pic.word)}
-            <p style="margin-top:12px;color:#d32f2f;font-weight:bold;">
+            <img src="${item.src}" alt="${item.word}"
+                style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;margin-bottom:12px;"
+                onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+            <p style="margin-top:6px;color:#d32f2f;font-weight:bold;">
               Recording… describe the object, action, sounds, smells in English.<br/>
-              録音中：物・動作・音・匂いを英語で説明してください。
+              録音中：物・動作・音・匂いを英語で説明してください。（4秒）
             </p>
           </div>`,
           recording_duration: 4000,
           show_done_button: false,
-          data: { task: 'naming_audio', target: pic.word, category: pic.category, trial_index: i + 1, pid: currentPID, condition: testCondition },
+          data: { task: 'naming_audio', target: item.word, category: item.category, pid: currentPID, condition: testCondition },
           on_finish: data => { data.needs_audio_scoring = true; data.rubric_score = null; }
         }))
       }
     ];
   }
 
+  /* ----- Transfer recognition ----- */
   function buildTransfer() {
     const intro = {
       type: T('jsPsychHtmlButtonResponse'),
@@ -423,20 +470,42 @@
     return { intro, trials };
   }
 
-  function buildLikert() {
-    return {
-      type: T('jsPsychSurveyLikert'),
-      preamble: '<h3>Language Training Feedback</h3><p>Please rate your experience with the text/2D/VR training.</p>',
-      questions: [
-        { prompt: 'Did your confidence in the vocabulary increase?', labels: ['1', '2', '3', '4', '5'], required: true, name: 'confidence_vocab' },
-        { prompt: 'How confident are you with the learning procedure?', labels: ['1', '2', '3', '4', '5'], required: true, name: 'confidence_proc' },
-        { prompt: 'How helpful was the training for your language learning?', labels: ['1', '2', '3', '4', '5'], required: true, name: 'helpfulness' }
-      ],
-      button_label: 'Submit',
-      data: { task: 'likert_feedback', pid: currentPID, condition: testCondition }
-    };
-  }
+  /* ----- Likert feedback ----- */
+function buildLikert() {
+  return {
+    type: T('jsPsychSurveyLikert'),
+    preamble: `<h3>Language Training Feedback / 言語トレーニングに関するフィードバック</h3>
+      <p>Please rate your experience with the text/2D/VR training.<br>
+         テキスト／2D／VRトレーニングについて、以下の項目を評価してください。<br>
+         <small>(1 = Not at all / あてはまらない, 5 = Very much / とてもあてはまる)</small></p>`,
+    questions: [
+      {
+        prompt: 'Did your confidence in the vocabulary increase?<br>語彙に対する自信は高まりましたか？',
+        labels: ['1 = Not at all / あてはまらない', '2', '3', '4', '5 = Very much / とてもあてはまる'],
+        required: true,
+        name: 'confidence_vocab'
+      },
+      {
+        prompt: 'How confident are you with the learning procedure?<br>学習手順についてどの程度自信がありますか？',
+        labels: ['1 = Not at all / あてはまらない', '2', '3', '4', '5 = Very much / とてもあてはまる'],
+        required: true,
+        name: 'confidence_proc'
+      },
+      {
+        prompt: 'How helpful was the training for your language learning?<br>このトレーニングは語学学習にどの程度役立ちましたか？',
+        labels: ['1 = Not at all / あてはまらない', '2', '3', '4', '5 = Very much / とてもあてはまる'],
+        required: true,
+        name: 'helpfulness'
+      }
+    ],
+    button_label: 'Submit / 送信',
+    data: { task: 'likert_feedback', pid: currentPID, condition: testCondition }
+  };
+}
 
+
+
+  /* ----- Final comments ----- */
   function buildExit() {
     return {
       type: T('jsPsychSurveyText'),
@@ -447,13 +516,10 @@
     };
   }
 
-  /* ---------- Save & download ---------- */
+  /* ----- Save & download ----- */
   function saveData() {
-    const allData = jsPsych.data.get().values();
-    console.log('[posttest] Trials collected:', allData.length);
-
+    const filename = `posttest_${currentPID}_${testCondition}.json`;
     try {
-      const filename = `posttest_${currentPID}_${testCondition}.json`;
       jsPsych.data.get().localSave('json', filename);
       console.log('[posttest] Data saved as', filename);
     } catch (err) {
@@ -470,8 +536,7 @@
           <p style="margin-top:20px;">A JSON file with your responses has been downloaded automatically.</p>
           <p>Thank you for participating! ご参加ありがとうございました。</p>
           <button class="jspsych-btn" onclick="location.reload()" style="margin-top:25px;">Run again</button>
-        </div>
-      `;
+        </div>`;
     }
   }
 })();
