@@ -119,16 +119,15 @@
   const pickImageSrc = (word) => randomVariant(choiceMap, word) || PLACEHOLDER_IMG;
   const pickAudioSrc = (key) => randomVariant(AUDIO_VARIANTS, key) || PLACEHOLDER_AUDIO;
 
-  function choiceButton(word, src) {
-    const displaySrc = src || PLACEHOLDER_IMG;
-    return `<button class="choice-card">
-      <span class="choice-card-inner">
-        <img src="${displaySrc}" alt="${word}"
-            onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
-        <span>${word}</span>
-      </span>
+function choiceButton(word, src) {
+  const displaySrc = src || PLACEHOLDER_IMG;
+  return `
+    <button class="choice-card" data-choice="${word}" aria-label="${word}">
+      <img src="${displaySrc}" alt="${word}"
+           onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
     </button>`;
-  }
+}
+
 
   function kendallTau(target, response) {
     let concordant = 0;
@@ -389,49 +388,89 @@
   }
 
   /* ----- Picture naming (auto recording) ----- */
-  function buildNaming(delayed) {
-    const pool = delayed ? PICTURES.slice(0, 6) : PICTURES;
-    const namingItems = pool.map(pic => ({
-      word: pic.word,
-      category: pic.category,
-      src: pickImageSrc(pic.word)
-    }));
+function buildNaming(delayed) {
+  const pool = delayed ? PICTURES.slice(0, 6) : PICTURES;
+  const items = shuffle(pool).map(pic => ({
+    target: pic.word,
+    category: pic.category,
+    image: pickImageSrc(pic.word)
+  }));
 
-    return [
-      {
-        type: T('jsPsychInitializeMicrophone'),
-        data: { task: 'mic_init' }
-      },
-      {
-        type: T('jsPsychHtmlButtonResponse'),
-        stimulus: `<div style="text-align:center;">
-          <h2>Picture Naming</h2>
-          <p style="max-width:520px;margin:12px auto;">When a picture appears, recording starts immediately and lasts 4 seconds.<br>
-          Speak in English, describing the object, action, sounds, and smells.<br>
-          英語で物・動作・音・匂いを説明してください。（録音は自動的に4秒間行われます）</p>
-        </div>`,
-        choices: ['Begin']
-      },
-      {
-        timeline: namingItems.map(item => ({
-          type: T('jsPsychHtmlAudioResponse'),
-          stimulus: `<div style="max-width:520px;margin:0 auto;text-align:center;">
-            <img src="${item.src}" alt="${item.word}"
-                style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;margin-bottom:12px;"
-                onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
-            <p style="margin-top:6px;color:#d32f2f;font-weight:bold;">
-              Recording… describe the object, action, sounds, smells in English.<br/>
-              録音中：物・動作・音・匂いを英語で説明してください。（4秒）
-            </p>
-          </div>`,
-          recording_duration: 4000,
-          show_done_button: false,
-          data: { task: 'naming_audio', target: item.word, category: item.category, pid: currentPID, condition: testCondition },
-          on_finish: data => { data.needs_audio_scoring = true; data.rubric_score = null; }
-        }))
-      }
-    ];
-  }
+  const prepTrial = {
+    type: T('jsPsychHtmlButtonResponse'),
+    stimulus: () => {
+      const img = jsPsych.timelineVariable('image');
+      const word = jsPsych.timelineVariable('target');
+      return `<div style="max-width:520px;margin:0 auto;text-align:center;">
+        <img src="${img}" alt="${word}"
+            style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;margin-bottom:12px;"
+            onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+        <p>Click “Start recording” when you are ready (4 seconds).</p>
+      </div>`;
+    },
+    choices: ['Start recording / 録音開始'],
+    data: {
+      task: 'naming_prepare',
+      target: () => jsPsych.timelineVariable('target'),
+      category: () => jsPsych.timelineVariable('category'),
+      pid: currentPID,
+      condition: testCondition
+    }
+  };
+
+  const recordTrial = {
+    type: T('jsPsychHtmlAudioResponse'),
+    stimulus: () => {
+      const img = jsPsych.timelineVariable('image');
+      const word = jsPsych.timelineVariable('target');
+      return `<div style="max-width:520px;margin:0 auto;text-align:center;">
+        <img src="${img}" alt="${word}"
+            style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;margin-bottom:12px;"
+            onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+        <p style="margin-top:6px;color:#d32f2f;font-weight:bold;">
+          Recording… describe the object, action, sounds, smells in English.<br/>
+          録音中：物・動作・音・匂いを英語で説明してください。（4秒）
+        </p>
+      </div>`;
+    },
+    recording_duration: 4000,
+    show_done_button: false,
+    allow_playback: false,
+    post_trial_gap: 800,   // short pause before the next picture
+    data: {
+      task: 'naming_audio',
+      target: () => jsPsych.timelineVariable('target'),
+      category: () => jsPsych.timelineVariable('category'),
+      pid: currentPID,
+      condition: testCondition
+    },
+    on_finish: data => {
+      data.needs_audio_scoring = true;
+      data.rubric_score = null;
+    }
+  };
+
+  return [
+    {
+      type: T('jsPsychInitializeMicrophone'),
+      data: { task: 'mic_init' }
+    },
+    {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `<div style="text-align:center;">
+        <h2>Picture Naming</h2>
+        <p>Describe the object, action, sounds, smells in English.<br>
+           英語で物・動作・音・匂いを説明してください。</p>
+      </div>`,
+      choices: ['Begin']
+    },
+    {
+      timeline: [prepTrial, recordTrial],
+      timeline_variables: items,
+      randomize_order: true
+    }
+  ];
+}
 
   /* ----- Transfer recognition ----- */
   function buildTransfer() {
