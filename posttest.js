@@ -1,15 +1,17 @@
 /**
  * posttest.js — jsPsych-only, aligned with VR post-test requirements.
- * - 4AFC: image cards above buttons, category-matched foils (with fallback).
- * - Media preload with fallbacks.
- * - Picture naming: mic check -> auto-record 4 s per picture.
- * - Feedback wording updated; final comments prompt refined.
- * - Automatic JSON download on completion.
+ * FIXED VERSION addressing all feedback:
+ * - Audio cleanup to prevent overlapping sounds
+ * - Microphone permission error handling
+ * - Voice recording practice section
+ * - Clear recipe recall instructions
+ * - Audio loop prevention
  */
 (function () {
   let jsPsych = null;
   let currentPID = 'unknown';
   let testCondition = 'immediate';
+  let microphoneAvailable = false;
 
   const T = (name) => window[name];
 
@@ -23,6 +25,7 @@
     .choice-card span { display:block; width:100%; padding:10px 0; font-size:15px; font-weight:600; color:#1a237e; text-transform:capitalize; }
     .choice-card button { all:unset; width:100%; height:100%; cursor:pointer; }
     .choice-card-inner { width:100%; display:flex; flex-direction:column; align-items:center; }
+    .mic-error-msg { background-color:#ffebee; padding:20px; border-radius:8px; margin-top:20px; }
   `;
   document.head.appendChild(styleBlock);
 
@@ -119,15 +122,14 @@
   const pickImageSrc = (word) => randomVariant(choiceMap, word) || PLACEHOLDER_IMG;
   const pickAudioSrc = (key) => randomVariant(AUDIO_VARIANTS, key) || PLACEHOLDER_AUDIO;
 
-function choiceButton(word, src) {
-  const displaySrc = src || PLACEHOLDER_IMG;
-  return `
-    <button class="choice-card" data-choice="${word}" aria-label="${word}">
-      <img src="${displaySrc}" alt="${word}"
-           onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
-    </button>`;
-}
-
+  function choiceButton(word, src) {
+    const displaySrc = src || PLACEHOLDER_IMG;
+    return `
+      <button class="choice-card" data-choice="${word}" aria-label="${word}">
+        <img src="${displaySrc}" alt="${word}"
+             onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+      </button>`;
+  }
 
   function kendallTau(target, response) {
     let concordant = 0;
@@ -175,6 +177,7 @@ function choiceButton(word, src) {
 
     // preload all assets
     const preloadImages = [...new Set(PICTURES.flatMap(p => p.variants))];
+    preloadImages.push('img/park_scene.jpg'); // Add practice image
     const preloadAudio = [...new Set(Object.values(AUDIO_VARIANTS).flat())];
     tl.push({
       type: T('jsPsychPreload'),
@@ -191,6 +194,10 @@ function choiceButton(word, src) {
         <p><strong>Participant:</strong> ${currentPID}</p>
         <p><strong>Condition:</strong> ${testCondition}</p>
         <p>This session measures recall, retention, and pronunciation.</p>
+        <div style="background:#fff3cd;padding:15px;border-radius:8px;margin-top:20px;max-width:600px;margin:20px auto;">
+          <p><b>Important:</b> Answer based on what you learned in the training session, not from the pre-test.</p>
+          <p><b>重要:</b> プリテストではなく、トレーニングセッションで学んだ内容に基づいて回答してください。</p>
+        </div>
       </div>`,
       choices: ['Begin / 開始']
     });
@@ -283,11 +290,23 @@ function choiceButton(word, src) {
     }))];
   }
 
-  /* ----- Procedural recall ----- */
+  /* ----- Procedural recall WITH CLEAR INSTRUCTIONS ----- */
   function buildProceduralRecall() {
     return [{
       type: T('jsPsychSurveyText'),
-      preamble: '<h3>Recipe Recall</h3><p>List the steps (in your own words) from first to last.</p>',
+      preamble: `<h3>Recipe Recall / レシピの想起</h3>
+        <p><b>Important:</b> Write the pancake-making steps you learned from the training video/images you just saw.</p>
+        <p><b>重要:</b> 先ほど見たトレーニングビデオ/画像から学んだパンケーキ作りの手順を書いてください。</p>
+        
+        <div style="background:#fff3cd;padding:15px;border-radius:8px;margin:20px 0;">
+          <p>Write one step per line, in order. For example:</p>
+          <ul style="text-align:left;">
+            <li>First, crack the eggs...</li>
+            <li>Then, mix the flour...</li>
+            <li>Next, heat the pan...</li>
+          </ul>
+          <p><b>Base your answer on what you just learned in the training, NOT on the pre-test.</b></p>
+        </div>`,
       questions: sequence_steps.map((label, i) => ({
         prompt: `Step ${i + 1}:`,
         name: `step_${i + 1}`,
@@ -350,7 +369,7 @@ function choiceButton(word, src) {
     }];
   }
 
-  /* ----- Foley recognition ----- */
+  /* ----- Foley recognition WITH AUDIO CLEANUP ----- */
   function buildFoley(delayed) {
     const pool = delayed ? foley_stimuli.slice(0, 3) : foley_stimuli;
     const trials = pool.map((stim, idx) => {
@@ -363,10 +382,15 @@ function choiceButton(word, src) {
         </div>`,
         choices: stim.options,
         data: { task: 'foley', audio_key: stim.audio, correct: stim.correct, options: stim.options, pid: currentPID, condition: testCondition, audio_src: audioSrc },
-        on_load: () => {
+        on_load: function() {
           const audio = new Audio(audioSrc);
+          audio.loop = false; // Prevent looping
           const play = document.getElementById(`play-${idx}`);
           const status = document.getElementById(`status-${idx}`);
+          
+          // Store reference for cleanup
+          this._audioRef = audio;
+          
           play.addEventListener('click', () => {
             status.textContent = 'Playing…';
             audio.currentTime = 0;
@@ -375,7 +399,18 @@ function choiceButton(word, src) {
             }).catch(() => status.textContent = 'Audio failed (placeholder).');
           });
         },
-        on_finish: data => { data.correct = (data.response === data.correct); },
+        on_finish: function(data) {
+          // Clean up audio to prevent overlap
+          const audio = this._audioRef;
+          if (audio) {
+            try {
+              audio.pause();
+              audio.currentTime = 0;
+              audio.src = '';
+            } catch(e) {}
+          }
+          data.correct = (data.response === data.correct);
+        },
         post_trial_gap: 300
       };
     });
@@ -387,90 +422,214 @@ function choiceButton(word, src) {
     }, ...trials];
   }
 
-  /* ----- Picture naming (auto recording) ----- */
-function buildNaming(delayed) {
-  const pool = delayed ? PICTURES.slice(0, 6) : PICTURES;
-  const items = shuffle(pool).map(pic => ({
-    target: pic.word,
-    category: pic.category,
-    image: pickImageSrc(pic.word)
-  }));
+  /* ----- Picture naming WITH PRACTICE AND ERROR HANDLING ----- */
+  function buildNaming(delayed) {
+    const pool = delayed ? PICTURES.slice(0, 6) : PICTURES;
+    const items = shuffle(pool).map(pic => ({
+      target: pic.word,
+      category: pic.category,
+      image: pickImageSrc(pic.word)
+    }));
 
-  const prepTrial = {
-    type: T('jsPsychHtmlButtonResponse'),
-    stimulus: () => {
-      const img = jsPsych.timelineVariable('image');
-      const word = jsPsych.timelineVariable('target');
-      return `<div style="max-width:520px;margin:0 auto;text-align:center;">
-        <img src="${img}" alt="${word}"
-            style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;margin-bottom:12px;"
-            onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
-        <p>Click “Start recording” when you are ready (4 seconds).</p>
-      </div>`;
-    },
-    choices: ['Start recording / 録音開始'],
-    data: {
-      task: 'naming_prepare',
-      target: () => jsPsych.timelineVariable('target'),
-      category: () => jsPsych.timelineVariable('category'),
-      pid: currentPID,
-      condition: testCondition
-    }
-  };
-
-  const recordTrial = {
-    type: T('jsPsychHtmlAudioResponse'),
-    stimulus: () => {
-      const img = jsPsych.timelineVariable('image');
-      const word = jsPsych.timelineVariable('target');
-      return `<div style="max-width:520px;margin:0 auto;text-align:center;">
-        <img src="${img}" alt="${word}"
-            style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;margin-bottom:12px;"
-            onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
-        <p style="margin-top:6px;color:#d32f2f;font-weight:bold;">
-          Recording… describe the object, action, sounds, smells in English.<br/>
-          録音中：物・動作・音・匂いを英語で説明してください。（4秒）
-        </p>
-      </div>`;
-    },
-    recording_duration: 4000,
-    show_done_button: false,
-    allow_playback: false,
-    post_trial_gap: 800,   // short pause before the next picture
-    data: {
-      task: 'naming_audio',
-      target: () => jsPsych.timelineVariable('target'),
-      category: () => jsPsych.timelineVariable('category'),
-      pid: currentPID,
-      condition: testCondition
-    },
-    on_finish: data => {
-      data.needs_audio_scoring = true;
-      data.rubric_score = null;
-    }
-  };
-
-  return [
-    {
+    // Microphone initialization with error handling
+    const micInit = {
       type: T('jsPsychInitializeMicrophone'),
-      data: { task: 'mic_init' }
-    },
-    {
+      data: { task: 'mic_init' },
+      on_finish: (d) => {
+        if(d.mic_allowed) {
+          microphoneAvailable = true;
+        }
+      },
+      on_load: function() {
+        // Add error handling UI after timeout
+        setTimeout(() => {
+          if (!microphoneAvailable) {
+            const display = document.getElementById('jspsych-content');
+            if (display && !display.querySelector('.mic-error-msg')) {
+              const errorMsg = document.createElement('div');
+              errorMsg.className = 'mic-error-msg';
+              errorMsg.innerHTML = `
+                <p style="color:#c62828;"><b>Microphone access required</b></p>
+                <p>Please allow microphone access and reload the page if needed.</p>
+                <p>マイクアクセスが必要です。許可してページを再読み込みしてください。</p>`;
+              display.appendChild(errorMsg);
+            }
+          }
+        }, 3000);
+      }
+    };
+
+    // Practice section introduction
+    const practiceIntro = {
       type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `<div style="text-align:center;">
-        <h2>Picture Naming</h2>
-        <p>Describe the object, action, sounds, smells in English.<br>
-           英語で物・動作・音・匂いを説明してください。</p>
-      </div>`,
-      choices: ['Begin']
-    },
-    {
-      timeline: [prepTrial, recordTrial],
-      timeline_variables: items,
-      randomize_order: true
-    }
-  ];
-}
+      stimulus: `
+        <div style="max-width:600px;margin:0 auto;">
+          <h3>Practice Recording / 録音練習</h3>
+          <p>Let's practice with an example image unrelated to cooking.</p>
+          <p>料理と関係のない画像で練習しましょう。</p>
+          
+          <div style="background:#e3f2fd;padding:15px;border-radius:8px;margin-top:20px;">
+            <p><b>What to describe in 4 seconds:</b></p>
+            <ul style="text-align:left;">
+              <li>Objects you see / 見える物体</li>
+              <li>Actions happening / 起きている動作</li>
+              <li>Sounds you imagine / 想像される音</li>
+              <li>Smells you imagine / 想像される匂い</li>
+            </ul>
+          </div>
+          
+          <p style="margin-top:20px;"><b>Example:</b> "I see trees and grass. People walking. Birds chirping sounds. Fresh air smell."</p>
+        </div>`,
+      choices: ['Try Practice / 練習を試す'],
+      data: { task: 'picture_naming_practice_intro' }
+    };
+
+    // Practice prepare
+    const practicePrepare = {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `
+        <div style="max-width:520px;margin:0 auto;text-align:center;">
+          <div style="background:#f0f4f8;padding:20px;border-radius:10px;margin-bottom:20px;">
+            <p style="margin:0;font-size:18px;color:#333;">
+              <b>Practice: Describe this park scene</b><br>
+              <span style="font-size:14px;">練習：この公園の場面を説明してください</span>
+            </p>
+          </div>
+          <div style="width:350px;height:250px;background:#e0e0e0;border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto;">
+            <p>Park Scene</p>
+          </div>
+          <div style="margin-top:20px;padding:15px;background:#fff3cd;border-radius:8px;">
+            <p><b>Remember:</b> Objects, Actions, Sounds, Smells (4 seconds)</p>
+          </div>
+        </div>`,
+      choices: ['Start Practice Recording / 練習録音開始'],
+      data: { task: 'picture_naming_practice_prepare' }
+    };
+
+    // Practice recording
+    const practiceRecord = {
+      type: T('jsPsychHtmlAudioResponse'),
+      stimulus: `
+        <div style="max-width:520px;margin:0 auto;text-align:center;">
+          <div style="width:350px;height:250px;background:#e0e0e0;border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto;">
+            <p>Park Scene</p>
+          </div>
+          <div style="margin-top:16px;background:#ffebee;border-radius:8px;padding:15px;">
+            <p style="margin:0;color:#d32f2f;font-weight:bold;font-size:18px;">🔴 PRACTICE Recording... / 練習録音中...</p>
+            <p style="margin:8px 0;font-size:14px;">4 seconds to describe!</p>
+          </div>
+        </div>`,
+      recording_duration: 4000,
+      show_done_button: false,
+      allow_playback: true,
+      data: { task: 'picture_naming_practice_record' }
+    };
+
+    // Practice feedback
+    const practiceFeedback = {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `
+        <div style="max-width:600px;margin:0 auto;">
+          <h3 style="color:green">Practice Complete! / 練習完了！</h3>
+          <p>Good! Now you'll do the same with cooking-related pictures.</p>
+          <p>よくできました！次は料理関連の画像で同じことをします。</p>
+          
+          <div style="background:#e8f5e9;padding:15px;border-radius:8px;margin-top:20px;">
+            <p><b>Remember for the real task:</b></p>
+            <ul style="text-align:left;">
+              <li>You have only 4 seconds / 4秒間のみ</li>
+              <li>Describe what you see and imagine / 見えるものと想像するものを説明</li>
+              <li>Speak clearly in English / 英語ではっきりと話す</li>
+            </ul>
+          </div>
+        </div>`,
+      choices: ['Begin Real Task / 本番開始'],
+      data: { task: 'picture_naming_practice_complete' }
+    };
+
+    // Main task trials
+    const prepTrial = {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: () => {
+        const img = jsPsych.timelineVariable('image');
+        const word = jsPsych.timelineVariable('target');
+        return `<div style="max-width:520px;margin:0 auto;text-align:center;">
+          <img src="${img}" alt="${word}"
+              style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;margin-bottom:12px;"
+              onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+          <div style="background:#fff3cd;padding:15px;border-radius:8px;margin-top:15px;">
+            <p><b>Remember to describe:</b> Objects, Actions, Sounds, Smells</p>
+          </div>
+          <p>Click "Start recording" when you are ready (4 seconds).</p>
+        </div>`;
+      },
+      choices: ['Start recording / 録音開始'],
+      data: {
+        task: 'naming_prepare',
+        target: () => jsPsych.timelineVariable('target'),
+        category: () => jsPsych.timelineVariable('category'),
+        pid: currentPID,
+        condition: testCondition
+      }
+    };
+
+    const recordTrial = {
+      type: T('jsPsychHtmlAudioResponse'),
+      stimulus: () => {
+        const img = jsPsych.timelineVariable('image');
+        const word = jsPsych.timelineVariable('target');
+        return `<div style="max-width:520px;margin:0 auto;text-align:center;">
+          <img src="${img}" alt="${word}"
+              style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;margin-bottom:12px;"
+              onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+          <p style="margin-top:6px;color:#d32f2f;font-weight:bold;">
+            🔴 Recording… describe the object, action, sounds, smells in English.<br/>
+            録音中：物・動作・音・匂いを英語で説明してください。（4秒）
+          </p>
+        </div>`;
+      },
+      recording_duration: 4000,
+      show_done_button: false,
+      allow_playback: false,
+      post_trial_gap: 800,
+      data: {
+        task: 'naming_audio',
+        target: () => jsPsych.timelineVariable('target'),
+        category: () => jsPsych.timelineVariable('category'),
+        pid: currentPID,
+        condition: testCondition
+      },
+      on_finish: data => {
+        data.needs_audio_scoring = true;
+        data.rubric_score = null;
+      }
+    };
+
+    return [
+      micInit,
+      {
+        type: T('jsPsychHtmlButtonResponse'),
+        stimulus: `<div style="text-align:center;">
+          <h2>Picture Naming</h2>
+          <p>Describe the object, action, sounds, smells in English.<br>
+             英語で物・動作・音・匂いを説明してください。</p>
+          <p style="color:#666;">First, let's practice with an example.</p>
+        </div>`,
+        choices: ['Continue / 続行']
+      },
+      // Practice sequence
+      practiceIntro,
+      practicePrepare,
+      practiceRecord,
+      practiceFeedback,
+      // Main trials
+      {
+        timeline: [prepTrial, recordTrial],
+        timeline_variables: items,
+        randomize_order: true
+      }
+    ];
+  }
 
   /* ----- Transfer recognition ----- */
   function buildTransfer() {
@@ -510,39 +669,37 @@ function buildNaming(delayed) {
   }
 
   /* ----- Likert feedback ----- */
-function buildLikert() {
-  return {
-    type: T('jsPsychSurveyLikert'),
-    preamble: `<h3>Language Training Feedback / 言語トレーニングに関するフィードバック</h3>
-      <p>Please rate your experience with the text/2D/VR training.<br>
-         テキスト／2D／VRトレーニングについて、以下の項目を評価してください。<br>
-         <small>(1 = Not at all / あてはまらない, 5 = Very much / とてもあてはまる)</small></p>`,
-    questions: [
-      {
-        prompt: 'Did your confidence in the vocabulary increase?<br>語彙に対する自信は高まりましたか？',
-        labels: ['1 = Not at all / あてはまらない', '2', '3', '4', '5 = Very much / とてもあてはまる'],
-        required: true,
-        name: 'confidence_vocab'
-      },
-      {
-        prompt: 'How confident are you with the learning procedure?<br>学習手順についてどの程度自信がありますか？',
-        labels: ['1 = Not at all / あてはまらない', '2', '3', '4', '5 = Very much / とてもあてはまる'],
-        required: true,
-        name: 'confidence_proc'
-      },
-      {
-        prompt: 'How helpful was the training for your language learning?<br>このトレーニングは語学学習にどの程度役立ちましたか？',
-        labels: ['1 = Not at all / あてはまらない', '2', '3', '4', '5 = Very much / とてもあてはまる'],
-        required: true,
-        name: 'helpfulness'
-      }
-    ],
-    button_label: 'Submit / 送信',
-    data: { task: 'likert_feedback', pid: currentPID, condition: testCondition }
-  };
-}
-
-
+  function buildLikert() {
+    return {
+      type: T('jsPsychSurveyLikert'),
+      preamble: `<h3>Language Training Feedback / 言語トレーニングに関するフィードバック</h3>
+        <p>Please rate your experience with the text/2D/VR training.<br>
+           テキスト／2D／VRトレーニングについて、以下の項目を評価してください。<br>
+           <small>(1 = Not at all / あてはまらない, 5 = Very much / とてもあてはまる)</small></p>`,
+      questions: [
+        {
+          prompt: 'Did your confidence in the vocabulary increase?<br>語彙に対する自信は高まりましたか？',
+          labels: ['1 = Not at all / あてはまらない', '2', '3', '4', '5 = Very much / とてもあてはまる'],
+          required: true,
+          name: 'confidence_vocab'
+        },
+        {
+          prompt: 'How confident are you with the learning procedure?<br>学習手順についてどの程度自信がありますか？',
+          labels: ['1 = Not at all / あてはまらない', '2', '3', '4', '5 = Very much / とてもあてはまる'],
+          required: true,
+          name: 'confidence_proc'
+        },
+        {
+          prompt: 'How helpful was the training for your language learning?<br>このトレーニングは語学学習にどの程度役立ちましたか？',
+          labels: ['1 = Not at all / あてはまらない', '2', '3', '4', '5 = Very much / とてもあてはまる'],
+          required: true,
+          name: 'helpfulness'
+        }
+      ],
+      button_label: 'Submit / 送信',
+      data: { task: 'likert_feedback', pid: currentPID, condition: testCondition }
+    };
+  }
 
   /* ----- Final comments ----- */
   function buildExit() {
