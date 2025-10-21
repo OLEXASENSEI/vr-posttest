@@ -6,6 +6,10 @@
  * - Voice recording practice section
  * - Clear recipe recall instructions
  * - Audio loop prevention
+ * - Speeded match uses A/L + fixation (parallel to LDT)
+ * - Blind Retell (no visuals, 45s) and Teach Someone (no visuals, 60s) added
+ * - 4AFC & Foley correctness fields fixed (no overwrite)
+ * - Phase tagging (phase:'post') for harmonized analysis
  */
 (function () {
   let jsPsych = null;
@@ -148,6 +152,22 @@
     return denom ? (concordant - discordant) / denom : 0;
   }
 
+  /* ----- Mic fallback utility ----- */
+  function micOrTextBlock(jspsychAudioTrial, textFallbackPrompt, dataTag) {
+    if (!microphoneAvailable) {
+      return {
+        type: T('jsPsychSurveyText'),
+        preamble: `<h3>Speaking (Text Fallback)</h3><p>${textFallbackPrompt}</p>
+          <div class="mic-error-msg"><b>Note:</b> Mic unavailable, type your answer.</div>`,
+        questions: [{prompt: 'Type here / ここに入力', name: 'typed_answer', rows: 6, required: true}],
+        data: Object.assign({}, dataTag, { modality: 'text' })
+      };
+    }
+    const trial = Object.assign({}, jspsychAudioTrial);
+    trial.data = Object.assign({}, (jspsychAudioTrial.data||{}), dataTag, { modality: 'audio' });
+    return trial;
+  }
+
   /* ---------- Entry ---------- */
   window.__START_POSTTEST = (pid, delayed) => {
     currentPID = pid || 'unknown';
@@ -163,6 +183,9 @@
       message_progress_bar: 'Progress / 進捗',
       on_finish: saveData
     });
+
+    // Tag dataset for downstream analysis
+    try { jsPsych.data.addProperties({ phase: 'post', pid: currentPID, condition: testCondition }); } catch {}
 
     jsPsych.run(buildTimeline(delayed));
   };
@@ -213,6 +236,11 @@
       tl.push(transfer.intro);
       tl.push(...transfer.trials);
     }
+
+    // New no-visual speaking tasks
+    tl.push(...buildBlindRetell());
+    tl.push(...buildTeachSomeone());
+
     tl.push(buildLikert());
     tl.push(buildExit());
     return tl;
@@ -243,7 +271,11 @@
         choices: labels,
         button_html: buttonHtml,
         data: { task: '4afc', word: targetPic.word, choices: labels, correct: correctIndex, pid: currentPID, condition: testCondition },
-        on_finish: data => { data.correct = (data.response === data.correct); }
+        on_finish: data => {
+          const idx = data.correct; // index stored earlier
+          data.correct_index = idx;
+          data.is_correct = (data.response === idx);
+        }
       };
     });
 
@@ -254,8 +286,15 @@
     }, ...trials];
   }
 
-  /* ----- Speeded match ----- */
+  /* ----- Speeded match (A/L + fixation) ----- */
   function buildSpeededMatch() {
+    const fixation = {
+      type: T('jsPsychHtmlKeyboardResponse'),
+      stimulus: '<div style="font-size:60px;">+</div>',
+      choices: 'NO_KEYS',
+      trial_duration: 500
+    };
+
     const combos = [];
     const shuffled = shuffle(PICTURES);
     shuffled.forEach(pic => {
@@ -268,26 +307,52 @@
       }
     });
 
-    return [{
+    const intro = {
       type: T('jsPsychHtmlButtonResponse'),
-      stimulus: '<h2>Word → Picture (Speeded)</h2><p>Press <strong>F</strong> if the picture matches the word, <strong>J</strong> if it does not.</p>',
+      stimulus: `
+        <h2>Word → Picture (Speeded)</h2>
+        <p><b>A</b> = matches the word, <b>L</b> = does not match</p>
+        <p>Between trials you will see <b>+</b>.</p>`,
       choices: ['Begin']
-    }, ...shuffle(combos).slice(0, Math.min(combos.length, 2 * shuffled.length)).map(stim => ({
+    };
+
+    const trial = {
       type: T('jsPsychHtmlKeyboardResponse'),
-      stimulus: `<div style="text-align:center;">
-        <h3>${stim.word.toUpperCase()}</h3>
-        <div style="display:flex;justify-content:center;margin:18px 0;">
-          <img src="${stim.src}" alt="${stim.word}"
-            style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;"
-            onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
-        </div>
-        <p style="margin-top:12px;color:#666;">F = match, J = not match</p>
-      </div>`,
-      choices: ['f', 'j'],
+      stimulus: () => {
+        const stim = jsPsych.timelineVariable('stim');
+        return `<div style="text-align:center;">
+          <h3>${stim.word.toUpperCase()}</h3>
+          <div style="display:flex;justify-content:center;margin:18px 0;">
+            <img src="${stim.src}" alt="${stim.word}"
+              style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;"
+              onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+          </div>
+          <p style="margin-top:12px;color:#666;">A = match, L = not match</p>
+        </div>`;
+      },
+      choices: ['a', 'l'],
       trial_duration: 3500,
-      data: { task: 'word_picture_speeded', word: stim.word, match: stim.match, correct_response: stim.match ? 'f' : 'j', pid: currentPID, condition: testCondition },
-      on_finish: data => { data.correct = (data.response === data.correct_response); }
-    }))];
+      data: () => {
+        const stim = jsPsych.timelineVariable('stim');
+        return {
+          task: 'word_picture_speeded',
+          word: stim.word,
+          match: stim.match,
+          correct_response: stim.match ? 'a' : 'l',
+          pid: currentPID,
+          condition: testCondition
+        };
+      },
+      on_finish: d => { d.correct = (d.response === d.correct_response); }
+    };
+
+    const tv = shuffle(combos).slice(0, Math.min(combos.length, 2 * shuffled.length))
+                 .map(stim => ({ stim }));
+
+    return [
+      intro,
+      { timeline: [fixation, trial], timeline_variables: tv, randomize_order: true }
+    ];
   }
 
   /* ----- Procedural recall WITH CLEAR INSTRUCTIONS ----- */
@@ -409,7 +474,9 @@
               audio.src = '';
             } catch(e) {}
           }
-          data.correct = (data.response === data.correct);
+          const correctIndex = data.correct;
+          data.correct_index = correctIndex;
+          data.is_correct = (data.response === correctIndex);
         },
         post_trial_gap: 300
       };
@@ -666,6 +733,83 @@
     ]));
 
     return { intro, trials };
+  }
+
+  /* ----- Blind Retell (no visuals, 45s) ----- */
+  function buildBlindRetell() {
+    const intro = {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `
+        <div style="max-width:650px;margin:0 auto;text-align:center;">
+          <h2>Blind Retell / 視覚なしで説明</h2>
+          <p>Without any pictures, <b>explain how to make a pancake</b> from memory.</p>
+          <p>画像なしで<b>パンケーキの作り方</b>を記憶から説明してください。</p>
+          <p>You will have <b>45 seconds</b>.</p>
+        </div>`,
+      choices: ['Begin / 開始'],
+      data: { task: 'blind_retell_intro' }
+    };
+
+    const audioTrial = {
+      type: T('jsPsychHtmlAudioResponse'),
+      stimulus: `
+        <div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;">
+          <p style="color:#666;">(No visual cues / 視覚ヒントなし)</p>
+        </div>
+        <p style="margin-top:10px;color:#d32f2f;font-weight:bold;">🔴 Recording… 45s</p>`,
+      recording_duration: 45000,
+      show_done_button: false,
+      allow_playback: false,
+      post_trial_gap: 800
+    };
+
+    const textPrompt = `Explain how to make a pancake step by step. Use time order words (first, then, next...).`;
+
+    return [
+      intro,
+      micOrTextBlock(audioTrial, textPrompt, { task: 'blind_retell', pid: currentPID, condition: testCondition, needs_audio_scoring: true })
+    ];
+  }
+
+  /* ----- Teach Someone (no visuals, 60s) ----- */
+  function buildTeachSomeone() {
+    const intro = {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `
+        <div style="max-width:680px;margin:0 auto;text-align:center;">
+          <h2>Teach a Friend / 友だちに教える</h2>
+          <p>Your friend has never cooked. Teach them how to make a pancake so they can succeed.</p>
+          <div style="background:#e3f2fd;padding:12px;border-radius:8px;text-align:left;">
+            <ul style="margin:0 0 0 1em;">
+              <li>Tools & ingredients</li><li>Key actions (crack, mix, pour, flip)</li>
+              <li>Safety/timing tips</li><li>Success check (bubbles, golden color)</li>
+            </ul>
+          </div>
+          <p>You will have <b>60 seconds</b>.</p>
+        </div>`,
+      choices: ['Begin / 開始'],
+      data: { task: 'teach_intro' }
+    };
+
+    const audioTrial = {
+      type: T('jsPsychHtmlAudioResponse'),
+      stimulus: `
+        <div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;">
+          <p style="color:#666;">(No visual cues / 視覚ヒントなし)</p>
+        </div>
+        <p style="margin-top:10px;color:#d32f2f;font-weight:bold;">🔴 Teaching… 60s</p>`,
+      recording_duration: 60000,
+      show_done_button: false,
+      allow_playback: false,
+      post_trial_gap: 800
+    };
+
+    const textPrompt = `Teach a beginner how to make a pancake (tools, ingredients, actions, tips, success checks).`;
+
+    return [
+      intro,
+      micOrTextBlock(audioTrial, textPrompt, { task: 'teach_someone', pid: currentPID, condition: testCondition, needs_audio_scoring: true })
+    ];
   }
 
   /* ----- Likert feedback ----- */
