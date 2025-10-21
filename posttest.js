@@ -1,15 +1,16 @@
 /**
  * posttest.js — jsPsych-only, aligned with VR post-test requirements.
- * FIXED VERSION addressing all feedback:
+ * Consolidated FIXED VERSION:
+ * - Microphone setup gate (permission + level meter) + logged fallback
  * - Audio cleanup to prevent overlapping sounds
- * - Microphone permission error handling
- * - Voice recording practice section
- * - Clear recipe recall instructions
+ * - Voice recording practice section with real image (preloaded)
+ * - Clear, LEAK-FREE recipe recall instructions (no content hints)
  * - Audio loop prevention
  * - Speeded match uses A/L + fixation (parallel to LDT)
- * - Blind Retell (no visuals, 45s) and Teach Someone (no visuals, 60s) added
+ * - Blind Retell (no visuals, 45s) and Teach Someone (no visuals, 60s)
  * - 4AFC & Foley correctness fields fixed (no overwrite)
  * - Phase tagging (phase:'post') for harmonized analysis
+ * - Verbs-only options/caps for 4AFC & Naming; skip naming if no mic
  */
 (function () {
   let jsPsych = null;
@@ -18,6 +19,29 @@
   let microphoneAvailable = false;
 
   const T = (name) => window[name];
+
+  /* ---------- CONFIG SWITCHES ---------- */
+  const SKIP_NAMING_IF_NO_MIC = true;   // if mic blocked, skip naming entirely (don’t pollute intelligibility)
+  const NAMING_VERBS_ONLY      = true;   // only action/process words for naming
+  const NAMING_MAX_ITEMS       = 6;      // cap number of naming trials
+  const FOURAFC_VERBS_ONLY     = true;   // verbs-only pool for 4AFC
+  const FOURAFC_MAX_ITEMS      = 6;      // cap number of 4AFC trials
+
+  // practice image used in naming practice (actually shows)
+  const PRACTICE_IMG = 'img/park_scene.jpg';
+  const practiceImgHTML = `
+    <img
+      src="${PRACTICE_IMG}?v=${Math.random().toString(36).slice(2)}"
+      alt="Practice scene"
+      style="width:350px;height:auto;border-radius:8px;display:block;margin:0 auto;"
+      onerror="this.onerror=null; this.replaceWith(
+        Object.assign(document.createElement('div'),{
+          style:'width:350px;height:250px;background:#e0e0e0;border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto;',
+          innerText:'Park Scene (image missing)'
+        })
+      );"
+    />
+  `;
 
   /* ---------- Styling (inject once) ---------- */
   const styleBlock = document.createElement('style');
@@ -125,6 +149,7 @@
   };
   const pickImageSrc = (word) => randomVariant(choiceMap, word) || PLACEHOLDER_IMG;
   const pickAudioSrc = (key) => randomVariant(AUDIO_VARIANTS, key) || PLACEHOLDER_AUDIO;
+  const isVerbLike = (pic) => pic?.category === 'action' || pic?.category === 'process';
 
   function choiceButton(word, src) {
     const displaySrc = src || PLACEHOLDER_IMG;
@@ -168,6 +193,116 @@
     return trial;
   }
 
+  /* ----- Microphone Setup Gate (permission + level meter) ----- */
+  function buildMicSetupGate({ required = true } = {}) {
+    let streamRef = null;
+
+    const gate = {
+      type: T('jsPsychHtmlButtonResponse'),
+      choices: ['Continue / 続行', required ? 'Use Text Only / 文字で続行' : 'Skip'],
+      button_html: [
+        '<button class="jspsych-btn" id="mic-continue" disabled>%choice%</button>',
+        '<button class="jspsych-btn" id="mic-textonly">%choice%</button>'
+      ],
+      stimulus: `
+        <div style="max-width:720px;margin:0 auto;text-align:center;line-height:1.6">
+          <h2>Microphone Setup / マイクの設定</h2>
+          <p>Click <b>Enable Microphone</b> and allow access. Speak to test the level meter.</p>
+          <p><b>マイクを有効化</b>を押して許可してください。話してテストしてください。</p>
+
+          <div style="margin:16px 0;">
+            <button class="jspsych-btn" id="mic-enable">🎙️ Enable Microphone / マイクを有効化</button>
+          </div>
+
+          <div id="mic-status" style="margin:10px 0;color:#666;">Status: not initialized</div>
+
+          <div style="margin:10px auto;width:340px;height:14px;border-radius:7px;background:#eee;overflow:hidden;">
+            <div id="mic-level" style="height:100%;width:0%;background:#4caf50;transition:width .08s linear;"></div>
+          </div>
+
+          <div style="background:#f8f9fa;border:1px solid #ddd;border-radius:8px;padding:12px;text-align:left;margin-top:12px">
+            <b>Troubleshooting</b>
+            <ul style="margin:8px 0 0 18px">
+              <li>Use <b>HTTPS</b> page (required for mic)</li>
+              <li>If embedded in an <code>&lt;iframe&gt;</code>, add <code>allow="microphone *; camera *; autoplay *"</code></li>
+              <li>On iOS/Safari: tap the page first (user gesture), then enable</li>
+              <li>If blocked, check site permissions in the address bar</li>
+            </ul>
+          </div>
+        </div>
+      `,
+      data: { task: 'mic_gate' },
+      on_load: () => {
+        const enableBtn  = document.getElementById('mic-enable');
+        const contBtn    = document.getElementById('mic-continue');
+        const textOnly   = document.getElementById('mic-textonly');
+        const statusEl   = document.getElementById('mic-status');
+        const levelEl    = document.getElementById('mic-level');
+
+        async function startStream() {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: { echoCancellation: true, noiseSuppression: true }
+            });
+            streamRef = stream;
+
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = ctx.createMediaStreamSource(stream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 2048;
+            source.connect(analyser);
+
+            const data = new Uint8Array(analyser.fftSize);
+            function tick() {
+              analyser.getByteTimeDomainData(data);
+              let sum = 0;
+              for (let i = 0; i < data.length; i++) {
+                const v = (data[i] - 128) / 128;
+                sum += v * v;
+              }
+              const rms = Math.sqrt(sum / data.length);
+              const pct = Math.min(100, Math.max(0, Math.round(rms * 220)));
+              levelEl.style.width = pct + '%';
+              requestAnimationFrame(tick);
+            }
+            tick();
+
+            statusEl.textContent = 'Status: microphone enabled ✔';
+            contBtn.disabled = false;
+            window.__mic_ok = true;
+          } catch (err) {
+            console.error('[mic] getUserMedia error:', err);
+            statusEl.textContent = 'Status: permission denied or device unavailable ✖';
+            contBtn.disabled = true;
+            window.__mic_ok = false;
+          }
+        }
+
+        enableBtn.addEventListener('click', startStream);
+        textOnly.addEventListener('click', () => { window.__mic_ok = false; });
+
+        window.addEventListener('beforeunload', () => {
+          try { streamRef?.getTracks()?.forEach(t => t.stop()); } catch {}
+        });
+      },
+      on_finish: () => {
+        microphoneAvailable = !!window.__mic_ok;
+        try { jsPsych.data.addProperties({ mic_available: microphoneAvailable }); } catch {}
+      }
+    };
+
+    return {
+      timeline: [gate],
+      loop_function: () => {
+        if (!required) return false;
+        const last = jsPsych.data.get().last(1).values()[0] || {};
+        const pressedIndex = last.button_pressed; // "0" Continue, "1" Text-only
+        if (microphoneAvailable || pressedIndex === 1) return false;
+        return true;
+      }
+    };
+  }
+
   /* ---------- Entry ---------- */
   window.__START_POSTTEST = (pid, delayed) => {
     currentPID = pid || 'unknown';
@@ -199,8 +334,8 @@
     const tl = [];
 
     // preload all assets
-    const preloadImages = [...new Set(PICTURES.flatMap(p => p.variants))];
-    preloadImages.push('img/park_scene.jpg'); // Add practice image
+    let preloadImages = [...new Set(PICTURES.flatMap(p => p.variants))];
+    preloadImages.push(PRACTICE_IMG); // Practice image for naming
     const preloadAudio = [...new Set(Object.values(AUDIO_VARIANTS).flat())];
     tl.push({
       type: T('jsPsychPreload'),
@@ -225,6 +360,10 @@
       choices: ['Begin / 開始']
     });
 
+    // Require mic (or explicit text-only fallback) before speaking tasks
+    tl.push(buildMicSetupGate({ required: true }));
+
+    // Tasks
     tl.push(...build4AFC(delayed));
     if (!delayed) tl.push(...buildSpeededMatch());
     tl.push(...buildProceduralRecall());
@@ -237,7 +376,7 @@
       tl.push(...transfer.trials);
     }
 
-    // New no-visual speaking tasks
+    // No-visual speaking tasks
     tl.push(...buildBlindRetell());
     tl.push(...buildTeachSomeone());
 
@@ -246,9 +385,14 @@
     return tl;
   }
 
-  /* ----- 4AFC ----- */
+  /* ----- 4AFC (verbs-only + cap supported) ----- */
   function build4AFC(delayed) {
-    const pool = delayed ? PICTURES.slice(0, 6) : PICTURES;
+    let pool = delayed ? PICTURES.slice(0, 6) : PICTURES.slice();
+    if (FOURAFC_VERBS_ONLY) pool = pool.filter(isVerbLike);
+    if (FOURAFC_MAX_ITEMS && Number.isFinite(FOURAFC_MAX_ITEMS)) {
+      pool = shuffle(pool).slice(0, Math.min(FOURAFC_MAX_ITEMS, pool.length));
+    }
+
     const trials = pool.map(targetPic => {
       const sameCategory = pool.filter(p => p.category === targetPic.category && p.word !== targetPic.word);
       let foils = sample(sameCategory, 3);
@@ -346,8 +490,9 @@
       on_finish: d => { d.correct = (d.response === d.correct_response); }
     };
 
-    const tv = shuffle(combos).slice(0, Math.min(combos.length, 2 * shuffled.length))
-                 .map(stim => ({ stim }));
+    const tv = shuffle(combos)
+      .slice(0, Math.min(combos.length, 2 * shuffled.length))
+      .map(stim => ({ stim }));
 
     return [
       intro,
@@ -355,24 +500,33 @@
     ];
   }
 
-  /* ----- Procedural recall WITH CLEAR INSTRUCTIONS ----- */
+  /* ----- Procedural recall (LEAK-FREE PREAMBLE) ----- */
   function buildProceduralRecall() {
+    const formatHint = `
+      <details style="margin-top:10px;">
+        <summary style="cursor:pointer;">Need a format hint? / フォーマットのヒント</summary>
+        <div style="margin-top:8px;">
+          <p>Use time-order words and write one step per line. (No example content shown.)</p>
+          <ul style="text-align:left;margin-top:6px;">
+            <li><i>First, …</i></li>
+            <li><i>Then, …</i></li>
+            <li><i>Next, …</i></li>
+            <li><i>Finally, …</i></li>
+          </ul>
+        </div>
+      </details>`;
+
     return [{
       type: T('jsPsychSurveyText'),
       preamble: `<h3>Recipe Recall / レシピの想起</h3>
-        <p><b>Important:</b> Write the pancake-making steps you learned from the training video/images you just saw.</p>
-        <p><b>重要:</b> 先ほど見たトレーニングビデオ/画像から学んだパンケーキ作りの手順を書いてください。</p>
-        
-        <div style="background:#fff3cd;padding:15px;border-radius:8px;margin:20px 0;">
-          <p>Write one step per line, in order. For example:</p>
-          <ul style="text-align:left;">
-            <li>First, crack the eggs...</li>
-            <li>Then, mix the flour...</li>
-            <li>Next, heat the pan...</li>
-          </ul>
-          <p><b>Base your answer on what you just learned in the training, NOT on the pre-test.</b></p>
-        </div>`,
-      questions: sequence_steps.map((label, i) => ({
+        <p><b>Important:</b> Explain the pancake-making steps you learned from the training (no pictures will be shown here).</p>
+        <p><b>重要:</b> トレーニングで学んだパンケーキ作りの手順を説明してください（ここでは画像は表示されません）。</p>
+        <div style="background:#fff3cd;padding:15px;border-radius:8px;margin:16px 0;">
+          <p>Write <b>one step per line</b>, in order. Do <b>not</b> copy any example steps.</p>
+          <p><b>Note:</b> Base your answer on what you learned in the training, NOT on the pre-test.</p>
+        </div>
+        ${formatHint}`,
+      questions: sequence_steps.map((_, i) => ({
         prompt: `Step ${i + 1}:`,
         name: `step_${i + 1}`,
         rows: 2,
@@ -452,10 +606,8 @@
           audio.loop = false; // Prevent looping
           const play = document.getElementById(`play-${idx}`);
           const status = document.getElementById(`status-${idx}`);
-          
-          // Store reference for cleanup
           this._audioRef = audio;
-          
+
           play.addEventListener('click', () => {
             status.textContent = 'Playing…';
             audio.currentTime = 0;
@@ -465,14 +617,9 @@
           });
         },
         on_finish: function(data) {
-          // Clean up audio to prevent overlap
           const audio = this._audioRef;
           if (audio) {
-            try {
-              audio.pause();
-              audio.currentTime = 0;
-              audio.src = '';
-            } catch(e) {}
+            try { audio.pause(); audio.currentTime = 0; audio.src = ''; } catch(e) {}
           }
           const correctIndex = data.correct;
           data.correct_index = correctIndex;
@@ -489,26 +636,27 @@
     }, ...trials];
   }
 
-  /* ----- Picture naming WITH PRACTICE AND ERROR HANDLING ----- */
+  /* ----- Picture naming (verbs-only + cap + practice image + conditional skip) ----- */
   function buildNaming(delayed) {
-    const pool = delayed ? PICTURES.slice(0, 6) : PICTURES;
+    let pool = delayed ? PICTURES.slice(0, 6) : PICTURES.slice();
+    if (NAMING_VERBS_ONLY) pool = pool.filter(isVerbLike);
+    if (NAMING_MAX_ITEMS && Number.isFinite(NAMING_MAX_ITEMS)) {
+      pool = shuffle(pool).slice(0, Math.min(NAMING_MAX_ITEMS, pool.length));
+    }
     const items = shuffle(pool).map(pic => ({
       target: pic.word,
       category: pic.category,
       image: pickImageSrc(pic.word)
     }));
 
-    // Microphone initialization with error handling
+    // Microphone initialization with error handling (secondary safety net)
     const micInit = {
       type: T('jsPsychInitializeMicrophone'),
       data: { task: 'mic_init' },
       on_finish: (d) => {
-        if(d.mic_allowed) {
-          microphoneAvailable = true;
-        }
+        if(d.mic_allowed) microphoneAvailable = true;
       },
       on_load: function() {
-        // Add error handling UI after timeout
         setTimeout(() => {
           if (!microphoneAvailable) {
             const display = document.getElementById('jspsych-content');
@@ -551,7 +699,7 @@
       data: { task: 'picture_naming_practice_intro' }
     };
 
-    // Practice prepare
+    // Practice prepare (uses real image)
     const practicePrepare = {
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `
@@ -562,9 +710,7 @@
               <span style="font-size:14px;">練習：この公園の場面を説明してください</span>
             </p>
           </div>
-          <div style="width:350px;height:250px;background:#e0e0e0;border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto;">
-            <p>Park Scene</p>
-          </div>
+          ${practiceImgHTML}
           <div style="margin-top:20px;padding:15px;background:#fff3cd;border-radius:8px;">
             <p><b>Remember:</b> Objects, Actions, Sounds, Smells (4 seconds)</p>
           </div>
@@ -573,14 +719,12 @@
       data: { task: 'picture_naming_practice_prepare' }
     };
 
-    // Practice recording
+    // Practice recording (uses real image)
     const practiceRecord = {
       type: T('jsPsychHtmlAudioResponse'),
       stimulus: `
         <div style="max-width:520px;margin:0 auto;text-align:center;">
-          <div style="width:350px;height:250px;background:#e0e0e0;border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto;">
-            <p>Park Scene</p>
-          </div>
+          ${practiceImgHTML}
           <div style="margin-top:16px;background:#ffebee;border-radius:8px;padding:15px;">
             <p style="margin:0;color:#d32f2f;font-weight:bold;font-size:18px;">🔴 PRACTICE Recording... / 練習録音中...</p>
             <p style="margin:8px 0;font-size:14px;">4 seconds to describe!</p>
@@ -672,28 +816,41 @@
       }
     };
 
+    const namingBlock = {
+      timeline: [
+        {
+          type: T('jsPsychHtmlButtonResponse'),
+          stimulus: `<div style="text-align:center;">
+            <h2>Picture Naming</h2>
+            <p>Describe the object, action, sounds, smells in English.<br>
+               英語で物・動作・音・匂いを説明してください。</p>
+            <p style="color:#666;">First, let's practice with an example.</p>
+          </div>`,
+          choices: ['Continue / 続行']
+        },
+        practiceIntro,
+        practicePrepare,
+        practiceRecord,
+        practiceFeedback,
+        { timeline: [prepTrial, recordTrial], timeline_variables: items, randomize_order: true }
+      ]
+    };
+
     return [
       micInit,
       {
-        type: T('jsPsychHtmlButtonResponse'),
-        stimulus: `<div style="text-align:center;">
-          <h2>Picture Naming</h2>
-          <p>Describe the object, action, sounds, smells in English.<br>
-             英語で物・動作・音・匂いを説明してください。</p>
-          <p style="color:#666;">First, let's practice with an example.</p>
-        </div>`,
-        choices: ['Continue / 続行']
+        timeline: [namingBlock],
+        conditional_function: () => !(SKIP_NAMING_IF_NO_MIC && !microphoneAvailable)
       },
-      // Practice sequence
-      practiceIntro,
-      practicePrepare,
-      practiceRecord,
-      practiceFeedback,
-      // Main trials
       {
-        timeline: [prepTrial, recordTrial],
-        timeline_variables: items,
-        randomize_order: true
+        type: T('jsPsychHtmlButtonResponse'),
+        stimulus: `<div style="max-width:640px;margin:0 auto;text-align:center;">
+          <h3>Skipping Picture Naming</h3>
+          <p>Microphone access was not granted, so the picture-naming section is skipped.</p>
+          <p>マイクの許可がないため、絵の説明セクションをスキップします。</p>
+        </div>`,
+        choices: ['Continue / 続行'],
+        conditional_function: () => SKIP_NAMING_IF_NO_MIC && !microphoneAvailable
       }
     ];
   }
