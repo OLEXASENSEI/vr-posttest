@@ -859,7 +859,7 @@
   function buildTransfer() {
     const intro = {
       type: T('jsPsychHtmlButtonResponse'),
-      stimulus: '<h2>Recognition Test</h2><p>Did this word appear in the VR training?</p>',
+      stimulus: '<h2>Recognition Test</h2><p>Did this word appear in the training?</p>',
       choices: ['Begin']
     };
 
@@ -870,7 +870,7 @@
           <div style="padding:28px;background:#f8f9fa;border-radius:12px;border:1px solid #ddd;">
             <h2 style="margin:0;">${item.word}</h2>
           </div>
-          <p style="margin-top:18px;">Did you encounter this word in the VR training?</p>
+          <p style="margin-top:18px;">Did you encounter this word in the training?</p>
         </div>`,
         choices: ['YES', 'NO'],
         data: { task: 'transfer_test', word: item.word, trained: item.trained, type: item.type, pos: item.pos, iconic: item.iconic, pid: currentPID, condition: testCondition },
