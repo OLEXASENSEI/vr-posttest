@@ -120,9 +120,9 @@
     
     // FOILS - ARBITRARY (untrained)
     { word: 'fork',  pos: 'noun', iconic: false, rating: 3.90, type: 'foil_true', trained: false, group: 'foil' },
-    { word: 'knife', pos: 'noun', iconic: false, rating: null, type: 'foil_true', trained: false, group: 'foil' },
+    { word: 'knife', pos: 'noun', iconic: false, rating: 5.29, type: 'foil_true', trained: false, group: 'foil' },
     { word: 'cup',   pos: 'noun', iconic: false, rating: 3.83, type: 'foil_true', trained: false, group: 'foil' },
-    { word: 'salt',  pos: 'noun', iconic: false, rating: null, type: 'foil_true', trained: false, group: 'foil' },
+    { word: 'salt',  pos: 'noun', iconic: false, rating: 4.26, type: 'foil_true', trained: false, group: 'foil' },
   ];
 
   // GROUP B foley stimuli
