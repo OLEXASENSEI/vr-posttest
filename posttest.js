@@ -52,7 +52,9 @@
     // GROUP B — post-test targets (iconic)
     { word: 'sizzling', category: 'process', iconic: true,  rating: 5.30, variants: ['img/sizzling_01.png', 'img/sizzling_02.png'] },
     { word: 'mixing',   category: 'action',  iconic: true,  rating: 5.10, variants: ['img/mixing_01.png',   'img/mixing_02.png'] },
-    { word: 'stirring', category: 'action',  iconic: true,  rating: 4.82, variants: ['img/stirring_01.png', 'img/stirring_02.png'] },
+    // NOTE: No stirring images exist on server — using mixing as visual proxy.
+    // TODO: Upload stirring_01.png and stirring_02.png and restore original variants.
+    { word: 'stirring', category: 'action',  iconic: true,  rating: 4.82, variants: ['img/mixing_01.png',   'img/mixing_02.png'] },
     // GROUP B — post-test targets (arbitrary)
     { word: 'pouring',  category: 'action',  iconic: false, rating: 3.60, variants: ['img/pouring_01.png',  'img/pouring_02.png'] },
     { word: 'butter',   category: 'ingredient', iconic: false, rating: 3.50, variants: ['img/butter_01.png', 'img/butter_02.png'] },
@@ -67,8 +69,12 @@
 
   const AUDIO_VARIANTS = {
     sizzle: ['sounds/sizzle_1.mp3', 'sounds/sizzle_2.mp3'],
-    mix:    ['sounds/mix_1.mp3',    'sounds/mix_2.mp3'],
-    stir:   ['sounds/stir_1.mp3',   'sounds/stir_2.mp3'],
+    // NOTE: No mix_1.mp3 or mix_2.mp3 on server — mix audio unavailable
+    // TODO: Upload mix_1.mp3 and mix_2.mp3 to restore
+    // mix:    ['sounds/mix_1.mp3',    'sounds/mix_2.mp3'],
+    // NOTE: No stir_1.mp3 or stir_2.mp3 on server — stir audio unavailable
+    // TODO: Upload stir_1.mp3 and stir_2.mp3 to restore
+    // stir:   ['sounds/stir_1.mp3',   'sounds/stir_2.mp3'],
     pour:   ['sounds/pour_1.mp3',   'sounds/pour_2.mp3'],
     spread: ['sounds/spread_1.mp3', 'sounds/spread_2.mp3'],
   };
@@ -108,8 +114,10 @@
 
   const foley_stimuli = [
     { audio: 'sizzle', options: ['pancake sizzling', 'stirring dry flour'], correct: 0 },
-    { audio: 'mix',    options: ['mixing batter', 'pouring'],              correct: 0 },
-    { audio: 'stir',   options: ['stirring', 'cracking an egg'],           correct: 0 },
+    // mix and stir audio files don't exist — trials removed
+    // TODO: Restore when mix_1.mp3/mix_2.mp3 and stir_1.mp3/stir_2.mp3 are uploaded
+    // { audio: 'mix',    options: ['mixing batter', 'pouring'],              correct: 0 },
+    // { audio: 'stir',   options: ['stirring', 'cracking an egg'],           correct: 0 },
     { audio: 'pour',   options: ['pouring batter', 'flipping a pancake'],  correct: 0 },
     { audio: 'spread', options: ['spreading butter', 'pouring milk'],      correct: 0 },
   ];
@@ -126,8 +134,16 @@
   const choiceMap = Object.fromEntries(PICTURES.map(p => [p.word, p.variants]));
   const randomVariant = (m, k) => { const l = m[k]; return l?.length ? l[Math.floor(Math.random() * l.length)] : null; };
   const asObject = (x) => { if (!x) return {}; if (typeof x === 'string') { try { return JSON.parse(x); } catch { return {}; } } return typeof x === 'object' ? x : {}; };
-  const pickImageSrc = (w) => randomVariant(choiceMap, w) || PLACEHOLDER_IMG;
-  const pickAudioSrc = (k) => randomVariant(AUDIO_VARIANTS, k) || PLACEHOLDER_AUDIO;
+  const pickImageSrc = (w) => {
+    const src = randomVariant(choiceMap, w);
+    if (!src) console.warn('[posttest] No image found for:', w);
+    return src || PLACEHOLDER_IMG;
+  };
+  const pickAudioSrc = (k) => {
+    const src = randomVariant(AUDIO_VARIANTS, k);
+    if (!src) console.warn('[posttest] No audio found for:', k);
+    return src || PLACEHOLDER_AUDIO;
+  };
 
   function choiceButton(word, src) {
     return `<button class="choice-card" data-choice="${word}" aria-label="${word}">
@@ -247,6 +263,14 @@
     document.querySelectorAll('.start').forEach(b => b.disabled = true);
     jsPsych?.terminate?.();
 
+    // Ensure display element exists
+    if (!document.getElementById('jspsych-target')) {
+      const el = document.createElement('div');
+      el.id = 'jspsych-target';
+      document.body.appendChild(el);
+      console.warn('[posttest] Created missing #jspsych-target element');
+    }
+
     jsPsych = T('initJsPsych')({
       display_element: 'jspsych-target',
       show_progress_bar: true,
@@ -266,7 +290,22 @@
     const preloadImages = [...new Set(PICTURES.flatMap(p => p.variants))];
     preloadImages.push(PRACTICE_IMG);
     const preloadAudio = [...new Set(Object.values(AUDIO_VARIANTS).flat())];
-    tl.push({ type: T('jsPsychPreload'), auto_preload: false, images: preloadImages, audio: preloadAudio, message: 'Loading…' });
+    tl.push({
+      type: T('jsPsychPreload'),
+      auto_preload: false,
+      images: preloadImages,
+      audio: preloadAudio,
+      message: 'Loading assets… / アセットを読み込み中…',
+      continue_after_error: true,
+      error_message: 'Some assets could not be loaded. The test will continue with available content.',
+      max_load_time: 10000,
+      on_error: (file) => { console.warn('[posttest] Preload failed for:', file); },
+      on_finish: (data) => {
+        if (data.failed_images?.length || data.failed_audio?.length) {
+          console.warn('[posttest] Failed assets:', { images: data.failed_images, audio: data.failed_audio });
+        }
+      }
+    });
 
     // Welcome
     tl.push({
