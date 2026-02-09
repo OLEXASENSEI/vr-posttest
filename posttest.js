@@ -1,23 +1,24 @@
 /**
- * posttest.js — VR Post-Test Battery (CORRECTED v3)
- * GROUP B WORDS: sizzle, mix, stirring (iconic) + pour, butter, flour (arbitrary)
+ * posttest.js — VR Post-Test Battery (CORRECTED v4)
+ * GROUP B WORDS: sizzle, mix, stir (iconic) + pour, butter, flour (arbitrary)
  *
- * v3 FIXES:
- *  1. 4AFC: Prevent mixing/stirring from appearing as foils for each other (shared images)
- *  2. 4AFC: Added word labels below images to disambiguate visually similar items
- *  3. Recipe Recall: Added Japanese for "Write one step per line, in order"
- *  4. Sequencing: Added undo/reset so participants can correct mistakes
- *  5. Mic initialization moved before all audio tasks (not just naming)
- *  6. Foley & transfer trial order randomized
- *  7. Likert questions revised for VR iconicity research relevance
+ * v4 FIXES (from v3):
+ *  1. Stirring images: Now uses stirring_01.png/02.png (they exist on server!)
+ *  2. Mix/stir audio: Added to AUDIO_VARIANTS (mix is .wav, stir is .mp3)
+ *  3. Foley: Restored mix/stir trials → 5 total as documented
+ *  4. SHARED_IMAGE_PAIRS: Removed (no longer needed — stirring has own images)
+ *  5. Group A foley comparison: Added using crack/flip/whisk audio from server
+ *  6. 4AFC: Added milk/sugar as additional distractor images
+ *  7. Word forms: Standardized (base forms in LDT/transfer, gerund in naming/4AFC)
+ *  8. Save: Added optional POST endpoint (consistent with pretest)
  *
- * Previous v2 fixes retained:
- *  - FOURAFC_VERBS_ONLY & NAMING_VERBS_ONLY → false
- *  - Fixed audio cleanup (closure variable, not `this`)
- *  - Removed internal design notes from participant-facing screens
- *  - Fixed conditional mic-skip timeline structure
- *  - Standardized iconicity metadata across all trials
- *  - Harmonized foil ratings with pretest (knife/salt → null)
+ * Previous v3 fixes retained:
+ *  - 4AFC word labels below images
+ *  - Recipe Recall Japanese translation
+ *  - Sequencing undo/reset
+ *  - Mic initialization before all audio tasks
+ *  - Foley & transfer trial order randomized
+ *  - Revised Likert questions for VR iconicity research
  */
 (function () {
   let jsPsych = null;
@@ -26,6 +27,7 @@
   let microphoneAvailable = false;
 
   const T = (name) => window[name];
+  const q = Object.fromEntries(new URLSearchParams(location.search));
 
   /* ---------- CONFIG ---------- */
   const SKIP_NAMING_IF_NO_MIC = true;
@@ -66,30 +68,33 @@
     // GROUP B — post-test targets (iconic)
     { word: 'sizzling', category: 'process', iconic: true,  rating: 5.30, variants: ['img/sizzling_01.png', 'img/sizzling_02.png'] },
     { word: 'mixing',   category: 'action',  iconic: true,  rating: 5.10, variants: ['img/mixing_01.png',   'img/mixing_02.png'] },
-    // NOTE: No stirring images exist on server — using mixing as visual proxy.
-    // TODO: Upload stirring_01.png and stirring_02.png and restore original variants.
-    { word: 'stirring', category: 'action',  iconic: true,  rating: 4.82, variants: ['img/mixing_01.png',   'img/mixing_02.png'] },
+    // FIX v4: Stirring now uses its own images (they exist on server!)
+    { word: 'stirring', category: 'action',  iconic: true,  rating: 4.82, variants: ['img/stirring_01.png', 'img/stirring_02.png'] },
     // GROUP B — post-test targets (arbitrary)
     { word: 'pouring',  category: 'action',  iconic: false, rating: 3.60, variants: ['img/pouring_01.png',  'img/pouring_02.png'] },
     { word: 'butter',   category: 'ingredient', iconic: false, rating: 3.50, variants: ['img/butter_01.png', 'img/butter_02.png'] },
     { word: 'flour',    category: 'ingredient', iconic: false, rating: 3.00, variants: ['img/flour_01.png',  'img/flour_02.png'] },
-    // Distractor images
-    { word: 'pancake',  category: 'food',   iconic: null, rating: null, variants: ['img/pancake_01.png', 'img/pancake_02.png'] },
-    { word: 'egg',      category: 'object', iconic: null, rating: null, variants: ['img/egg_01.png',     'img/egg_02.png'] },
+    // Distractor images (expanded: added milk and sugar)
+    { word: 'pancake',  category: 'food',       iconic: null, rating: null, variants: ['img/pancake_01.png', 'img/pancake_02.png'] },
+    { word: 'egg',      category: 'object',     iconic: null, rating: null, variants: ['img/egg_01.png',     'img/egg_02.png'] },
+    { word: 'milk',     category: 'ingredient', iconic: null, rating: null, variants: ['img/milk_01.png',    'img/milk_02.png'] },
+    { word: 'sugar',    category: 'ingredient', iconic: null, rating: null, variants: ['img/sugar_01.png',   'img/sugar_02.png'] },
   ];
 
   // Group B target word list (the 6 words that must all be tested)
   const GROUP_B_TARGETS = ['sizzling', 'mixing', 'stirring', 'pouring', 'butter', 'flour'];
 
-  // Words that share images and must NOT appear as foils for each other in 4AFC
-  const SHARED_IMAGE_PAIRS = [['mixing', 'stirring']];
-
+  // FIX v4: Added mix and stir audio (mix is .wav, stir is .mp3)
   const AUDIO_VARIANTS = {
     sizzle: ['sounds/sizzle_1.mp3', 'sounds/sizzle_2.mp3'],
-    // NOTE: No mix or stir audio on server
-    // TODO: Upload mix_1.mp3, mix_2.mp3, stir_1.mp3, stir_2.mp3 to restore
+    mix:    ['sounds/mix_1.wav',    'sounds/mix_2.wav'],
+    stir:   ['sounds/stir_1.mp3',   'sounds/stir_2.mp3'],
     pour:   ['sounds/pour_1.mp3',   'sounds/pour_2.mp3'],
     spread: ['sounds/spread_1.mp3', 'sounds/spread_2.mp3'],
+    // Group A audio — for cross-group foley comparison
+    crack:  ['sounds/crack_1.mp3',  'sounds/crack_2.mp3'],
+    flip:   ['sounds/flip_1.mp3',   'sounds/flip_2.mp3'],
+    whisk:  ['sounds/whisk_1.mp3',  'sounds/whisk_2.mp3'],
   };
 
   const PLACEHOLDER_IMG = `data:image/svg+xml,${encodeURIComponent(
@@ -103,7 +108,7 @@
     { word: 'whisk',     pos: 'verb', iconic: true,  rating: 4.55, type: 'target_iconic',    trained: true,  group: 'A' },
     { word: 'sizzle',    pos: 'verb', iconic: true,  rating: 5.30, type: 'target_iconic',    trained: true,  group: 'B' },
     { word: 'mix',       pos: 'verb', iconic: true,  rating: 5.10, type: 'target_iconic',    trained: true,  group: 'B' },
-    { word: 'stirring',  pos: 'verb', iconic: true,  rating: 4.82, type: 'target_iconic',    trained: true,  group: 'B' },
+    { word: 'stir',      pos: 'verb', iconic: true,  rating: 4.82, type: 'target_iconic',    trained: true,  group: 'B' },
     { word: 'bowl',      pos: 'noun', iconic: false, rating: 3.00, type: 'target_arbitrary', trained: true,  group: 'A' },
     { word: 'spatula',   pos: 'noun', iconic: false, rating: 3.91, type: 'target_arbitrary', trained: true,  group: 'A' },
     { word: 'pan',       pos: 'noun', iconic: false, rating: 3.45, type: 'target_arbitrary', trained: true,  group: 'A' },
@@ -119,11 +124,20 @@
     { word: 'salt',      pos: 'noun', iconic: false, rating: null,  type: 'foil_arbitrary',  trained: false, group: 'foil' },
   ];
 
-  const foley_stimuli = [
-    { audio: 'sizzle', options: ['pancake sizzling', 'stirring dry flour'], correct: 0 },
-    // TODO: Restore mix/stir trials when audio files are uploaded
-    { audio: 'pour',   options: ['pouring batter', 'flipping a pancake'],  correct: 0 },
-    { audio: 'spread', options: ['spreading butter', 'pouring milk'],      correct: 0 },
+  // FIX v4: Restored mix and stir foley trials (audio files exist on server)
+  const foley_stimuli_groupB = [
+    { audio: 'sizzle', options: ['pancake sizzling', 'stirring dry flour'],   correct: 0, group: 'B', iconic: true,  rating: 5.30 },
+    { audio: 'mix',    options: ['mixing batter', 'pouring liquid'],          correct: 0, group: 'B', iconic: true,  rating: 5.10 },
+    { audio: 'stir',   options: ['stirring a bowl', 'cracking an egg'],       correct: 0, group: 'B', iconic: true,  rating: 4.82 },
+    { audio: 'pour',   options: ['pouring batter', 'flipping a pancake'],     correct: 0, group: 'B', iconic: false, rating: 3.60 },
+    { audio: 'spread', options: ['spreading butter', 'pouring milk'],         correct: 0, group: 'B', iconic: false, rating: 3.50 },
+  ];
+
+  // NEW v4: Group A foley for cross-group comparison (all trained sounds)
+  const foley_stimuli_groupA = [
+    { audio: 'crack', options: ['cracking an egg', 'stirring a pot'],     correct: 0, group: 'A', iconic: true,  rating: 5.40 },
+    { audio: 'flip',  options: ['flipping a pancake', 'pouring batter'], correct: 0, group: 'A', iconic: true,  rating: 5.70 },
+    { audio: 'whisk', options: ['whisking eggs', 'sizzling oil'],        correct: 0, group: 'A', iconic: true,  rating: 4.55 },
   ];
 
   const sequence_steps = ['Crack eggs', 'Mix flour and eggs', 'Heat the pan', 'Pour batter on pan', 'Flip when ready'];
@@ -148,11 +162,6 @@
     if (!src) console.warn('[posttest] No audio found for:', k);
     return src || PLACEHOLDER_AUDIO;
   };
-
-  /** Check if two words share images and should not be foils for each other */
-  function sharesImagesWith(wordA, wordB) {
-    return SHARED_IMAGE_PAIRS.some(pair => pair.includes(wordA) && pair.includes(wordB));
-  }
 
   function choiceButton(word, src) {
     return `<button class="choice-card" data-choice="${word}" aria-label="${word}">
@@ -265,6 +274,41 @@
     };
   }
 
+  /* ---------- Data Save (consistent with pretest) ---------- */
+  function saveData() {
+    const pid = currentPID || 'unknown';
+    const filename = `posttest_${pid}_${testCondition}.json`;
+
+    // Try POST endpoint first (if provided via URL param)
+    if (q.post) {
+      try {
+        const payload = jsPsych.data.get().values();
+        fetch(q.post, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pid, condition: testCondition, data: payload })
+        }).then(() => console.log('[posttest] Data POSTed successfully'))
+          .catch(err => console.error('[posttest] POST failed:', err));
+      } catch (err) { console.error('[posttest] POST error:', err); }
+    }
+
+    // Also download locally
+    try { jsPsych.data.get().localSave('json', filename); } catch (err) { console.error('[posttest] localSave failed:', err); }
+
+    const target = document.getElementById('jspsych-target');
+    if (target) {
+      target.innerHTML = `<div style="text-align:center;padding:40px;">
+        <h2>✓ Post-test complete / ポストテスト完了</h2>
+        <p><strong>Participant:</strong> ${pid}</p>
+        <p><strong>Condition:</strong> ${testCondition}</p>
+        <p style="margin-top:20px;">Your responses have been saved.</p>
+        <p>回答が保存されました。</p>
+        <p>Thank you! / ご参加ありがとうございました。</p>
+        <button class="jspsych-btn" onclick="location.reload()" style="margin-top:25px;">Run again</button>
+      </div>`;
+    }
+  }
+
   /* ---------- Entry ---------- */
   window.__START_POSTTEST = (pid, delayed) => {
     currentPID = pid || 'unknown';
@@ -296,7 +340,7 @@
   function buildTimeline(delayed) {
     const tl = [];
 
-    // Preload
+    // Preload — includes all image and audio variants
     const preloadImages = [...new Set(PICTURES.flatMap(p => p.variants))];
     preloadImages.push(PRACTICE_IMG);
     const preloadAudio = [...new Set(Object.values(AUDIO_VARIANTS).flat())];
@@ -340,6 +384,7 @@
     tl.push(...buildProceduralRecall());
     if (!delayed) tl.push(...buildSequencing());
     tl.push(...buildFoley(delayed));
+    if (!delayed) tl.push(...buildGroupAFoley());
     tl.push(...buildNaming(delayed));
     if (!delayed) {
       const transfer = buildTransfer();
@@ -358,26 +403,22 @@
     if (FOURAFC_VERBS_ONLY) pool = pool.filter(p => p.category === 'action' || p.category === 'process');
     if (FOURAFC_MAX_ITEMS && Number.isFinite(FOURAFC_MAX_ITEMS)) pool = shuffle(pool).slice(0, FOURAFC_MAX_ITEMS);
 
-    // Randomize trial presentation order
+    // All available distractors (non-target pictures)
+    const distractorPool = PICTURES.filter(p => !GROUP_B_TARGETS.includes(p.word));
+
     const trials = shuffle(pool).map(targetPic => {
-      // Build foil set — EXCLUDE words that share images with the target
-      const eligible = pool.filter(p =>
-        p.word !== targetPic.word && !sharesImagesWith(p.word, targetPic.word)
-      );
+      // Build foil set from same-category targets first, then fill with distractors
+      const eligible = pool.filter(p => p.word !== targetPic.word);
       const sameCategory = eligible.filter(p => p.category === targetPic.category);
       let foils = sample(sameCategory, 3);
       if (foils.length < 3) {
         const extras = eligible.filter(p => !foils.includes(p));
         foils = foils.concat(sample(extras, 3 - foils.length));
       }
-      // Add distractor images if still short
+      // Fill remaining with distractor images (milk, sugar, pancake, egg)
       if (foils.length < 3) {
-        const distractors = PICTURES.filter(p =>
-          !GROUP_B_TARGETS.includes(p.word) &&
-          !foils.includes(p) &&
-          !sharesImagesWith(p.word, targetPic.word)
-        );
-        foils = foils.concat(sample(distractors, 3 - foils.length));
+        const available = distractorPool.filter(p => !foils.includes(p));
+        foils = foils.concat(sample(available, 3 - foils.length));
       }
       const choices = shuffle([targetPic, ...foils]).slice(0, 4);
       const labels = choices.map(c => c.word);
@@ -427,13 +468,11 @@
 
     shuffled.forEach(pic => {
       combos.push({ word: pic.word, match: true, src: pickImageSrc(pic.word), iconic: pic.iconic, rating: pic.rating });
-      // For mismatches, avoid pairing words that share images
-      const foilCandidates = shuffled.filter(p =>
-        p !== pic && p.category === pic.category && !sharesImagesWith(p.word, pic.word)
-      );
+      // Mismatch: pick a different word's image (no shared-image concern now that stirring has own images)
+      const foilCandidates = shuffled.filter(p => p !== pic && p.category === pic.category);
       const foil = foilCandidates.length > 0
         ? foilCandidates[0]
-        : shuffled.find(p => p !== pic && !sharesImagesWith(p.word, pic.word));
+        : shuffled.find(p => p !== pic);
       if (foil) combos.push({ word: pic.word, match: false, src: pickImageSrc(foil.word), iconic: pic.iconic, rating: pic.rating });
     });
 
@@ -498,6 +537,9 @@
 
   /* ---------- Sequencing (with undo/reset) ---------- */
   function buildSequencing() {
+    // Closure variable to capture selection before DOM clears
+    let capturedSequence = null;
+
     return [
       {
         type: T('jsPsychHtmlButtonResponse'),
@@ -509,7 +551,6 @@
       {
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: () => {
-          // Shuffle at display time for true randomization each run
           const displayOrder = shuffle(sequence_steps);
           let html = '<div style="text-align:center;"><h3>Select the steps in order / 順番に選択してください</h3>';
           html += '<div id="seq-container" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;">';
@@ -535,6 +576,8 @@
 
           function updateDisplay() {
             output.textContent = selected.map((s, i) => `${i + 1}. ${s}`).join('  |  ');
+            // Store in closure for on_finish
+            capturedSequence = selected.slice();
             if (selected.length === sequence_steps.length) {
               submit.disabled = false; submit.style.opacity = '1';
             } else {
@@ -573,8 +616,8 @@
           });
         },
         on_finish: d => {
-          const text = document.getElementById('seq-output')?.textContent || '';
-          const entered = text.split('|').map(s => s.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
+          // Use closure-captured data (DOM may be gone)
+          const entered = capturedSequence || [];
           d.entered_sequence = entered;
           d.correct_positions = entered.filter((s, i) => s === d.correct_order[i]).length;
           d.kendall_tau = kendallTau(d.correct_order, entered);
@@ -583,14 +626,13 @@
     ];
   }
 
-  /* ---------- Foley (GROUP B sounds) ---------- */
+  /* ---------- Foley (GROUP B sounds — 5 trials) ---------- */
   function buildFoley(delayed) {
-    const pool = delayed ? foley_stimuli.slice(0, 3) : foley_stimuli;
+    const pool = delayed ? foley_stimuli_groupB.slice(0, 3) : foley_stimuli_groupB;
 
-    // Randomize foley trial order
     const trials = shuffle(pool).map((stim, idx) => {
       const audioSrc = pickAudioSrc(stim.audio);
-      // Randomize option display order, track where correct answer ends up
+      // Randomize option display order
       const optionOrder = shuffle(stim.options.map((opt, i) => ({ text: opt, origIdx: i })));
       const displayOptions = optionOrder.map(o => o.text);
       const correctDisplayIdx = optionOrder.findIndex(o => o.origIdx === stim.correct);
@@ -605,7 +647,8 @@
         data: {
           task: 'foley', audio_key: stim.audio, correct: correctDisplayIdx,
           options: displayOptions, pid: currentPID, condition: testCondition,
-          audio_src: audioSrc, word_group: 'B', phase: 'post'
+          audio_src: audioSrc, word_group: stim.group,
+          iconic: stim.iconic, iconicity_rating: stim.rating, phase: 'post'
         },
         on_load: function () {
           const audio = new Audio(audioSrc);
@@ -644,6 +687,64 @@
     ];
   }
 
+  /* ---------- NEW v4: Group A Foley (cross-group comparison) ---------- */
+  function buildGroupAFoley() {
+    const trials = shuffle(foley_stimuli_groupA).map((stim, idx) => {
+      const audioSrc = pickAudioSrc(stim.audio);
+      const optionOrder = shuffle(stim.options.map((opt, i) => ({ text: opt, origIdx: i })));
+      const displayOptions = optionOrder.map(o => o.text);
+      const correctDisplayIdx = optionOrder.findIndex(o => o.origIdx === stim.correct);
+
+      return {
+        type: T('jsPsychHtmlButtonResponse'),
+        stimulus: `<div style="text-align:center;">
+          <button class="jspsych-btn" id="foleyA-play-${idx}">▶️ Play sound / 音を再生</button>
+          <p id="foleyA-status-${idx}" style="margin-top:10px;color:#666;">Listen before answering. / 答える前に聞いてください。</p>
+        </div>`,
+        choices: displayOptions,
+        data: {
+          task: 'foley_groupA', audio_key: stim.audio, correct: correctDisplayIdx,
+          options: displayOptions, pid: currentPID, condition: testCondition,
+          audio_src: audioSrc, word_group: stim.group,
+          iconic: stim.iconic, iconicity_rating: stim.rating, phase: 'post'
+        },
+        on_load: function () {
+          const audio = new Audio(audioSrc);
+          audio.loop = false;
+          window.__foley_audio = audio;
+
+          const play = document.getElementById(`foleyA-play-${idx}`);
+          const status = document.getElementById(`foleyA-status-${idx}`);
+
+          play.addEventListener('click', () => {
+            status.textContent = 'Playing… / 再生中…';
+            audio.currentTime = 0;
+            audio.play().then(() => { setTimeout(() => { status.textContent = 'Choose the best option. / 答えを選択してください。'; }, 500); })
+              .catch(() => { status.textContent = 'Audio failed. / 音声の再生に失敗しました。'; });
+          });
+        },
+        on_finish: (d) => {
+          const a = window.__foley_audio;
+          if (a) { try { a.pause(); a.currentTime = 0; a.src = ''; } catch {} }
+          window.__foley_audio = null;
+          d.is_correct = (d.response === d.correct);
+        },
+        post_trial_gap: 300
+      };
+    });
+
+    return [
+      {
+        type: T('jsPsychHtmlButtonResponse'),
+        stimulus: `<h2>More Sounds / さらに音声</h2>
+          <p>A few more cooking sounds to identify.</p>
+          <p>さらにいくつかの料理の音を識別してください。</p>`,
+        choices: ['Continue / 続行']
+      },
+      ...trials
+    ];
+  }
+
   /* ---------- Picture naming (GROUP B — all 6 words, with practice) ---------- */
   function buildNaming() {
     let pool = PICTURES.filter(p => GROUP_B_TARGETS.includes(p.word));
@@ -655,7 +756,6 @@
       iconic: pic.iconic, rating: pic.rating
     }));
 
-    // Mic initialization — persists for all subsequent audio tasks (blind retell, teach someone)
     const micInit = {
       type: T('jsPsychInitializeMicrophone'),
       data: { task: 'mic_init' },
@@ -797,7 +897,6 @@
       choices: ['Begin / 開始']
     };
 
-    // Randomize transfer word presentation order
     const shuffledTransferWords = shuffle(transfer_words);
 
     const trials = shuffledTransferWords.flatMap(item => [
@@ -891,7 +990,7 @@
     )];
   }
 
-  /* ---------- Likert (revised for VR iconicity research) ---------- */
+  /* ---------- Likert (7 items for VR iconicity research) ---------- */
   function buildLikert() {
     return {
       type: T('jsPsychSurveyLikert'),
@@ -952,24 +1051,5 @@
       button_label: 'Finish / 完了',
       data: { task: 'exit_comments', pid: currentPID, condition: testCondition, phase: 'post' }
     };
-  }
-
-  /* ---------- Save ---------- */
-  function saveData() {
-    const filename = `posttest_${currentPID}_${testCondition}.json`;
-    try { jsPsych.data.get().localSave('json', filename); } catch (err) { console.error('[posttest] save failed:', err); }
-
-    const target = document.getElementById('jspsych-target');
-    if (target) {
-      target.innerHTML = `<div style="text-align:center;padding:40px;">
-        <h2>✓ Post-test complete / ポストテスト完了</h2>
-        <p><strong>Participant:</strong> ${currentPID}</p>
-        <p><strong>Condition:</strong> ${testCondition}</p>
-        <p style="margin-top:20px;">Your responses have been downloaded as JSON.</p>
-        <p>回答がJSONとしてダウンロードされました。</p>
-        <p>Thank you! / ご参加ありがとうございました。</p>
-        <button class="jspsych-btn" onclick="location.reload()" style="margin-top:25px;">Run again</button>
-      </div>`;
-    }
   }
 })();
