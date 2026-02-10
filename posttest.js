@@ -50,10 +50,9 @@
   const styleBlock = document.createElement('style');
   styleBlock.textContent = `
     .choice-grid{display:flex;flex-wrap:wrap;gap:18px;justify-content:center;}
-    .choice-card{width:220px;border:1px solid #ccc;border-radius:12px;padding:0;overflow:hidden;background:white;display:flex;flex-direction:column;align-items:center;box-shadow:0 3px 12px rgba(0,0,0,.08);transition:transform .15s ease;cursor:pointer;}
-    .choice-card:hover{transform:translateY(-4px);}
-    .choice-card img{width:100%;height:150px;object-fit:cover;display:block;}
-    .choice-card span{display:block;width:100%;padding:10px 0;font-size:15px;font-weight:600;color:#1a237e;text-transform:capitalize;}
+    .choice-card{width:220px;border:1px solid #ccc;border-radius:12px;padding:0;overflow:hidden;background:white;display:flex;flex-direction:column;align-items:center;box-shadow:0 3px 12px rgba(0,0,0,.08);transition:transform .15s ease, border-color .15s ease;cursor:pointer;}
+    .choice-card:hover{transform:translateY(-4px);border-color:#1a237e;}
+    .choice-card img{width:100%;height:150px;object-fit:cover;display:block;border-radius:12px;}
     .mic-error-msg{background-color:#ffebee;padding:20px;border-radius:8px;margin-top:20px;}
     .seq-selected{opacity:0.4;pointer-events:none;}
     .seq-undo-btn{margin-top:12px;background:#ff9800;color:white;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;}
@@ -128,7 +127,7 @@
   const foley_stimuli_groupB = [
     { audio: 'sizzle', options: ['pancake sizzling', 'stirring dry flour'],   correct: 0, group: 'B', iconic: true,  rating: 5.30 },
     { audio: 'mix',    options: ['mixing batter', 'pouring liquid'],          correct: 0, group: 'B', iconic: true,  rating: 5.10 },
-    { audio: 'stir',   options: ['stirring a bowl', 'cracking an egg'],       correct: 0, group: 'B', iconic: true,  rating: 4.82 },
+    { audio: 'stir',   options: ['stirring batter', 'cracking an egg'],         correct: 0, group: 'B', iconic: true,  rating: 4.82 },
     { audio: 'pour',   options: ['pouring batter', 'flipping a pancake'],     correct: 0, group: 'B', iconic: false, rating: 3.60 },
     { audio: 'spread', options: ['spreading butter', 'pouring milk'],         correct: 0, group: 'B', iconic: false, rating: 3.50 },
   ];
@@ -164,9 +163,8 @@
   };
 
   function choiceButton(word, src) {
-    return `<button class="choice-card" data-choice="${word}" aria-label="${word}">
-      <img src="${src || PLACEHOLDER_IMG}" alt="${word}" onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
-      <span>${word}</span>
+    return `<button class="choice-card" data-choice="${word}" aria-label="option">
+      <img src="${src || PLACEHOLDER_IMG}" alt="choice" onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
     </button>`;
   }
 
@@ -183,19 +181,27 @@
     return d ? (conc - disc) / d : 0;
   }
 
-  /* ---------- Mic fallback ---------- */
-  function micOrTextBlock(audioTrial, textPrompt, dataTag) {
-    if (!microphoneAvailable) {
-      return {
-        type: T('jsPsychSurveyText'),
-        preamble: `<h3>Speaking (Text Fallback)</h3><p>${textPrompt}</p>
-          <div class="mic-error-msg"><b>Note:</b> Mic unavailable; type your answer.<br>
-          <b>注意：</b>マイクが使用できません。回答を入力してください。</div>`,
-        questions: [{ prompt: 'Type here / ここに入力', name: 'typed_answer', rows: 6, required: true }],
-        data: Object.assign({}, dataTag, { modality: 'text' })
-      };
-    }
-    return Object.assign({}, audioTrial, { data: Object.assign({}, audioTrial.data || {}, dataTag, { modality: 'audio' }) });
+  /* ---------- Mic fallback (runtime conditional) ---------- */
+  // Returns an array of timeline nodes: audio path runs if mic available, text path runs if not.
+  // The conditional_function checks microphoneAvailable at RUNTIME, not build time.
+  function micOrTextNodes(audioTrial, textPrompt, dataTag) {
+    return [
+      {
+        timeline: [Object.assign({}, audioTrial, { data: Object.assign({}, audioTrial.data || {}, dataTag, { modality: 'audio' }) })],
+        conditional_function: () => microphoneAvailable
+      },
+      {
+        timeline: [{
+          type: T('jsPsychSurveyText'),
+          preamble: `<h3>Speaking (Text Fallback)</h3><p>${textPrompt}</p>
+            <div class="mic-error-msg"><b>Note:</b> Mic unavailable; type your answer.<br>
+            <b>注意：</b>マイクが使用できません。回答を入力してください。</div>`,
+          questions: [{ prompt: 'Type here / ここに入力', name: 'typed_answer', rows: 6, required: true }],
+          data: Object.assign({}, dataTag, { modality: 'text' })
+        }],
+        conditional_function: () => !microphoneAvailable
+      }
+    ];
   }
 
   /* ---------- Mic Gate ---------- */
@@ -203,10 +209,6 @@
     const gate = {
       type: T('jsPsychHtmlButtonResponse'),
       choices: ['Continue / 続行', 'Use Text Only / 文字で続行'],
-      button_html: [
-        '<button class="jspsych-btn" id="mic-continue" disabled>%choice%</button>',
-        '<button class="jspsych-btn" id="mic-textonly">%choice%</button>'
-      ],
       stimulus: `
         <div style="max-width:720px;margin:0 auto;text-align:center;line-height:1.6">
           <h2>Microphone Setup / マイクの設定</h2>
@@ -231,9 +233,13 @@
       data: { task: 'mic_gate' },
       on_load: () => {
         const enableBtn = document.getElementById('mic-enable');
-        const contBtn = document.getElementById('mic-continue');
+        const allBtns = document.querySelectorAll('.jspsych-btn');
+        const contBtn = allBtns[allBtns.length - 2];
+        const textBtn = allBtns[allBtns.length - 1];
         const statusEl = document.getElementById('mic-status');
         const levelEl = document.getElementById('mic-level');
+
+        if (contBtn) { contBtn.disabled = true; contBtn.style.opacity = '0.5'; }
 
         async function startStream() {
           try {
@@ -249,15 +255,16 @@
               requestAnimationFrame(tick);
             })();
             statusEl.textContent = 'Microphone enabled ✔';
-            contBtn.disabled = false;
+            if (contBtn) { contBtn.disabled = false; contBtn.style.opacity = '1'; }
             window.__mic_ok = true;
           } catch (err) {
             statusEl.textContent = 'Permission denied or unavailable ✖';
+            if (contBtn) { contBtn.disabled = true; contBtn.style.opacity = '0.5'; }
             window.__mic_ok = false;
           }
         }
         enableBtn.addEventListener('click', startStream);
-        document.getElementById('mic-textonly').addEventListener('click', () => { window.__mic_ok = false; });
+        if (textBtn) textBtn.addEventListener('click', () => { window.__mic_ok = false; });
       },
       on_finish: () => {
         microphoneAvailable = !!window.__mic_ok;
@@ -352,7 +359,7 @@
       message: 'Loading assets… / アセットを読み込み中…',
       continue_after_error: true,
       error_message: 'Some assets could not be loaded. The test will continue with available content.',
-      max_load_time: 10000,
+      max_load_time: 30000,
       on_error: (file) => { console.warn('[posttest] Preload failed for:', file); },
       on_finish: (data) => {
         if (data.failed_images?.length || data.failed_audio?.length) {
@@ -447,8 +454,8 @@
     return [{
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `<h2>Vocabulary Check / 語彙チェック</h2>
-        <p>Select the picture that matches the word. Each card shows an image and a label.</p>
-        <p>単語に合う画像を選択してください。各カードには画像とラベルが表示されます。</p>`,
+        <p>Select the picture that matches the word.</p>
+        <p>単語に合う画像を選択してください。</p>`,
       choices: ['Start / 開始']
     }, ...trials];
   }
@@ -564,12 +571,14 @@
           return html;
         },
         choices: ['Submit / 送信'],
-        button_html: '<button class="jspsych-btn" id="seq-submit" disabled style="opacity:0.5;">%choice%</button>',
         data: { task: 'sequencing', correct_order: sequence_steps, pid: currentPID, condition: testCondition, phase: 'post' },
         on_load: () => {
           const buttons = Array.from(document.querySelectorAll('.seq-btn'));
           const output = document.getElementById('seq-output');
-          const submit = document.getElementById('seq-submit');
+          // Find submit button (last jspsych-btn rendered)
+          const allBtns = document.querySelectorAll('.jspsych-btn');
+          const submit = allBtns[allBtns.length - 1];
+          if (submit) { submit.disabled = true; submit.style.opacity = '0.5'; }
           const undoBtn = document.getElementById('seq-undo');
           const resetBtn = document.getElementById('seq-reset');
           const selected = [];
@@ -941,7 +950,7 @@
       stimulus: `<h2>Blind Retell / 視覚なしで説明</h2>
         <p>Without any pictures, <b>explain how to make a pancake</b> from memory.</p>
         <p>画像なしで<b>パンケーキの作り方</b>を記憶から説明してください。</p>
-        <p>You have <b>45 seconds</b>. / <b>45秒間</b>。</p>`,
+        <p>You have up to <b>45 seconds</b>. Press "Done" when finished. / 最大<b>45秒間</b>。終わったら「完了」を押してください。</p>`,
       choices: ['Begin / 開始'],
       data: { task: 'blind_retell_intro' }
     };
@@ -950,11 +959,11 @@
       type: T('jsPsychHtmlAudioResponse'),
       stimulus: `<div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;">
         <p style="color:#666;">(No visual cues / 視覚ヒントなし)</p>
-      </div><p style="margin-top:10px;color:#d32f2f;font-weight:bold;">🔴 Recording… 45s / 録音中… 45秒</p>`,
-      recording_duration: 45000, show_done_button: false, allow_playback: false, post_trial_gap: 800
+      </div><p style="margin-top:10px;color:#d32f2f;font-weight:bold;">🔴 Recording… up to 45s / 録音中… 最大45秒</p>`,
+      recording_duration: 45000, show_done_button: true, done_button_label: 'Done / 完了', allow_playback: false, post_trial_gap: 800
     };
 
-    return [intro, micOrTextBlock(
+    return [intro, ...micOrTextNodes(
       audioTrial,
       'Explain how to make a pancake step by step.<br>パンケーキの作り方を順を追って説明してください。',
       { task: 'blind_retell', pid: currentPID, condition: testCondition, phase: 'post', needs_audio_scoring: true }
@@ -970,7 +979,7 @@
         <p>料理をしたことのない友だちにパンケーキの作り方を教えてください。</p>
         <p>Include: tools, ingredients, key actions, safety/timing tips, success checks.</p>
         <p>含めること：道具、材料、主な動作、安全・時間のコツ、成功の確認方法。</p>
-        <p>You have <b>60 seconds</b>. / <b>60秒間</b>。</p>`,
+        <p>You have up to <b>60 seconds</b>. Press "Done" when finished. / 最大<b>60秒間</b>。終わったら「完了」を押してください。</p>`,
       choices: ['Begin / 開始'],
       data: { task: 'teach_intro' }
     };
@@ -979,11 +988,11 @@
       type: T('jsPsychHtmlAudioResponse'),
       stimulus: `<div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;">
         <p style="color:#666;">(No visual cues / 視覚ヒントなし)</p>
-      </div><p style="margin-top:10px;color:#d32f2f;font-weight:bold;">🔴 Teaching… 60s / 説明中… 60秒</p>`,
-      recording_duration: 60000, show_done_button: false, allow_playback: false, post_trial_gap: 800
+      </div><p style="margin-top:10px;color:#d32f2f;font-weight:bold;">🔴 Teaching… up to 60s / 説明中… 最大60秒</p>`,
+      recording_duration: 60000, show_done_button: true, done_button_label: 'Done / 完了', allow_playback: false, post_trial_gap: 800
     };
 
-    return [intro, micOrTextBlock(
+    return [intro, ...micOrTextNodes(
       audioTrial,
       'Teach a beginner how to make a pancake.<br>初心者にパンケーキの作り方を教えてください。',
       { task: 'teach_someone', pid: currentPID, condition: testCondition, phase: 'post', needs_audio_scoring: true }
