@@ -432,7 +432,7 @@
           <div class="choice-grid"></div>
         </div>`,
         choices: labels,
-        button_html: labels.map((l, i) => choiceButton(l, images[i])),
+        button_html: (choice, index) => choiceButton(labels[index], images[index]),
         data: {
           task: '4afc', word: targetPic.word, choices: labels,
           correct: correctIndex, pid: currentPID, condition: testCondition,
