@@ -565,8 +565,8 @@
         on_load: () => {
           const buttons = Array.from(document.querySelectorAll('.seq-btn'));
           const output = document.getElementById('seq-output');
-          const allBtns = document.querySelectorAll('.jspsych-btn');
-          const submit = allBtns[allBtns.length - 1];
+          const allBtns = [...document.querySelectorAll('.jspsych-btn')].filter(b => !b.classList.contains('seq-btn'));
+          const submit = allBtns.length ? allBtns[allBtns.length - 1] : null;
           if (submit) { submit.disabled = true; submit.style.opacity = '0.5'; }
           const undoBtn = document.getElementById('seq-undo');
           const resetBtn = document.getElementById('seq-reset');
