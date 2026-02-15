@@ -1,24 +1,27 @@
 /**
- * posttest.js — VR Post-Test Battery (CORRECTED v4)
+ * posttest.js — VR Post-Test Battery (CORRECTED v5)
  * GROUP B WORDS: sizzle, mix, stir (iconic) + pour, butter, flour (arbitrary)
  *
- * v4 FIXES (from v3):
- *  1. Stirring images: Now uses stirring_01.png/02.png (they exist on server!)
- *  2. Mix/stir audio: Added to AUDIO_VARIANTS (mix is .wav, stir is .mp3)
- *  3. Foley: Restored mix/stir trials → 5 total as documented
- *  4. SHARED_IMAGE_PAIRS: Removed (no longer needed — stirring has own images)
- *  5. Group A foley comparison: Added using crack/flip/whisk audio from server
- *  6. 4AFC: Added milk/sugar as additional distractor images
- *  7. Word forms: Standardized (base forms in LDT/transfer, gerund in naming/4AFC)
- *  8. Save: Added optional POST endpoint (consistent with pretest)
+ * v5 FIXES (from v4):
+ *  1. Blind Retell: Added preparation step with "Start Recording" button
+ *     before recording begins (previously jumped straight to recording after
+ *     intro, leaving participants confused by "(No visual cues)" screen)
+ *  2. Likert: Reworded VR reuse question to be conditional ("If you had the
+ *     chance...") so it works for both VR and non-VR conditions
+ *  3. Mic gate: Applied same button-filtering fix as pretest v4 (filter out
+ *     stimulus-embedded #mic-enable from jspsych-btn query)
+ *  4. Mic gate loop_function: Fixed to use response instead of button_pressed
+ *     (jsPsych 7 compatibility)
+ *  5. Foley on_load: Added null guards for DOM elements
  *
- * Previous v3 fixes retained:
- *  - 4AFC word labels below images
- *  - Recipe Recall Japanese translation
- *  - Sequencing undo/reset
- *  - Mic initialization before all audio tasks
- *  - Foley & transfer trial order randomized
- *  - Revised Likert questions for VR iconicity research
+ * v4 FIXES retained:
+ *  1. Stirring images: Now uses stirring_01.png/02.png
+ *  2. Mix/stir audio: Added to AUDIO_VARIANTS
+ *  3. Foley: Restored mix/stir trials → 5 total
+ *  4. Group A foley comparison: Added using crack/flip/whisk audio
+ *  5. 4AFC: Added milk/sugar as additional distractor images
+ *  6. Word forms: Standardized
+ *  7. Save: Added optional POST endpoint
  */
 (function () {
   let jsPsych = null;
@@ -32,7 +35,6 @@
   /* ---------- CONFIG ---------- */
   const SKIP_NAMING_IF_NO_MIC = true;
 
-  // CRITICAL: Both must be FALSE to maintain 3 iconic + 3 arbitrary balance
   const NAMING_VERBS_ONLY  = false;
   const NAMING_MAX_ITEMS   = 6;
   const FOURAFC_VERBS_ONLY = false;
@@ -64,33 +66,26 @@
 
   /* ---------- STIMULI ---------- */
   const PICTURES = [
-    // GROUP B — post-test targets (iconic)
     { word: 'sizzling', category: 'process', iconic: true,  rating: 5.30, variants: ['img/sizzling_01.png', 'img/sizzling_02.png'] },
     { word: 'mixing',   category: 'action',  iconic: true,  rating: 5.10, variants: ['img/mixing_01.png',   'img/mixing_02.png'] },
-    // FIX v4: Stirring now uses its own images (they exist on server!)
     { word: 'stirring', category: 'action',  iconic: true,  rating: 4.82, variants: ['img/stirring_01.png', 'img/stirring_02.png'] },
-    // GROUP B — post-test targets (arbitrary)
     { word: 'pouring',  category: 'action',  iconic: false, rating: 3.60, variants: ['img/pouring_01.png',  'img/pouring_02.png'] },
     { word: 'butter',   category: 'ingredient', iconic: false, rating: 3.50, variants: ['img/butter_01.png', 'img/butter_02.png'] },
     { word: 'flour',    category: 'ingredient', iconic: false, rating: 3.00, variants: ['img/flour_01.png',  'img/flour_02.png'] },
-    // Distractor images (expanded: added milk and sugar)
     { word: 'pancake',  category: 'food',       iconic: null, rating: null, variants: ['img/pancake_01.png', 'img/pancake_02.png'] },
     { word: 'egg',      category: 'object',     iconic: null, rating: null, variants: ['img/egg_01.png',     'img/egg_02.png'] },
     { word: 'milk',     category: 'ingredient', iconic: null, rating: null, variants: ['img/milk_01.png',    'img/milk_02.png'] },
     { word: 'sugar',    category: 'ingredient', iconic: null, rating: null, variants: ['img/sugar_01.png',   'img/sugar_02.png'] },
   ];
 
-  // Group B target word list (the 6 words that must all be tested)
   const GROUP_B_TARGETS = ['sizzling', 'mixing', 'stirring', 'pouring', 'butter', 'flour'];
 
-  // FIX v4: Added mix and stir audio (mix is .wav, stir is .mp3)
   const AUDIO_VARIANTS = {
     sizzle: ['sounds/sizzle_1.mp3', 'sounds/sizzle_2.mp3'],
     mix:    ['sounds/mix_1.wav',    'sounds/mix_2.wav'],
     stir:   ['sounds/stir_1.mp3',   'sounds/stir_2.mp3'],
     pour:   ['sounds/pour_1.mp3',   'sounds/pour_2.mp3'],
     spread: ['sounds/spread_1.mp3', 'sounds/spread_2.mp3'],
-    // Group A audio — for cross-group foley comparison
     crack:  ['sounds/crack_1.mp3',  'sounds/crack_2.mp3'],
     flip:   ['sounds/flip_1.mp3',   'sounds/flip_2.mp3'],
     whisk:  ['sounds/whisk_1.mp3',  'sounds/whisk_2.mp3'],
@@ -100,7 +95,6 @@
     '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect width="320" height="240" fill="#e3f2fd"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="26" fill="#1565c0">Image missing</text></svg>')}`;
   const PLACEHOLDER_AUDIO = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
 
-  // ALL 12 trained words + foils for transfer recognition
   const transfer_words = [
     { word: 'flip',      pos: 'verb', iconic: true,  rating: 5.70, type: 'target_iconic',    trained: true,  group: 'A' },
     { word: 'crack',     pos: 'verb', iconic: true,  rating: 5.40, type: 'target_iconic',    trained: true,  group: 'A' },
@@ -123,16 +117,14 @@
     { word: 'salt',      pos: 'noun', iconic: false, rating: null,  type: 'foil_arbitrary',  trained: false, group: 'foil' },
   ];
 
-  // FIX v4: Restored mix and stir foley trials (audio files exist on server)
   const foley_stimuli_groupB = [
     { audio: 'sizzle', options: ['pancake sizzling', 'stirring dry flour'],   correct: 0, group: 'B', iconic: true,  rating: 5.30 },
     { audio: 'mix',    options: ['mixing batter', 'pouring liquid'],          correct: 0, group: 'B', iconic: true,  rating: 5.10 },
-    { audio: 'stir',   options: ['stirring batter', 'cracking an egg'],         correct: 0, group: 'B', iconic: true,  rating: 4.82 },
+    { audio: 'stir',   options: ['stirring batter', 'cracking an egg'],       correct: 0, group: 'B', iconic: true,  rating: 4.82 },
     { audio: 'pour',   options: ['pouring batter', 'flipping a pancake'],     correct: 0, group: 'B', iconic: false, rating: 3.60 },
     { audio: 'spread', options: ['spreading butter', 'pouring milk'],         correct: 0, group: 'B', iconic: false, rating: 3.50 },
   ];
 
-  // NEW v4: Group A foley for cross-group comparison (all trained sounds)
   const foley_stimuli_groupA = [
     { audio: 'crack', options: ['cracking an egg', 'stirring a pot'],     correct: 0, group: 'A', iconic: true,  rating: 5.40 },
     { audio: 'flip',  options: ['flipping a pancake', 'pouring batter'], correct: 0, group: 'A', iconic: true,  rating: 5.70 },
@@ -182,8 +174,6 @@
   }
 
   /* ---------- Mic fallback (runtime conditional) ---------- */
-  // Returns an array of timeline nodes: audio path runs if mic available, text path runs if not.
-  // The conditional_function checks microphoneAvailable at RUNTIME, not build time.
   function micOrTextNodes(audioTrial, textPrompt, dataTag) {
     return [
       {
@@ -204,7 +194,7 @@
     ];
   }
 
-  /* ---------- Mic Gate ---------- */
+  /* ---------- Mic Gate — v5 FIX: button filtering + response check ---------- */
   function buildMicSetupGate({ required = true } = {}) {
     const gate = {
       type: T('jsPsychHtmlButtonResponse'),
@@ -233,11 +223,20 @@
       data: { task: 'mic_gate' },
       on_load: () => {
         const enableBtn = document.getElementById('mic-enable');
-        const allBtns = document.querySelectorAll('.jspsych-btn');
-        const contBtn = allBtns[allBtns.length - 2];
-        const textBtn = allBtns[allBtns.length - 1];
         const statusEl = document.getElementById('mic-status');
         const levelEl = document.getElementById('mic-level');
+
+        // v5 FIX: Filter out stimulus-embedded #mic-enable from button query
+        const allBtns = [...document.querySelectorAll('.jspsych-btn')];
+        const choiceBtns = allBtns.filter(b => b.id !== 'mic-enable');
+        const contBtn = choiceBtns.length >= 2 ? choiceBtns[choiceBtns.length - 2] : null;
+        const textBtn = choiceBtns.length >= 1 ? choiceBtns[choiceBtns.length - 1] : null;
+
+        if (!enableBtn || !statusEl || !levelEl) {
+          console.error('[mic_gate] DOM elements not found');
+          window.__mic_ok = false;
+          return;
+        }
 
         if (contBtn) { contBtn.disabled = true; contBtn.style.opacity = '0.5'; }
 
@@ -276,17 +275,17 @@
       loop_function: () => {
         if (!required) return false;
         const last = jsPsych.data.get().last(1).values()[0] || {};
-        return !(microphoneAvailable || last.button_pressed === 1);
+        // v5 FIX: jsPsych 7 uses 'response' (integer), not 'button_pressed'
+        return !(microphoneAvailable || last.response === 1);
       }
     };
   }
 
-  /* ---------- Data Save (consistent with pretest) ---------- */
+  /* ---------- Data Save ---------- */
   function saveData() {
     const pid = currentPID || 'unknown';
     const filename = `posttest_${pid}_${testCondition}.json`;
 
-    // Try POST endpoint first (if provided via URL param)
     if (q.post) {
       try {
         const payload = jsPsych.data.get().values();
@@ -299,7 +298,6 @@
       } catch (err) { console.error('[posttest] POST error:', err); }
     }
 
-    // Also download locally
     try { jsPsych.data.get().localSave('json', filename); } catch (err) { console.error('[posttest] localSave failed:', err); }
 
     const target = document.getElementById('jspsych-target');
@@ -308,7 +306,7 @@
         <h2>✓ Post-test complete / ポストテスト完了</h2>
         <p><strong>Participant:</strong> ${pid}</p>
         <p><strong>Condition:</strong> ${testCondition}</p>
-        <p style="margin-top:20px;">Your responses have been saved.</p>
+        <p>Your responses have been saved.</p>
         <p>回答が保存されました。</p>
         <p>Thank you! / ご参加ありがとうございました。</p>
         <button class="jspsych-btn" onclick="location.reload()" style="margin-top:25px;">Run again</button>
@@ -347,7 +345,6 @@
   function buildTimeline(delayed) {
     const tl = [];
 
-    // Preload — includes all image and audio variants
     const preloadImages = [...new Set(PICTURES.flatMap(p => p.variants))];
     preloadImages.push(PRACTICE_IMG);
     const preloadAudio = [...new Set(Object.values(AUDIO_VARIANTS).flat())];
@@ -368,7 +365,6 @@
       }
     });
 
-    // Welcome
     tl.push({
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `<div style="text-align:center;">
@@ -385,7 +381,6 @@
 
     tl.push(buildMicSetupGate({ required: true }));
 
-    // Core tasks
     tl.push(...build4AFC(delayed));
     if (!delayed) tl.push(...buildSpeededMatch());
     tl.push(...buildProceduralRecall());
@@ -404,17 +399,15 @@
     return tl;
   }
 
-  /* ---------- 4AFC (GROUP B — all 6 words) ---------- */
+  /* ---------- 4AFC ---------- */
   function build4AFC() {
     let pool = PICTURES.filter(p => GROUP_B_TARGETS.includes(p.word));
     if (FOURAFC_VERBS_ONLY) pool = pool.filter(p => p.category === 'action' || p.category === 'process');
     if (FOURAFC_MAX_ITEMS && Number.isFinite(FOURAFC_MAX_ITEMS)) pool = shuffle(pool).slice(0, FOURAFC_MAX_ITEMS);
 
-    // All available distractors (non-target pictures)
     const distractorPool = PICTURES.filter(p => !GROUP_B_TARGETS.includes(p.word));
 
     const trials = shuffle(pool).map(targetPic => {
-      // Build foil set from same-category targets first, then fill with distractors
       const eligible = pool.filter(p => p.word !== targetPic.word);
       const sameCategory = eligible.filter(p => p.category === targetPic.category);
       let foils = sample(sameCategory, 3);
@@ -422,7 +415,6 @@
         const extras = eligible.filter(p => !foils.includes(p));
         foils = foils.concat(sample(extras, 3 - foils.length));
       }
-      // Fill remaining with distractor images (milk, sugar, pancake, egg)
       if (foils.length < 3) {
         const available = distractorPool.filter(p => !foils.includes(p));
         foils = foils.concat(sample(available, 3 - foils.length));
@@ -475,7 +467,6 @@
 
     shuffled.forEach(pic => {
       combos.push({ word: pic.word, match: true, src: pickImageSrc(pic.word), iconic: pic.iconic, rating: pic.rating });
-      // Mismatch: pick a different word's image (no shared-image concern now that stirring has own images)
       const foilCandidates = shuffled.filter(p => p !== pic && p.category === pic.category);
       const foil = foilCandidates.length > 0
         ? foilCandidates[0]
@@ -542,9 +533,8 @@
     }];
   }
 
-  /* ---------- Sequencing (with undo/reset) ---------- */
+  /* ---------- Sequencing ---------- */
   function buildSequencing() {
-    // Closure variable to capture selection before DOM clears
     let capturedSequence = null;
 
     return [
@@ -575,7 +565,6 @@
         on_load: () => {
           const buttons = Array.from(document.querySelectorAll('.seq-btn'));
           const output = document.getElementById('seq-output');
-          // Find submit button (last jspsych-btn rendered)
           const allBtns = document.querySelectorAll('.jspsych-btn');
           const submit = allBtns[allBtns.length - 1];
           if (submit) { submit.disabled = true; submit.style.opacity = '0.5'; }
@@ -584,16 +573,15 @@
           const selected = [];
 
           function updateDisplay() {
-            output.textContent = selected.map((s, i) => `${i + 1}. ${s}`).join('  |  ');
-            // Store in closure for on_finish
+            if (output) output.textContent = selected.map((s, i) => `${i + 1}. ${s}`).join('  |  ');
             capturedSequence = selected.slice();
             if (selected.length === sequence_steps.length) {
-              submit.disabled = false; submit.style.opacity = '1';
+              if (submit) { submit.disabled = false; submit.style.opacity = '1'; }
             } else {
-              submit.disabled = true; submit.style.opacity = '0.5';
+              if (submit) { submit.disabled = true; submit.style.opacity = '0.5'; }
             }
-            undoBtn.disabled = selected.length === 0;
-            resetBtn.disabled = selected.length === 0;
+            if (undoBtn) undoBtn.disabled = selected.length === 0;
+            if (resetBtn) resetBtn.disabled = selected.length === 0;
             buttons.forEach(btn => {
               if (selected.includes(btn.dataset.step)) {
                 btn.classList.add('seq-selected');
@@ -613,19 +601,18 @@
             });
           });
 
-          undoBtn.addEventListener('click', () => {
+          if (undoBtn) undoBtn.addEventListener('click', () => {
             if (selected.length === 0) return;
             selected.pop();
             updateDisplay();
           });
 
-          resetBtn.addEventListener('click', () => {
+          if (resetBtn) resetBtn.addEventListener('click', () => {
             selected.length = 0;
             updateDisplay();
           });
         },
         on_finish: d => {
-          // Use closure-captured data (DOM may be gone)
           const entered = capturedSequence || [];
           d.entered_sequence = entered;
           d.correct_positions = entered.filter((s, i) => s === d.correct_order[i]).length;
@@ -635,13 +622,12 @@
     ];
   }
 
-  /* ---------- Foley (GROUP B sounds — 5 trials) ---------- */
+  /* ---------- Foley (GROUP B) ---------- */
   function buildFoley(delayed) {
     const pool = delayed ? foley_stimuli_groupB.slice(0, 3) : foley_stimuli_groupB;
 
     const trials = shuffle(pool).map((stim, idx) => {
       const audioSrc = pickAudioSrc(stim.audio);
-      // Randomize option display order
       const optionOrder = shuffle(stim.options.map((opt, i) => ({ text: opt, origIdx: i })));
       const displayOptions = optionOrder.map(o => o.text);
       const correctDisplayIdx = optionOrder.findIndex(o => o.origIdx === stim.correct);
@@ -666,6 +652,12 @@
 
           const play = document.getElementById(`foley-play-${idx}`);
           const status = document.getElementById(`foley-status-${idx}`);
+
+          // v5 FIX: Guard DOM element access
+          if (!play || !status) {
+            console.error('[foley] DOM elements not found');
+            return;
+          }
 
           play.addEventListener('click', () => {
             status.textContent = 'Playing… / 再生中…';
@@ -696,7 +688,7 @@
     ];
   }
 
-  /* ---------- NEW v4: Group A Foley (cross-group comparison) ---------- */
+  /* ---------- Group A Foley ---------- */
   function buildGroupAFoley() {
     const trials = shuffle(foley_stimuli_groupA).map((stim, idx) => {
       const audioSrc = pickAudioSrc(stim.audio);
@@ -724,6 +716,12 @@
 
           const play = document.getElementById(`foleyA-play-${idx}`);
           const status = document.getElementById(`foleyA-status-${idx}`);
+
+          // v5 FIX: Guard DOM element access
+          if (!play || !status) {
+            console.error('[foleyA] DOM elements not found');
+            return;
+          }
 
           play.addEventListener('click', () => {
             status.textContent = 'Playing… / 再生中…';
@@ -754,7 +752,7 @@
     ];
   }
 
-  /* ---------- Picture naming (GROUP B — all 6 words, with practice) ---------- */
+  /* ---------- Picture naming ---------- */
   function buildNaming() {
     let pool = PICTURES.filter(p => GROUP_B_TARGETS.includes(p.word));
     if (NAMING_VERBS_ONLY) pool = pool.filter(p => p.category === 'action' || p.category === 'process');
@@ -943,27 +941,60 @@
     return { intro, trials };
   }
 
-  /* ---------- Blind Retell ---------- */
+  /* ======================================================================
+   * v5 FIX: Blind Retell — added preparation step before recording
+   * Previously: intro → recording started immediately (confusing)
+   * Now:        intro → preparation screen with "Start Recording" → recording
+   * ====================================================================== */
   function buildBlindRetell() {
     const intro = {
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `<h2>Blind Retell / 視覚なしで説明</h2>
         <p>Without any pictures, <b>explain how to make a pancake</b> from memory.</p>
         <p>画像なしで<b>パンケーキの作り方</b>を記憶から説明してください。</p>
-        <p>You have up to <b>45 seconds</b>. Press "Done" when finished. / 最大<b>45秒間</b>。終わったら「完了」を押してください。</p>`,
+        <p>You will have up to <b>45 seconds</b>. Press "Done" when finished.</p>
+        <p>最大<b>45秒間</b>です。終わったら「完了」を押してください。</p>`,
       choices: ['Begin / 開始'],
       data: { task: 'blind_retell_intro' }
     };
 
+    // v5 FIX: New preparation step — gives participant a clear moment to
+    // read what they need to do and press "Start Recording" when ready
+    const prepare = {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `<div style="max-width:600px;margin:0 auto;text-align:center;">
+        <div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;background:#f8f9fa;">
+          <div>
+            <p style="color:#333;font-size:18px;font-weight:bold;margin:0 0 8px 0;">🎤 Explain how to make a pancake</p>
+            <p style="color:#333;font-size:16px;margin:0;">パンケーキの作り方を説明してください</p>
+          </div>
+        </div>
+        <div style="margin-top:16px;padding:15px;background:#fff3cd;border-radius:8px;">
+          <p style="margin:0;"><b>Include:</b> ingredients, tools, steps, and any sounds or actions you remember.</p>
+          <p style="margin:4px 0 0 0;"><b>含めること：</b>材料、道具、手順、覚えている音や動作。</p>
+        </div>
+        <p style="margin-top:16px;color:#666;">Recording will start when you click the button below (up to 45 seconds).<br>
+        下のボタンをクリックすると録音が始まります（最大45秒間）。</p>
+      </div>`,
+      choices: ['Start Recording / 録音開始'],
+      data: { task: 'blind_retell_prepare' }
+    };
+
     const audioTrial = {
       type: T('jsPsychHtmlAudioResponse'),
-      stimulus: `<div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;">
-        <p style="color:#666;">(No visual cues / 視覚ヒントなし)</p>
-      </div><p style="margin-top:10px;color:#d32f2f;font-weight:bold;">🔴 Recording… up to 45s / 録音中… 最大45秒</p>`,
+      stimulus: `<div style="max-width:600px;margin:0 auto;text-align:center;">
+        <div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;background:#fff8f8;">
+          <div>
+            <p style="color:#333;font-size:16px;margin:0;">Explain how to make a pancake / パンケーキの作り方を説明</p>
+            <p style="color:#888;font-size:14px;margin:8px 0 0 0;">Ingredients → Tools → Steps → Sounds</p>
+          </div>
+        </div>
+        <p style="margin-top:12px;color:#d32f2f;font-weight:bold;font-size:18px;">🔴 Recording… up to 45s / 録音中… 最大45秒</p>
+      </div>`,
       recording_duration: 45000, show_done_button: true, done_button_label: 'Done / 完了', allow_playback: false, post_trial_gap: 800
     };
 
-    return [intro, ...micOrTextNodes(
+    return [intro, prepare, ...micOrTextNodes(
       audioTrial,
       'Explain how to make a pancake step by step.<br>パンケーキの作り方を順を追って説明してください。',
       { task: 'blind_retell', pid: currentPID, condition: testCondition, phase: 'post', needs_audio_scoring: true }
@@ -999,12 +1030,19 @@
     )];
   }
 
-  /* ---------- Likert (7 items for VR iconicity research) ---------- */
+  /* ======================================================================
+   * v5 FIX: Likert — reworded VR reuse question to work across conditions
+   * Old:  "I would like to use VR for learning English vocabulary again."
+   * New:  "If I had the chance to use VR for learning English vocabulary,
+   *        I would want to try it (again)."
+   * This allows comparison between VR participants (who experienced it)
+   * and non-VR participants (who can express desire/interest).
+   * ====================================================================== */
   function buildLikert() {
     return {
       type: T('jsPsychSurveyLikert'),
       preamble: `<h3>Training Feedback / トレーニングのフィードバック</h3>
-        <p>Rate your experience with the VR training. / VRトレーニングでの体験を評価してください。</p>
+        <p>Rate your experience with the training. / トレーニングでの体験を評価してください。</p>
         <p style="color:#888;">(1 = Strongly disagree / 全くそう思わない, 5 = Strongly agree / 強くそう思う)</p>`,
       questions: [
         {
@@ -1016,7 +1054,7 @@
           labels: ['1', '2', '3', '4', '5'], required: true, name: 'recall_objects'
         },
         {
-          prompt: 'The sounds in the VR environment helped me learn the vocabulary.<br>VR環境の音が語彙の学習に役立った。',
+          prompt: 'The sounds in the training environment helped me learn the vocabulary.<br>トレーニング環境の音が語彙の学習に役立った。',
           labels: ['1', '2', '3', '4', '5'], required: true, name: 'sound_helpfulness'
         },
         {
@@ -1024,7 +1062,7 @@
           labels: ['1', '2', '3', '4', '5'], required: true, name: 'iconicity_awareness'
         },
         {
-          prompt: 'The VR experience felt like a real cooking situation.<br>VR体験は本当の料理の場面のように感じた。',
+          prompt: 'The training experience felt like a real cooking situation.<br>トレーニング体験は本当の料理の場面のように感じた。',
           labels: ['1', '2', '3', '4', '5'], required: true, name: 'immersion'
         },
         {
@@ -1032,8 +1070,9 @@
           labels: ['1', '2', '3', '4', '5'], required: true, name: 'procedural_confidence'
         },
         {
-          prompt: 'I would like to use VR for learning English vocabulary again.<br>英語の語彙学習にまたVRを使いたい。',
-          labels: ['1', '2', '3', '4', '5'], required: true, name: 'willingness_reuse'
+          // v5 FIX: Conditional wording — works for both VR and non-VR conditions
+          prompt: 'If I had the chance to use VR for learning English vocabulary, I would want to try it (again).<br>英語の語彙学習にVRを使う機会があれば、（もう一度）試してみたい。',
+          labels: ['1', '2', '3', '4', '5'], required: true, name: 'willingness_vr'
         }
       ],
       button_label: 'Submit / 送信',
