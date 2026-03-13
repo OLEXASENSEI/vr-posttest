@@ -1,27 +1,44 @@
 /**
- * posttest.js — VR Post-Test Battery (CORRECTED v5)
+ * posttest.js — VR Post-Test Battery (CORRECTED v6)
  * GROUP B WORDS: sizzle, mix, stir (iconic) + pour, butter, flour (arbitrary)
  *
- * v5 FIXES (from v4):
- *  1. Blind Retell: Added preparation step with "Start Recording" button
- *     before recording begins (previously jumped straight to recording after
- *     intro, leaving participants confused by "(No visual cues)" screen)
- *  2. Likert: Reworded VR reuse question to be conditional ("If you had the
- *     chance...") so it works for both VR and non-VR conditions
- *  3. Mic gate: Applied same button-filtering fix as pretest v4 (filter out
- *     stimulus-embedded #mic-enable from jspsych-btn query)
- *  4. Mic gate loop_function: Fixed to use response instead of button_pressed
- *     (jsPsych 7 compatibility)
- *  5. Foley on_load: Added null guards for DOM elements
+ * v6 FIXES (from v5):
+ *  1. build4AFC: Added `delayed` parameter (was silently ignored).
+ *     Also removed the empty .choice-grid div from the stimulus — jsPsych
+ *     renders buttons outside the stimulus div so it never received the grid
+ *     CSS. Added CSS for #jspsych-html-button-response-btngroup so the choice
+ *     cards are laid out in a flex grid properly.
+ *  2. buildNaming: Added `delayed` parameter (was silently ignored).
+ *  3. Foley button locking (buildFoley + buildGroupAFoley): Answer buttons
+ *     were clickable immediately before any audio had been played. Added
+ *     same lock/unlock pattern used in pretest v4: buttons are disabled until
+ *     the audio 'ended' event fires. Uses
+ *     '.jspsych-html-button-response-button button' selector (same fix as
+ *     pretest foley, since .answer-btn class no longer exists in jsPsych 7.3).
+ *  4. micInit: jsPsychInitializeMicrophone was running unconditionally BEFORE
+ *     the microphoneAvailable conditional block, so it fired even when the mic
+ *     gate was skipped / mic was unavailable, causing a redundant permission
+ *     dialog. Moved micInit inside the namingBlock conditional timeline so it
+ *     only runs when microphoneAvailable is true.
+ *  5. buildTeachSomeone: Added a prepare step between intro and recording,
+ *     matching the fix applied to buildBlindRetell in v5. Previously the
+ *     participant clicked "Begin" and went directly to a "(No visual cues)"
+ *     recording screen with no orientation.
+ *
+ * v5 FIXES retained:
+ *  1. Blind Retell: Preparation step before recording
+ *  2. Likert: Conditional VR reuse question wording
+ *  3. Mic gate: Button-filtering fix (filter #mic-enable from .jspsych-btn)
+ *  4. Mic gate: loop_function uses response not button_pressed (jsPsych 7)
+ *  5. Foley on_load: null guards for DOM elements
  *
  * v4 FIXES retained:
- *  1. Stirring images: Now uses stirring_01.png/02.png
- *  2. Mix/stir audio: Added to AUDIO_VARIANTS
- *  3. Foley: Restored mix/stir trials → 5 total
- *  4. Group A foley comparison: Added using crack/flip/whisk audio
- *  5. 4AFC: Added milk/sugar as additional distractor images
- *  6. Word forms: Standardized
- *  7. Save: Added optional POST endpoint
+ *  1. Stirring images: stirring_01.png/02.png
+ *  2. Mix/stir audio: In AUDIO_VARIANTS
+ *  3. Foley: 5 Group B trials
+ *  4. Group A foley comparison
+ *  5. 4AFC: milk/sugar distractor images
+ *  6. Save: optional POST endpoint
  */
 (function () {
   let jsPsych = null;
@@ -61,6 +78,21 @@
     .seq-undo-btn:hover{background:#f57c00;}
     .seq-reset-btn{margin-top:12px;margin-left:8px;background:#f44336;color:white;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;}
     .seq-reset-btn:hover{background:#d32f2f;}
+
+    /* FIX v6 BUG 1: 4AFC grid layout — jsPsych renders choice buttons outside
+       the stimulus div, so the .choice-grid div in the stimulus is never the
+       parent of the actual cards. Instead, style the jsPsych button group
+       container directly so choice-cards are displayed in a flex grid. */
+    #jspsych-html-button-response-btngroup {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      gap: 18px !important;
+      justify-content: center !important;
+      padding: 10px !important;
+    }
+    .jspsych-html-button-response-button {
+      display: inline-flex !important;
+    }
   `;
   document.head.appendChild(styleBlock);
 
@@ -126,14 +158,14 @@
   ];
 
   const foley_stimuli_groupA = [
-    { audio: 'crack', options: ['cracking an egg', 'stirring a pot'],     correct: 0, group: 'A', iconic: true,  rating: 5.40 },
-    { audio: 'flip',  options: ['flipping a pancake', 'pouring batter'], correct: 0, group: 'A', iconic: true,  rating: 5.70 },
-    { audio: 'whisk', options: ['whisking eggs', 'sizzling oil'],        correct: 0, group: 'A', iconic: true,  rating: 4.55 },
+    { audio: 'crack', options: ['cracking an egg', 'stirring a pot'],    correct: 0, group: 'A', iconic: true, rating: 5.40 },
+    { audio: 'flip',  options: ['flipping a pancake', 'pouring batter'], correct: 0, group: 'A', iconic: true, rating: 5.70 },
+    { audio: 'whisk', options: ['whisking eggs', 'sizzling oil'],        correct: 0, group: 'A', iconic: true, rating: 4.55 },
   ];
 
   const sequence_steps = ['Crack eggs', 'Mix flour and eggs', 'Heat the pan', 'Pour batter on pan', 'Flip when ready'];
 
-  /* ---------- helpers ---------- */
+  /* ---------- Helpers ---------- */
   const shuffle = (arr) => {
     const c = arr.slice();
     for (let i = c.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [c[i], c[j]] = [c[j], c[i]]; }
@@ -143,10 +175,21 @@
   const choiceMap = Object.fromEntries(PICTURES.map(p => [p.word, p.variants]));
   const randomVariant = (m, k) => { const l = m[k]; return l?.length ? l[Math.floor(Math.random() * l.length)] : null; };
   const asObject = (x) => { if (!x) return {}; if (typeof x === 'string') { try { return JSON.parse(x); } catch { return {}; } } return typeof x === 'object' ? x : {}; };
+  const ASSET_BUST = Date.now();
+  const assetUrl = (p) => (p && !p.startsWith('data:')) ? p + (p.includes('?') ? '&' : '?') + 'v=' + ASSET_BUST : p;
+
   const pickImageSrc = (w) => {
     const src = randomVariant(choiceMap, w);
-    if (!src) console.warn('[posttest] No image found for:', w);
-    return src || PLACEHOLDER_IMG;
+    if (!src) {
+      console.warn('[posttest] No image entry for word:', w, '— check PICTURES array');
+      return PLACEHOLDER_IMG;
+    }
+    const resolved = assetUrl(src);
+    // Async validation: logs 404s to console without blocking render
+    fetch(resolved, { method: 'HEAD' })
+      .then(r => { if (!r.ok) console.warn('[posttest] Image 404:', src, '→ HTTP', r.status); })
+      .catch(() => console.warn('[posttest] Image unreachable:', src));
+    return resolved;
   };
   const pickAudioSrc = (k) => {
     const src = randomVariant(AUDIO_VARIANTS, k);
@@ -156,7 +199,7 @@
 
   function choiceButton(word, src) {
     return `<button class="choice-card" data-choice="${word}" aria-label="option">
-      <img src="${src || PLACEHOLDER_IMG}" alt="choice" onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+      <img src="${src || PLACEHOLDER_IMG}" alt="${word}" onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
     </button>`;
   }
 
@@ -194,7 +237,7 @@
     ];
   }
 
-  /* ---------- Mic Gate — v5 FIX: button filtering + response check ---------- */
+  /* ---------- Mic Gate ---------- */
   function buildMicSetupGate({ required = true } = {}) {
     const gate = {
       type: T('jsPsychHtmlButtonResponse'),
@@ -223,14 +266,14 @@
       data: { task: 'mic_gate' },
       on_load: () => {
         const enableBtn = document.getElementById('mic-enable');
-        const statusEl = document.getElementById('mic-status');
-        const levelEl = document.getElementById('mic-level');
+        const statusEl  = document.getElementById('mic-status');
+        const levelEl   = document.getElementById('mic-level');
 
-        // v5 FIX: Filter out stimulus-embedded #mic-enable from button query
-        const allBtns = [...document.querySelectorAll('.jspsych-btn')];
+        // Filter out stimulus-embedded #mic-enable from the jsPsych button query
+        const allBtns    = [...document.querySelectorAll('.jspsych-btn')];
         const choiceBtns = allBtns.filter(b => b.id !== 'mic-enable');
-        const contBtn = choiceBtns.length >= 2 ? choiceBtns[choiceBtns.length - 2] : null;
-        const textBtn = choiceBtns.length >= 1 ? choiceBtns[choiceBtns.length - 1] : null;
+        const contBtn    = choiceBtns.length >= 2 ? choiceBtns[choiceBtns.length - 2] : null;
+        const textBtn    = choiceBtns.length >= 1 ? choiceBtns[choiceBtns.length - 1] : null;
 
         if (!enableBtn || !statusEl || !levelEl) {
           console.error('[mic_gate] DOM elements not found');
@@ -275,7 +318,7 @@
       loop_function: () => {
         if (!required) return false;
         const last = jsPsych.data.get().last(1).values()[0] || {};
-        // v5 FIX: jsPsych 7 uses 'response' (integer), not 'button_pressed'
+        // jsPsych 7 uses 'response' (integer), not 'button_pressed'
         return !(microphoneAvailable || last.response === 1);
       }
     };
@@ -381,13 +424,13 @@
 
     tl.push(buildMicSetupGate({ required: true }));
 
-    tl.push(...build4AFC(delayed));
+    tl.push(...build4AFC(delayed));         // FIX v6: now receives delayed
     if (!delayed) tl.push(...buildSpeededMatch());
     tl.push(...buildProceduralRecall());
     if (!delayed) tl.push(...buildSequencing());
     tl.push(...buildFoley(delayed));
     if (!delayed) tl.push(...buildGroupAFoley());
-    tl.push(...buildNaming(delayed));
+    tl.push(...buildNaming(delayed));        // FIX v6: now receives delayed
     if (!delayed) {
       const transfer = buildTransfer();
       tl.push(transfer.intro, ...transfer.trials);
@@ -399,8 +442,15 @@
     return tl;
   }
 
-  /* ---------- 4AFC ---------- */
-  function build4AFC() {
+  /* ==========================================================================
+   * FIX v6 BUG 1: build4AFC
+   *  - Added `delayed` parameter (was declared with no params)
+   *  - Removed the empty .choice-grid div from the stimulus — jsPsych renders
+   *    buttons outside the stimulus so the div was always empty and the grid
+   *    CSS never applied to the actual cards. The btngroup CSS above handles
+   *    layout now.
+   * ======================================================================= */
+  function build4AFC(delayed) {
     let pool = PICTURES.filter(p => GROUP_B_TARGETS.includes(p.word));
     if (FOURAFC_VERBS_ONLY) pool = pool.filter(p => p.category === 'action' || p.category === 'process');
     if (FOURAFC_MAX_ITEMS && Number.isFinite(FOURAFC_MAX_ITEMS)) pool = shuffle(pool).slice(0, FOURAFC_MAX_ITEMS);
@@ -420,16 +470,17 @@
         foils = foils.concat(sample(available, 3 - foils.length));
       }
       const choices = shuffle([targetPic, ...foils]).slice(0, 4);
-      const labels = choices.map(c => c.word);
-      const images = choices.map(c => pickImageSrc(c.word));
+      const labels  = choices.map(c => c.word);
+      const images  = choices.map(c => pickImageSrc(c.word));
       const correctIndex = labels.indexOf(targetPic.word);
 
       return {
         type: T('jsPsychHtmlButtonResponse'),
+        // FIX v6: Removed the empty .choice-grid div. Layout is handled by the
+        // CSS targeting #jspsych-html-button-response-btngroup (see styleBlock).
         stimulus: `<div style="text-align:center;">
           <h3 style="margin-bottom:20px;">Which picture is <em>${targetPic.word}</em>?<br>
           <span style="font-size:14px;">どの画像が「${targetPic.word}」ですか？</span></h3>
-          <div class="choice-grid"></div>
         </div>`,
         choices: labels,
         button_html: (choice, index) => choiceButton(labels[index], images[index]),
@@ -468,9 +519,7 @@
     shuffled.forEach(pic => {
       combos.push({ word: pic.word, match: true, src: pickImageSrc(pic.word), iconic: pic.iconic, rating: pic.rating });
       const foilCandidates = shuffled.filter(p => p !== pic && p.category === pic.category);
-      const foil = foilCandidates.length > 0
-        ? foilCandidates[0]
-        : shuffled.find(p => p !== pic);
+      const foil = foilCandidates.length > 0 ? foilCandidates[0] : shuffled.find(p => p !== pic);
       if (foil) combos.push({ word: pic.word, match: false, src: pickImageSrc(foil.word), iconic: pic.iconic, rating: pic.rating });
     });
 
@@ -564,11 +613,11 @@
         data: { task: 'sequencing', correct_order: sequence_steps, pid: currentPID, condition: testCondition, phase: 'post' },
         on_load: () => {
           const buttons = Array.from(document.querySelectorAll('.seq-btn'));
-          const output = document.getElementById('seq-output');
+          const output  = document.getElementById('seq-output');
           const allBtns = [...document.querySelectorAll('.jspsych-btn')].filter(b => !b.classList.contains('seq-btn'));
-          const submit = allBtns.length ? allBtns[allBtns.length - 1] : null;
+          const submit  = allBtns.length ? allBtns[allBtns.length - 1] : null;
           if (submit) { submit.disabled = true; submit.style.opacity = '0.5'; }
-          const undoBtn = document.getElementById('seq-undo');
+          const undoBtn  = document.getElementById('seq-undo');
           const resetBtn = document.getElementById('seq-reset');
           const selected = [];
 
@@ -580,15 +629,13 @@
             } else {
               if (submit) { submit.disabled = true; submit.style.opacity = '0.5'; }
             }
-            if (undoBtn) undoBtn.disabled = selected.length === 0;
+            if (undoBtn)  undoBtn.disabled  = selected.length === 0;
             if (resetBtn) resetBtn.disabled = selected.length === 0;
             buttons.forEach(btn => {
               if (selected.includes(btn.dataset.step)) {
-                btn.classList.add('seq-selected');
-                btn.disabled = true;
+                btn.classList.add('seq-selected'); btn.disabled = true;
               } else {
-                btn.classList.remove('seq-selected');
-                btn.disabled = false;
+                btn.classList.remove('seq-selected'); btn.disabled = false;
               }
             });
           }
@@ -601,16 +648,8 @@
             });
           });
 
-          if (undoBtn) undoBtn.addEventListener('click', () => {
-            if (selected.length === 0) return;
-            selected.pop();
-            updateDisplay();
-          });
-
-          if (resetBtn) resetBtn.addEventListener('click', () => {
-            selected.length = 0;
-            updateDisplay();
-          });
+          if (undoBtn)  undoBtn.addEventListener('click',  () => { if (selected.length) { selected.pop(); updateDisplay(); } });
+          if (resetBtn) resetBtn.addEventListener('click', () => { selected.length = 0; updateDisplay(); });
         },
         on_finish: d => {
           const entered = capturedSequence || [];
@@ -622,21 +661,29 @@
     ];
   }
 
-  /* ---------- Foley (GROUP B) ---------- */
+  /* ==========================================================================
+   * FIX v6 BUG 3: buildFoley (Group B)
+   * Answer buttons are now locked until the audio has finished playing at least
+   * once. Uses the same '.jspsych-html-button-response-button button' selector
+   * as the pretest foley fix (v4), since .answer-btn no longer exists in
+   * jsPsych 7.3.
+   * ======================================================================= */
   function buildFoley(delayed) {
     const pool = delayed ? foley_stimuli_groupB.slice(0, 3) : foley_stimuli_groupB;
 
     const trials = shuffle(pool).map((stim, idx) => {
-      const audioSrc = pickAudioSrc(stim.audio);
+      const audioSrc    = pickAudioSrc(stim.audio);
       const optionOrder = shuffle(stim.options.map((opt, i) => ({ text: opt, origIdx: i })));
-      const displayOptions = optionOrder.map(o => o.text);
+      const displayOptions    = optionOrder.map(o => o.text);
       const correctDisplayIdx = optionOrder.findIndex(o => o.origIdx === stim.correct);
 
       return {
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `<div style="text-align:center;">
           <button class="jspsych-btn" id="foley-play-${idx}">▶️ Play sound / 音を再生</button>
-          <p id="foley-status-${idx}" style="margin-top:10px;color:#666;">Listen before answering. / 答える前に聞いてください。</p>
+          <p id="foley-status-${idx}" style="margin-top:10px;color:#666;">
+            Listen before answering. / 答える前に聞いてください。
+          </p>
         </div>`,
         choices: displayOptions,
         data: {
@@ -646,24 +693,57 @@
           iconic: stim.iconic, iconicity_rating: stim.rating, phase: 'post'
         },
         on_load: function () {
-          const audio = new Audio(audioSrc);
-          audio.loop = false;
+          const audio  = new Audio(audioSrc);
+          audio.loop   = false;
           window.__foley_audio = audio;
 
-          const play = document.getElementById(`foley-play-${idx}`);
+          const play   = document.getElementById(`foley-play-${idx}`);
           const status = document.getElementById(`foley-status-${idx}`);
 
-          // v5 FIX: Guard DOM element access
           if (!play || !status) {
             console.error('[foley] DOM elements not found');
             return;
           }
 
+          // FIX v6: Lock answer buttons until audio has played at least once.
+          // jsPsych 7.3 renders choices inside .jspsych-html-button-response-button
+          // wrappers; .answer-btn no longer exists.
+          const answerBtns = Array.from(
+            document.querySelectorAll('.jspsych-html-button-response-button button')
+          );
+          let unlocked = false;
+
+          function lockAnswers(lock) {
+            answerBtns.forEach(b => { b.disabled = lock; b.style.opacity = lock ? '0.5' : '1'; });
+          }
+          function unlockAnswers() {
+            if (!unlocked) {
+              unlocked = true;
+              lockAnswers(false);
+              status.textContent = 'Choose the best option. / 答えを選択してください。';
+            }
+          }
+          lockAnswers(true);
+
+          audio.addEventListener('ended', () => {
+            unlockAnswers();
+            play.textContent = '🔁 Play Again / もう一度';
+            play.disabled = false;
+          }, { once: true });
+          audio.addEventListener('error', () => {
+            status.textContent = 'Audio failed — choose anyway. / 音声失敗。回答してください。';
+            unlockAnswers();
+          }, { once: true });
+
           play.addEventListener('click', () => {
             status.textContent = 'Playing… / 再生中…';
+            play.disabled = true;
             audio.currentTime = 0;
-            audio.play().then(() => { setTimeout(() => { status.textContent = 'Choose the best option. / 答えを選択してください。'; }, 500); })
-              .catch(() => { status.textContent = 'Audio failed. / 音声の再生に失敗しました。'; });
+            audio.play().catch(() => {
+              status.textContent = 'Audio failed. / 音声の再生に失敗しました。';
+              unlockAnswers();
+              play.disabled = false;
+            });
           });
         },
         on_finish: (d) => {
@@ -681,26 +761,32 @@
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `<h2>Sound Recognition / 音声認識</h2>
           <p>Play the sound, then choose what it represents.</p>
-          <p>音を再生し、何を表しているかを選択してください。</p>`,
+          <p>音を再生し、何を表しているかを選択してください。</p>
+          <p style="color:#888;">You must listen before you can answer. / 聞いてから回答できます。</p>`,
         choices: ['Begin / 開始']
       },
       ...trials
     ];
   }
 
-  /* ---------- Group A Foley ---------- */
+  /* ==========================================================================
+   * FIX v6 BUG 3 (continued): buildGroupAFoley
+   * Same foley button-locking fix applied to Group A trials.
+   * ======================================================================= */
   function buildGroupAFoley() {
     const trials = shuffle(foley_stimuli_groupA).map((stim, idx) => {
-      const audioSrc = pickAudioSrc(stim.audio);
+      const audioSrc    = pickAudioSrc(stim.audio);
       const optionOrder = shuffle(stim.options.map((opt, i) => ({ text: opt, origIdx: i })));
-      const displayOptions = optionOrder.map(o => o.text);
+      const displayOptions    = optionOrder.map(o => o.text);
       const correctDisplayIdx = optionOrder.findIndex(o => o.origIdx === stim.correct);
 
       return {
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `<div style="text-align:center;">
           <button class="jspsych-btn" id="foleyA-play-${idx}">▶️ Play sound / 音を再生</button>
-          <p id="foleyA-status-${idx}" style="margin-top:10px;color:#666;">Listen before answering. / 答える前に聞いてください。</p>
+          <p id="foleyA-status-${idx}" style="margin-top:10px;color:#666;">
+            Listen before answering. / 答える前に聞いてください。
+          </p>
         </div>`,
         choices: displayOptions,
         data: {
@@ -710,24 +796,55 @@
           iconic: stim.iconic, iconicity_rating: stim.rating, phase: 'post'
         },
         on_load: function () {
-          const audio = new Audio(audioSrc);
-          audio.loop = false;
+          const audio  = new Audio(audioSrc);
+          audio.loop   = false;
           window.__foley_audio = audio;
 
-          const play = document.getElementById(`foleyA-play-${idx}`);
+          const play   = document.getElementById(`foleyA-play-${idx}`);
           const status = document.getElementById(`foleyA-status-${idx}`);
 
-          // v5 FIX: Guard DOM element access
           if (!play || !status) {
             console.error('[foleyA] DOM elements not found');
             return;
           }
 
+          // FIX v6: Same button-locking as Group B foley
+          const answerBtns = Array.from(
+            document.querySelectorAll('.jspsych-html-button-response-button button')
+          );
+          let unlocked = false;
+
+          function lockAnswers(lock) {
+            answerBtns.forEach(b => { b.disabled = lock; b.style.opacity = lock ? '0.5' : '1'; });
+          }
+          function unlockAnswers() {
+            if (!unlocked) {
+              unlocked = true;
+              lockAnswers(false);
+              status.textContent = 'Choose the best option. / 答えを選択してください。';
+            }
+          }
+          lockAnswers(true);
+
+          audio.addEventListener('ended', () => {
+            unlockAnswers();
+            play.textContent = '🔁 Play Again / もう一度';
+            play.disabled = false;
+          }, { once: true });
+          audio.addEventListener('error', () => {
+            status.textContent = 'Audio failed — choose anyway. / 音声失敗。回答してください。';
+            unlockAnswers();
+          }, { once: true });
+
           play.addEventListener('click', () => {
             status.textContent = 'Playing… / 再生中…';
+            play.disabled = true;
             audio.currentTime = 0;
-            audio.play().then(() => { setTimeout(() => { status.textContent = 'Choose the best option. / 答えを選択してください。'; }, 500); })
-              .catch(() => { status.textContent = 'Audio failed. / 音声の再生に失敗しました。'; });
+            audio.play().catch(() => {
+              status.textContent = 'Audio failed. / 音声の再生に失敗しました。';
+              unlockAnswers();
+              play.disabled = false;
+            });
           });
         },
         on_finish: (d) => {
@@ -745,15 +862,24 @@
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `<h2>More Sounds / さらに音声</h2>
           <p>A few more cooking sounds to identify.</p>
-          <p>さらにいくつかの料理の音を識別してください。</p>`,
+          <p>さらにいくつかの料理の音を識別してください。</p>
+          <p style="color:#888;">You must listen before you can answer. / 聞いてから回答できます。</p>`,
         choices: ['Continue / 続行']
       },
       ...trials
     ];
   }
 
-  /* ---------- Picture naming ---------- */
-  function buildNaming() {
+  /* ==========================================================================
+   * FIX v6 BUG 2 + BUG 4: buildNaming
+   *  BUG 2: Added `delayed` parameter (was declared with no params).
+   *  BUG 4: jsPsychInitializeMicrophone (micInit) was placed OUTSIDE and
+   *    BEFORE the microphoneAvailable conditional block, so it ran even when
+   *    the mic gate was skipped/refused, showing a redundant permission dialog.
+   *    Fixed by moving micInit INSIDE namingBlock.timeline so it only runs
+   *    when microphoneAvailable is true.
+   * ======================================================================= */
+  function buildNaming(delayed) {
     let pool = PICTURES.filter(p => GROUP_B_TARGETS.includes(p.word));
     if (NAMING_VERBS_ONLY) pool = pool.filter(p => p.category === 'action' || p.category === 'process');
     if (NAMING_MAX_ITEMS && Number.isFinite(NAMING_MAX_ITEMS)) pool = shuffle(pool).slice(0, NAMING_MAX_ITEMS);
@@ -763,6 +889,9 @@
       iconic: pic.iconic, rating: pic.rating
     }));
 
+    // FIX v6 BUG 4: micInit moved inside namingBlock.timeline (below) so it
+    // only runs when microphoneAvailable === true. Previously it was outside
+    // and before the conditional block.
     const micInit = {
       type: T('jsPsychInitializeMicrophone'),
       data: { task: 'mic_init' },
@@ -834,8 +963,7 @@
         category: jsPsych.timelineVariable('category'),
         iconic: jsPsych.timelineVariable('iconic'),
         iconicity_rating: jsPsych.timelineVariable('rating'),
-        pid: currentPID, condition: testCondition,
-        word_group: 'B', phase: 'post'
+        pid: currentPID, condition: testCondition, word_group: 'B', phase: 'post'
       })
     };
 
@@ -862,11 +990,13 @@
         iconic: jsPsych.timelineVariable('iconic'),
         iconicity_rating: jsPsych.timelineVariable('rating'),
         pid: currentPID, condition: testCondition,
-        word_group: 'B', phase: 'post',
-        needs_audio_scoring: true
+        word_group: 'B', phase: 'post', needs_audio_scoring: true
       })
     };
 
+    // FIX v6 BUG 4: micInit is now the FIRST item inside namingBlock.timeline.
+    // The entire block is conditional on microphoneAvailable, so micInit only
+    // runs once mic access is already confirmed — no surprise permission dialogs.
     const namingBlock = {
       timeline: [
         {
@@ -876,6 +1006,7 @@
             <p>英語で物・動作・音・匂いを説明してください。</p>`,
           choices: ['Continue / 続行']
         },
+        micInit,   // <-- moved here: only runs when microphoneAvailable is true
         practiceIntro, practicePrepare, practiceRecord, practiceFeedback,
         { timeline: [prepTrial, recordTrial], timeline_variables: items, randomize_order: true }
       ],
@@ -891,7 +1022,8 @@
       conditional_function: () => SKIP_NAMING_IF_NO_MIC && !microphoneAvailable
     };
 
-    return [micInit, namingBlock, skipMsg];
+    // FIX v6 BUG 4: micInit removed from here — it's now inside namingBlock
+    return [namingBlock, skipMsg];
   }
 
   /* ---------- Transfer recognition ---------- */
@@ -941,11 +1073,7 @@
     return { intro, trials };
   }
 
-  /* ======================================================================
-   * v5 FIX: Blind Retell — added preparation step before recording
-   * Previously: intro → recording started immediately (confusing)
-   * Now:        intro → preparation screen with "Start Recording" → recording
-   * ====================================================================== */
+  /* ---------- Blind Retell (v5 fix retained: prepare step) ---------- */
   function buildBlindRetell() {
     const intro = {
       type: T('jsPsychHtmlButtonResponse'),
@@ -958,8 +1086,6 @@
       data: { task: 'blind_retell_intro' }
     };
 
-    // v5 FIX: New preparation step — gives participant a clear moment to
-    // read what they need to do and press "Start Recording" when ready
     const prepare = {
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `<div style="max-width:600px;margin:0 auto;text-align:center;">
@@ -1001,7 +1127,13 @@
     )];
   }
 
-  /* ---------- Teach Someone ---------- */
+  /* ==========================================================================
+   * FIX v6 BUG 5: buildTeachSomeone
+   * Added a prepare step between intro and recording, matching the fix applied
+   * to buildBlindRetell in v5. Previously the participant clicked "Begin" on
+   * the intro and went directly to a "(No visual cues)" recording screen with
+   * no orientation — now they see a clear "Start Recording" prepare screen.
+   * ======================================================================= */
   function buildTeachSomeone() {
     const intro = {
       type: T('jsPsychHtmlButtonResponse'),
@@ -1010,34 +1142,56 @@
         <p>料理をしたことのない友だちにパンケーキの作り方を教えてください。</p>
         <p>Include: tools, ingredients, key actions, safety/timing tips, success checks.</p>
         <p>含めること：道具、材料、主な動作、安全・時間のコツ、成功の確認方法。</p>
-        <p>You have up to <b>60 seconds</b>. Press "Done" when finished. / 最大<b>60秒間</b>。終わったら「完了」を押してください。</p>`,
+        <p>You have up to <b>60 seconds</b>. Press "Done" when finished.<br>
+        最大<b>60秒間</b>。終わったら「完了」を押してください。</p>`,
       choices: ['Begin / 開始'],
       data: { task: 'teach_intro' }
     };
 
+    // FIX v6 BUG 5: New prepare step — gives participant a clear moment to
+    // orient before recording starts, matching the blind retell fix in v5.
+    const prepare = {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `<div style="max-width:600px;margin:0 auto;text-align:center;">
+        <div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;background:#f8f9fa;">
+          <div>
+            <p style="color:#333;font-size:18px;font-weight:bold;margin:0 0 8px 0;">🎤 Teach a friend to make a pancake</p>
+            <p style="color:#333;font-size:16px;margin:0;">友だちにパンケーキの作り方を教えてください</p>
+          </div>
+        </div>
+        <div style="margin-top:16px;padding:15px;background:#fff3cd;border-radius:8px;">
+          <p style="margin:0;"><b>Include:</b> tools, ingredients, steps, safety tips, and how to know when it's done.</p>
+          <p style="margin:4px 0 0 0;"><b>含めること：</b>道具、材料、手順、安全のコツ、完成の確認方法。</p>
+        </div>
+        <p style="margin-top:16px;color:#666;">Recording will start when you click the button below (up to 60 seconds).<br>
+        下のボタンをクリックすると録音が始まります（最大60秒間）。</p>
+      </div>`,
+      choices: ['Start Recording / 録音開始'],
+      data: { task: 'teach_prepare' }
+    };
+
     const audioTrial = {
       type: T('jsPsychHtmlAudioResponse'),
-      stimulus: `<div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;">
-        <p style="color:#666;">(No visual cues / 視覚ヒントなし)</p>
-      </div><p style="margin-top:10px;color:#d32f2f;font-weight:bold;">🔴 Teaching… up to 60s / 説明中… 最大60秒</p>`,
+      stimulus: `<div style="max-width:600px;margin:0 auto;text-align:center;">
+        <div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;background:#fff8f8;">
+          <div>
+            <p style="color:#333;font-size:16px;margin:0;">Teach a friend to make a pancake / 友だちに教える</p>
+            <p style="color:#888;font-size:14px;margin:8px 0 0 0;">Tools → Ingredients → Steps → Tips → Done check</p>
+          </div>
+        </div>
+        <p style="margin-top:12px;color:#d32f2f;font-weight:bold;font-size:18px;">🔴 Teaching… up to 60s / 説明中… 最大60秒</p>
+      </div>`,
       recording_duration: 60000, show_done_button: true, done_button_label: 'Done / 完了', allow_playback: false, post_trial_gap: 800
     };
 
-    return [intro, ...micOrTextNodes(
+    return [intro, prepare, ...micOrTextNodes(
       audioTrial,
       'Teach a beginner how to make a pancake.<br>初心者にパンケーキの作り方を教えてください。',
       { task: 'teach_someone', pid: currentPID, condition: testCondition, phase: 'post', needs_audio_scoring: true }
     )];
   }
 
-  /* ======================================================================
-   * v5 FIX: Likert — reworded VR reuse question to work across conditions
-   * Old:  "I would like to use VR for learning English vocabulary again."
-   * New:  "If I had the chance to use VR for learning English vocabulary,
-   *        I would want to try it (again)."
-   * This allows comparison between VR participants (who experienced it)
-   * and non-VR participants (who can express desire/interest).
-   * ====================================================================== */
+  /* ---------- Likert (v5 conditional VR wording retained) ---------- */
   function buildLikert() {
     return {
       type: T('jsPsychSurveyLikert'),
@@ -1070,7 +1224,7 @@
           labels: ['1', '2', '3', '4', '5'], required: true, name: 'procedural_confidence'
         },
         {
-          // v5 FIX: Conditional wording — works for both VR and non-VR conditions
+          // Conditional wording — works for both VR and non-VR conditions
           prompt: 'If I had the chance to use VR for learning English vocabulary, I would want to try it (again).<br>英語の語彙学習にVRを使う機会があれば、（もう一度）試してみたい。',
           labels: ['1', '2', '3', '4', '5'], required: true, name: 'willingness_vr'
         }
