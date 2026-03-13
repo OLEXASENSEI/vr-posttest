@@ -1,6 +1,13 @@
 /**
- * posttest.js — VR Post-Test Battery (CORRECTED v6)
+ * posttest.js — VR Post-Test Battery (CORRECTED v6.1)
  * GROUP B WORDS: sizzle, mix, stir (iconic) + pour, butter, flour (arbitrary)
+ *
+ * v6.1 FIXES (from v6):
+ *  1. Removed cache-busting query strings from assetUrl — was breaking image
+ *     loading on local/simple servers (img/x.png?v=174… → 404).
+ *  2. Removed async HEAD-fetch image validation from pickImageSrc — caused
+ *     false warnings on file:// and added no user-visible benefit.
+ *  3. Removed random query string from PRACTICE_IMG in practiceImgHTML.
  *
  * v6 FIXES (from v5):
  *  1. build4AFC: Added `delayed` parameter (was silently ignored).
@@ -57,9 +64,10 @@
   const FOURAFC_VERBS_ONLY = false;
   const FOURAFC_MAX_ITEMS  = 6;
 
+  // FIX v6.1: Removed cache-busting query string from PRACTICE_IMG usage
   const PRACTICE_IMG = 'img/park_scene.jpg';
   const practiceImgHTML = `
-    <img src="${PRACTICE_IMG}?v=${Math.random().toString(36).slice(2)}"
+    <img src="${PRACTICE_IMG}"
       alt="Practice scene" style="width:350px;height:auto;border-radius:8px;display:block;margin:0 auto;"
       onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{
         style:'width:350px;height:250px;background:#e0e0e0;border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto;',
@@ -175,22 +183,25 @@
   const choiceMap = Object.fromEntries(PICTURES.map(p => [p.word, p.variants]));
   const randomVariant = (m, k) => { const l = m[k]; return l?.length ? l[Math.floor(Math.random() * l.length)] : null; };
   const asObject = (x) => { if (!x) return {}; if (typeof x === 'string') { try { return JSON.parse(x); } catch { return {}; } } return typeof x === 'object' ? x : {}; };
-  const ASSET_BUST = Date.now();
-  const assetUrl = (p) => (p && !p.startsWith('data:')) ? p + (p.includes('?') ? '&' : '?') + 'v=' + ASSET_BUST : p;
 
+  // FIX v6.1: Removed cache-busting query strings — they break image loading
+  // on file:// and many simple local servers. The original appended
+  // ?v=<timestamp> to every asset URL, which causes 404s when the server
+  // doesn't strip query params from static file paths.
+  const assetUrl = (p) => p || '';
+
+  // FIX v6.1: Simplified pickImageSrc — removed the async HEAD-fetch
+  // validation that produced false-positive warnings on local setups and
+  // added no user-visible benefit.
   const pickImageSrc = (w) => {
     const src = randomVariant(choiceMap, w);
     if (!src) {
       console.warn('[posttest] No image entry for word:', w, '— check PICTURES array');
       return PLACEHOLDER_IMG;
     }
-    const resolved = assetUrl(src);
-    // Async validation: logs 404s to console without blocking render
-    fetch(resolved, { method: 'HEAD' })
-      .then(r => { if (!r.ok) console.warn('[posttest] Image 404:', src, '→ HTTP', r.status); })
-      .catch(() => console.warn('[posttest] Image unreachable:', src));
-    return resolved;
+    return src;
   };
+
   const pickAudioSrc = (k) => {
     const src = randomVariant(AUDIO_VARIANTS, k);
     if (!src) console.warn('[posttest] No audio found for:', k);
@@ -424,13 +435,13 @@
 
     tl.push(buildMicSetupGate({ required: true }));
 
-    tl.push(...build4AFC(delayed));         // FIX v6: now receives delayed
+    tl.push(...build4AFC(delayed));
     if (!delayed) tl.push(...buildSpeededMatch());
     tl.push(...buildProceduralRecall());
     if (!delayed) tl.push(...buildSequencing());
     tl.push(...buildFoley(delayed));
     if (!delayed) tl.push(...buildGroupAFoley());
-    tl.push(...buildNaming(delayed));        // FIX v6: now receives delayed
+    tl.push(...buildNaming(delayed));
     if (!delayed) {
       const transfer = buildTransfer();
       tl.push(transfer.intro, ...transfer.trials);
@@ -443,12 +454,7 @@
   }
 
   /* ==========================================================================
-   * FIX v6 BUG 1: build4AFC
-   *  - Added `delayed` parameter (was declared with no params)
-   *  - Removed the empty .choice-grid div from the stimulus — jsPsych renders
-   *    buttons outside the stimulus so the div was always empty and the grid
-   *    CSS never applied to the actual cards. The btngroup CSS above handles
-   *    layout now.
+   * build4AFC
    * ======================================================================= */
   function build4AFC(delayed) {
     let pool = PICTURES.filter(p => GROUP_B_TARGETS.includes(p.word));
@@ -476,8 +482,6 @@
 
       return {
         type: T('jsPsychHtmlButtonResponse'),
-        // FIX v6: Removed the empty .choice-grid div. Layout is handled by the
-        // CSS targeting #jspsych-html-button-response-btngroup (see styleBlock).
         stimulus: `<div style="text-align:center;">
           <h3 style="margin-bottom:20px;">Which picture is <em>${targetPic.word}</em>?<br>
           <span style="font-size:14px;">どの画像が「${targetPic.word}」ですか？</span></h3>
@@ -662,11 +666,7 @@
   }
 
   /* ==========================================================================
-   * FIX v6 BUG 3: buildFoley (Group B)
-   * Answer buttons are now locked until the audio has finished playing at least
-   * once. Uses the same '.jspsych-html-button-response-button button' selector
-   * as the pretest foley fix (v4), since .answer-btn no longer exists in
-   * jsPsych 7.3.
+   * buildFoley (Group B)
    * ======================================================================= */
   function buildFoley(delayed) {
     const pool = delayed ? foley_stimuli_groupB.slice(0, 3) : foley_stimuli_groupB;
@@ -705,9 +705,6 @@
             return;
           }
 
-          // FIX v6: Lock answer buttons until audio has played at least once.
-          // jsPsych 7.3 renders choices inside .jspsych-html-button-response-button
-          // wrappers; .answer-btn no longer exists.
           const answerBtns = Array.from(
             document.querySelectorAll('.jspsych-html-button-response-button button')
           );
@@ -770,8 +767,7 @@
   }
 
   /* ==========================================================================
-   * FIX v6 BUG 3 (continued): buildGroupAFoley
-   * Same foley button-locking fix applied to Group A trials.
+   * buildGroupAFoley
    * ======================================================================= */
   function buildGroupAFoley() {
     const trials = shuffle(foley_stimuli_groupA).map((stim, idx) => {
@@ -808,7 +804,6 @@
             return;
           }
 
-          // FIX v6: Same button-locking as Group B foley
           const answerBtns = Array.from(
             document.querySelectorAll('.jspsych-html-button-response-button button')
           );
@@ -871,13 +866,7 @@
   }
 
   /* ==========================================================================
-   * FIX v6 BUG 2 + BUG 4: buildNaming
-   *  BUG 2: Added `delayed` parameter (was declared with no params).
-   *  BUG 4: jsPsychInitializeMicrophone (micInit) was placed OUTSIDE and
-   *    BEFORE the microphoneAvailable conditional block, so it ran even when
-   *    the mic gate was skipped/refused, showing a redundant permission dialog.
-   *    Fixed by moving micInit INSIDE namingBlock.timeline so it only runs
-   *    when microphoneAvailable is true.
+   * buildNaming
    * ======================================================================= */
   function buildNaming(delayed) {
     let pool = PICTURES.filter(p => GROUP_B_TARGETS.includes(p.word));
@@ -889,9 +878,6 @@
       iconic: pic.iconic, rating: pic.rating
     }));
 
-    // FIX v6 BUG 4: micInit moved inside namingBlock.timeline (below) so it
-    // only runs when microphoneAvailable === true. Previously it was outside
-    // and before the conditional block.
     const micInit = {
       type: T('jsPsychInitializeMicrophone'),
       data: { task: 'mic_init' },
@@ -994,9 +980,6 @@
       })
     };
 
-    // FIX v6 BUG 4: micInit is now the FIRST item inside namingBlock.timeline.
-    // The entire block is conditional on microphoneAvailable, so micInit only
-    // runs once mic access is already confirmed — no surprise permission dialogs.
     const namingBlock = {
       timeline: [
         {
@@ -1006,7 +989,7 @@
             <p>英語で物・動作・音・匂いを説明してください。</p>`,
           choices: ['Continue / 続行']
         },
-        micInit,   // <-- moved here: only runs when microphoneAvailable is true
+        micInit,
         practiceIntro, practicePrepare, practiceRecord, practiceFeedback,
         { timeline: [prepTrial, recordTrial], timeline_variables: items, randomize_order: true }
       ],
@@ -1022,7 +1005,6 @@
       conditional_function: () => SKIP_NAMING_IF_NO_MIC && !microphoneAvailable
     };
 
-    // FIX v6 BUG 4: micInit removed from here — it's now inside namingBlock
     return [namingBlock, skipMsg];
   }
 
@@ -1073,7 +1055,7 @@
     return { intro, trials };
   }
 
-  /* ---------- Blind Retell (v5 fix retained: prepare step) ---------- */
+  /* ---------- Blind Retell ---------- */
   function buildBlindRetell() {
     const intro = {
       type: T('jsPsychHtmlButtonResponse'),
@@ -1128,11 +1110,7 @@
   }
 
   /* ==========================================================================
-   * FIX v6 BUG 5: buildTeachSomeone
-   * Added a prepare step between intro and recording, matching the fix applied
-   * to buildBlindRetell in v5. Previously the participant clicked "Begin" on
-   * the intro and went directly to a "(No visual cues)" recording screen with
-   * no orientation — now they see a clear "Start Recording" prepare screen.
+   * buildTeachSomeone
    * ======================================================================= */
   function buildTeachSomeone() {
     const intro = {
@@ -1148,8 +1126,6 @@
       data: { task: 'teach_intro' }
     };
 
-    // FIX v6 BUG 5: New prepare step — gives participant a clear moment to
-    // orient before recording starts, matching the blind retell fix in v5.
     const prepare = {
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `<div style="max-width:600px;margin:0 auto;text-align:center;">
@@ -1191,7 +1167,7 @@
     )];
   }
 
-  /* ---------- Likert (v5 conditional VR wording retained) ---------- */
+  /* ---------- Likert ---------- */
   function buildLikert() {
     return {
       type: T('jsPsychSurveyLikert'),
@@ -1224,7 +1200,6 @@
           labels: ['1', '2', '3', '4', '5'], required: true, name: 'procedural_confidence'
         },
         {
-          // Conditional wording — works for both VR and non-VR conditions
           prompt: 'If I had the chance to use VR for learning English vocabulary, I would want to try it (again).<br>英語の語彙学習にVRを使う機会があれば、（もう一度）試してみたい。',
           labels: ['1', '2', '3', '4', '5'], required: true, name: 'willingness_vr'
         }
