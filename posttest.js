@@ -1,5 +1,5 @@
 /**
- * posttest.js — VR Post-Test Battery (CORRECTED v6.1)
+ * posttest.js — VR Post-Test Battery (CORRECTED v6.1.2)
  * GROUP B WORDS: sizzle, mix, stir (iconic) + pour, butter, flour (arbitrary)
  *
  * v6.1 FIXES (from v6):
@@ -463,6 +463,8 @@
 
     const distractorPool = PICTURES.filter(p => !GROUP_B_TARGETS.includes(p.word));
 
+    const LABELS = ['A', 'B', 'C', 'D'];
+
     const trials = shuffle(pool).map(targetPic => {
       const eligible = pool.filter(p => p.word !== targetPic.word);
       const sameCategory = eligible.filter(p => p.category === targetPic.category);
@@ -476,20 +478,33 @@
         foils = foils.concat(sample(available, 3 - foils.length));
       }
       const choices = shuffle([targetPic, ...foils]).slice(0, 4);
-      const labels  = choices.map(c => c.word);
+      const words   = choices.map(c => c.word);
       const images  = choices.map(c => pickImageSrc(c.word));
-      const correctIndex = labels.indexOf(targetPic.word);
+      const correctIndex = words.indexOf(targetPic.word);
+
+      // v6.2 FIX: Images are rendered in the stimulus HTML directly instead of
+      // inside button_html, which broke across jsPsych 7 versions. Participants
+      // click a simple A/B/C/D button that corresponds to the labeled image.
+      const imageGridHTML = choices.map((c, i) => `
+        <div style="width:200px;text-align:center;">
+          <div style="font-size:20px;font-weight:bold;margin-bottom:6px;color:#1a237e;">${LABELS[i]}</div>
+          <img src="${images[i]}" alt="Option ${LABELS[i]}"
+            style="width:200px;height:150px;object-fit:cover;border-radius:12px;border:1px solid #ccc;box-shadow:0 3px 12px rgba(0,0,0,.08);"
+            onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
+        </div>`).join('');
 
       return {
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `<div style="text-align:center;">
           <h3 style="margin-bottom:20px;">Which picture is <em>${targetPic.word}</em>?<br>
           <span style="font-size:14px;">どの画像が「${targetPic.word}」ですか？</span></h3>
+          <div style="display:flex;flex-wrap:wrap;gap:18px;justify-content:center;margin-bottom:10px;">
+            ${imageGridHTML}
+          </div>
         </div>`,
-        choices: labels,
-        button_html: (choice, index) => choiceButton(labels[index], images[index]),
+        choices: LABELS.slice(0, choices.length),
         data: {
-          task: '4afc', word: targetPic.word, choices: labels,
+          task: '4afc', word: targetPic.word, choices: words,
           correct: correctIndex, pid: currentPID, condition: testCondition,
           iconic: targetPic.iconic, iconicity_rating: targetPic.rating,
           word_group: 'B', phase: 'post'
