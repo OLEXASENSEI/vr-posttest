@@ -1,6 +1,39 @@
 /**
- * posttest.js — VR Post-Test Battery (CORRECTED v7.3)
- * GROUP B WORDS: sizzle, mix, stir (iconic) + pour, butter, flour (arbitrary)
+ * posttest.js — VR Post-Test Battery (CORRECTED v7.4)
+ * GROUP A WORDS: flip, crack, stir (iconic) + bowl, spatula, pan, spoon (arbitrary)
+ * GROUP B WORDS: sizzle, mix (iconic) + pour, butter, flour (arbitrary)
+ *
+ * v7.4 CHANGES (Group A composition + posttest Group A naming):
+ *  Aligning the test stimulus pool with what's actually trained in the VR
+ *  scenes (2D, 3D, Text). Whisk is not in the training; spoon and stir are.
+ *  This revision moves stir from Group B to Group A throughout, drops whisk
+ *  entirely, adds spoon as a Group A arbitrary item, and — most importantly
+ *  for pronunciation analysis — adds a Group A naming block at posttest so
+ *  Group A items have both pretest and posttest spontaneous-production data
+ *  for change-score analysis.
+ *   - PICTURES: added Group A entries (bowl, spatula, pan, spoon as utensils;
+ *     flip, crack as actions). The existing 'stir' entry stays.
+ *   - GROUP_A_OBJECTS / GROUP_A_ACTIONS: new constants for the Group A
+ *     naming block.
+ *   - GROUP_B_TARGETS / GROUP_B_ACTIONS: stir removed.
+ *   - transfer_words: whisk row deleted; stir row moved to group 'A';
+ *     spoon added as target_arbitrary, group 'A'.
+ *   - foley_stimuli_groupA: whisk row replaced with stir (uses existing
+ *     sounds/stir_*.mp3 audio variants). Group A foley back at 3 items.
+ *   - foley_stimuli_groupB: stir row removed. Group B foley now 3 items
+ *     (sizzle, mix, pour). Symmetric with Group A.
+ *   - AUDIO_VARIANTS: whisk entry removed.
+ *   - buildNamingTrials: parameterized to take a wordGroup argument so the
+ *     same helper builds both Group B (existing) and Group A (new) trials.
+ *   - buildNaming: appended a Group A naming block (intro + Stage 1 utensils
+ *     + Stage 2 actions, spontaneous-only) after the existing Group B
+ *     Stage 3 scenes. Practice and micInit are NOT repeated — the existing
+ *     Group B block already handled them.
+ *   - Naming order: Group B first (primary uncontaminated outcome, peak
+ *     attention), Group A second (pretest baseline available for change
+ *     score, slight fatigue acceptable).
+ *   - Group A naming follows the posttest convention: spontaneous-only,
+ *     no model playback, no scene description (scenes are Group B-specific).
  *
  * v7.3 FIXES (over v7.2):
  *  - Fixed Stage 3 silent image hiding: scene images and the naming
@@ -104,23 +137,43 @@
   /* ---------- STIMULI ---------- */
   const PICTURES = [
     // word = canonical target saved in data; display = natural label for image prompts
+
+    // GROUP A — actions (iconic) + utensils (arbitrary). Tested in pretest,
+    // trained in all conditions, and now also tested in posttest naming for
+    // pretest→posttest production change-score analysis.
+    { word: 'flip',    display: 'flipping', category: 'action',  iconic: true,  rating: 5.70, variants: ['img/flipping.jpg'] },
+    { word: 'crack',   display: 'cracking', category: 'action',  iconic: true,  rating: 5.40, variants: ['img/cracking.jpeg'] },
+    { word: 'stir',    display: 'stirring', category: 'action',  iconic: true,  rating: 4.82, variants: ['img/stirring_01.png', 'img/stirring_02.png'] },
+    { word: 'bowl',    display: 'bowl',     category: 'utensil', iconic: false, rating: 3.00, variants: ['img/bowl.jpg'] },
+    { word: 'spatula', display: 'spatula',  category: 'utensil', iconic: false, rating: 3.91, variants: ['img/spatula.jpg'] },
+    { word: 'pan',     display: 'pan',      category: 'utensil', iconic: false, rating: 3.45, variants: ['img/pan.jpg'] },
+    { word: 'spoon',   display: 'spoon',    category: 'utensil', iconic: false, rating: 4.30, variants: ['img/spoon.jpg'] },
+
+    // GROUP B — actions (iconic) + ingredients (arbitrary). Trained, tested
+    // only in posttest (no pretest exposure → uncontaminated production data).
     { word: 'sizzle',  display: 'sizzling', category: 'action', iconic: true,  rating: 5.30, variants: ['img/sizzling_01.png', 'img/sizzling_02.png'] },
     { word: 'mix',     display: 'mixing',   category: 'action', iconic: true,  rating: 5.10, variants: ['img/mixing_01.png',   'img/mixing_02.png'] },
-    { word: 'stir',    display: 'stirring', category: 'action', iconic: true,  rating: 4.82, variants: ['img/stirring_01.png', 'img/stirring_02.png'] },
     { word: 'pour',    display: 'pouring',  category: 'action', iconic: false, rating: 3.60, variants: ['img/pouring_01.png',  'img/pouring_02.png'] },
     { word: 'butter',  display: 'butter',   category: 'ingredient', iconic: false, rating: 3.50, variants: ['img/butter_01.png', 'img/butter_02.png'] },
     { word: 'flour',   display: 'flour',    category: 'ingredient', iconic: false, rating: 3.00, variants: ['img/flour_01.png',  'img/flour_02.png'] },
+
+    // Distractors / fillers (used in 4AFC and speeded match foil pools)
     { word: 'pancake', display: 'pancake',  category: 'food',       iconic: null, rating: null, variants: ['img/pancake_01.png', 'img/pancake_02.png'] },
     { word: 'egg',     display: 'egg',      category: 'object',     iconic: null, rating: null, variants: ['img/egg_01.png',     'img/egg_02.png'] },
     { word: 'milk',    display: 'milk',     category: 'ingredient', iconic: null, rating: null, variants: ['img/milk_01.png',    'img/milk_02.png'] },
     { word: 'sugar',   display: 'sugar',    category: 'ingredient', iconic: null, rating: null, variants: ['img/sugar_01.png',   'img/sugar_02.png'] },
   ];
 
-  const GROUP_B_TARGETS = ['sizzle', 'mix', 'stir', 'pour', 'butter', 'flour'];
+  // v7.4: Group A constants for the new posttest Group A naming block
+  const GROUP_A_TARGETS = ['flip', 'crack', 'stir', 'bowl', 'spatula', 'pan', 'spoon'];
+  const GROUP_A_OBJECTS = ['bowl', 'spatula', 'pan', 'spoon'];   // utensils
+  const GROUP_A_ACTIONS = ['flip', 'crack', 'stir'];              // iconic actions
+
+  const GROUP_B_TARGETS = ['sizzle', 'mix', 'pour', 'butter', 'flour'];
 
   // v7: Category splits for 4AFC and naming
   const GROUP_B_INGREDIENTS = ['butter', 'flour'];
-  const GROUP_B_ACTIONS = ['sizzle', 'mix', 'stir', 'pour'];
+  const GROUP_B_ACTIONS = ['sizzle', 'mix', 'pour'];
   const INGREDIENT_DISTRACTORS = ['milk', 'sugar'];  // from PICTURES, same category
 
   // v7: Scene stimuli for Stage 3 description (Group B context)
@@ -136,7 +189,6 @@
     pour:   ['sounds/pour_1.mp3',   'sounds/pour_2.mp3'],
     crack:  ['sounds/crack_1.mp3',  'sounds/crack_2.mp3'],
     flip:   ['sounds/flip_1.mp3',   'sounds/flip_2.mp3'],
-    whisk:  ['sounds/whisk_1.mp3',  'sounds/whisk_2.mp3'],
   };
 
   const PLACEHOLDER_IMG = `data:image/svg+xml,${encodeURIComponent(
@@ -144,16 +196,17 @@
   const PLACEHOLDER_AUDIO = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
 
   // v6.1.3: Fixed knife and salt classifications per Winter et al. database
+  // v7.4: whisk dropped; stir moved to Group A; spoon added as Group A arbitrary
   const transfer_words = [
     { word: 'flip',      pos: 'verb', iconic: true,  rating: 5.70, type: 'target_iconic',    trained: true,  group: 'A' },
     { word: 'crack',     pos: 'verb', iconic: true,  rating: 5.40, type: 'target_iconic',    trained: true,  group: 'A' },
-    { word: 'whisk',     pos: 'verb', iconic: true,  rating: 4.55, type: 'target_iconic',    trained: true,  group: 'A' },
+    { word: 'stir',      pos: 'verb', iconic: true,  rating: 4.82, type: 'target_iconic',    trained: true,  group: 'A' },
     { word: 'sizzle',    pos: 'verb', iconic: true,  rating: 5.30, type: 'target_iconic',    trained: true,  group: 'B' },
     { word: 'mix',       pos: 'verb', iconic: true,  rating: 5.10, type: 'target_iconic',    trained: true,  group: 'B' },
-    { word: 'stir',      pos: 'verb', iconic: true,  rating: 4.82, type: 'target_iconic',    trained: true,  group: 'B' },
     { word: 'bowl',      pos: 'noun', iconic: false, rating: 3.00, type: 'target_arbitrary', trained: true,  group: 'A' },
     { word: 'spatula',   pos: 'noun', iconic: false, rating: 3.91, type: 'target_arbitrary', trained: true,  group: 'A' },
     { word: 'pan',       pos: 'noun', iconic: false, rating: 3.45, type: 'target_arbitrary', trained: true,  group: 'A' },
+    { word: 'spoon',     pos: 'noun', iconic: false, rating: 4.30, type: 'target_arbitrary', trained: true,  group: 'A' },
     { word: 'pour',      pos: 'verb', iconic: false, rating: 3.60, type: 'target_arbitrary', trained: true,  group: 'B' },
     { word: 'butter',    pos: 'noun', iconic: false, rating: 3.50, type: 'target_arbitrary', trained: true,  group: 'B' },
     { word: 'flour',     pos: 'noun', iconic: false, rating: 3.00, type: 'target_arbitrary', trained: true,  group: 'B' },
@@ -166,17 +219,18 @@
     { word: 'salt',      pos: 'noun', iconic: true,  rating: 4.62, type: 'foil_iconic',      trained: false, group: 'foil' },
   ];
 
+  // v7.4: stir moved to Group A; whisk dropped (not in training).
+  // Group B foley now has 3 items (sizzle, mix, pour); Group A has 3 (crack, flip, stir).
   const foley_stimuli_groupB = [
     { audio: 'sizzle', target_word: 'sizzle', options: ['pancake sizzling', 'stirring dry flour'], correct: 0, group: 'B', iconic: true,  rating: 5.30 },
     { audio: 'mix',    target_word: 'mix',    options: ['mixing batter', 'pouring liquid'],        correct: 0, group: 'B', iconic: true,  rating: 5.10 },
-    { audio: 'stir',   target_word: 'stir',   options: ['stirring batter', 'cracking an egg'],     correct: 0, group: 'B', iconic: true,  rating: 4.82 },
     { audio: 'pour',   target_word: 'pour',   options: ['pouring batter', 'flipping a pancake'],   correct: 0, group: 'B', iconic: false, rating: 3.60 },
   ];
 
   const foley_stimuli_groupA = [
     { audio: 'crack', options: ['cracking an egg', 'stirring a pot'],    correct: 0, group: 'A', iconic: true, rating: 5.40 },
     { audio: 'flip',  options: ['flipping a pancake', 'pouring batter'], correct: 0, group: 'A', iconic: true, rating: 5.70 },
-    { audio: 'whisk', options: ['whisking eggs', 'sizzling oil'],        correct: 0, group: 'A', iconic: true, rating: 4.55 },
+    { audio: 'stir',  options: ['stirring batter', 'cracking an egg'],   correct: 0, group: 'A', iconic: true, rating: 4.82 },
   ];
 
   const sequence_steps = [
@@ -887,7 +941,9 @@
     };
 
     // Helper: build naming trials for a set of PICTURES items
-    function buildNamingTrials(pics, prompt, promptJP, stageName) {
+    // v7.4: wordGroup is now a parameter (was hardcoded 'B') so the same helper
+    // builds Group A and Group B trials.
+    function buildNamingTrials(pics, prompt, promptJP, stageName, wordGroup) {
       const items = shuffle(pics).map(pic => ({
         target: pic.word, display: displayWord(pic), category: pic.category, image: pickImageSrc(pic.word),
         iconic: pic.iconic, rating: pic.rating
@@ -913,7 +969,7 @@
           category: jsPsych.timelineVariable('category'), iconic: jsPsych.timelineVariable('iconic'),
           iconicity_rating: jsPsych.timelineVariable('rating'),
           pid: currentPID, condition: testCondition,
-          word_group: 'B', phase: 'post', modality: 'audio',
+          word_group: wordGroup, phase: 'post', modality: 'audio',
           stage: stageName, needs_audio_scoring: true
         }),
         on_finish: (d) => {
@@ -939,7 +995,7 @@
           category: jsPsych.timelineVariable('category'), iconic: jsPsych.timelineVariable('iconic'),
           iconicity_rating: jsPsych.timelineVariable('rating'),
           pid: currentPID, condition: testCondition,
-          word_group: 'B', phase: 'post', modality: 'text', stage: stageName
+          word_group: wordGroup, phase: 'post', modality: 'text', stage: stageName
         })
       };
 
@@ -1047,7 +1103,7 @@
         };
         inner.push(practiceBlock);
 
-        // Stage 1: Ingredients
+        // Stage 1: Ingredients (Group B)
         const ingredientPics = PICTURES.filter(p => GROUP_B_INGREDIENTS.includes(p.word));
         if (ingredientPics.length > 0) {
           inner.push({
@@ -1057,10 +1113,10 @@
               <p>料理の材料が表示されます。英語で名前を言ってください。</p>`,
             choices: ['Begin / 開始']
           });
-          inner.push(...buildNamingTrials(ingredientPics, 'What is this?', 'これは何ですか？', 'ingredient'));
+          inner.push(...buildNamingTrials(ingredientPics, 'What is this?', 'これは何ですか？', 'ingredient', 'B'));
         }
 
-        // Stage 2: Actions
+        // Stage 2: Actions (Group B)
         const actionPics = PICTURES.filter(p => GROUP_B_ACTIONS.includes(p.word));
         if (actionPics.length > 0) {
           inner.push({
@@ -1070,10 +1126,10 @@
               <p>料理の動作が表示されます。英語で何をしているか言ってください。</p>`,
             choices: ['Begin / 開始']
           });
-          inner.push(...buildNamingTrials(actionPics, 'What is happening?', '何をしていますか？', 'action'));
+          inner.push(...buildNamingTrials(actionPics, 'What is happening?', '何をしていますか？', 'action', 'B'));
         }
 
-        // Stage 3: Scene description (audio + text fallback)
+        // Stage 3: Scene description (Group B; audio + text fallback)
         if (POSTTEST_SCENES.length > 0) {
           inner.push({
             type: T('jsPsychHtmlButtonResponse'),
@@ -1084,6 +1140,51 @@
             choices: ['Begin / 開始']
           });
           inner.push(...buildSceneTrials());
+        }
+
+        // v7.4: GROUP A NAMING BLOCK
+        // Spontaneous-only (no model + repeat — that would re-teach Group A
+        // beyond what pretest already did and contaminate posttest production).
+        // Pretest already collected Group A spontaneous baselines, so these
+        // posttest trials enable pre→post change-score analysis on Group A
+        // production accuracy and pronunciation. No scene description for
+        // Group A (POSTTEST_SCENES are Group B-specific cooking contexts).
+        const groupAObjectPics = PICTURES.filter(p => GROUP_A_OBJECTS.includes(p.word));
+        const groupAActionPics = PICTURES.filter(p => GROUP_A_ACTIONS.includes(p.word));
+
+        if (groupAObjectPics.length > 0 || groupAActionPics.length > 0) {
+          inner.push({
+            type: T('jsPsychHtmlButtonResponse'),
+            stimulus: `<h2>Naming: Cooking Tools & Actions / 道具と動作の名前</h2>
+              <p>Now we'll name a few more cooking items and actions you saw in training.</p>
+              <p>トレーニングで見た道具や動作をいくつか名前を言ってもらいます。</p>
+              <p style="color:#666;">Same format as before: see the picture, say what it is in English. / 同じ形式です：画像を見て、英語で何かを言ってください。</p>`,
+            choices: ['Continue / 続行']
+          });
+        }
+
+        // Stage 1A: Utensils (Group A objects)
+        if (groupAObjectPics.length > 0) {
+          inner.push({
+            type: T('jsPsychHtmlButtonResponse'),
+            stimulus: `<h3>Part 4: Name the Tool / パート4：道具の名前</h3>
+              <p>You will see a cooking tool. Say its name in English.</p>
+              <p>料理の道具が表示されます。英語で名前を言ってください。</p>`,
+            choices: ['Begin / 開始']
+          });
+          inner.push(...buildNamingTrials(groupAObjectPics, 'What is this?', 'これは何ですか？', 'utensil', 'A'));
+        }
+
+        // Stage 2A: Actions (Group A)
+        if (groupAActionPics.length > 0) {
+          inner.push({
+            type: T('jsPsychHtmlButtonResponse'),
+            stimulus: `<h3>Part 5: Name the Action / パート5：動作の名前</h3>
+              <p>You will see a cooking action. Say what is happening in English.</p>
+              <p>料理の動作が表示されます。英語で何をしているか言ってください。</p>`,
+            choices: ['Begin / 開始']
+          });
+          inner.push(...buildNamingTrials(groupAActionPics, 'What is happening?', '何をしていますか？', 'action_groupA', 'A'));
         }
 
         return inner;
