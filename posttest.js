@@ -1,5 +1,5 @@
 /**
- * posttest.js — VR Post-Test Battery (CORRECTED v7)
+ * posttest.js — VR Post-Test Battery (CORRECTED v7.1)
  * GROUP B WORDS: sizzle, mix, stir (iconic) + pour, butter, flour (arbitrary)
  *
  * v7 CHANGES (task redesign over v6.1.3):
@@ -7,10 +7,22 @@
  *     distractors) and Actions block (sizzling, mixing, stirring, pouring —
  *     self-distracting within category). Prevents category giveaway.
  *  2. REDESIGN: Picture naming replaced with 3-stage progressive task:
- *     Stage 1 — Ingredient naming: "What is this?" → name → hear model → repeat
- *     Stage 2 — Action naming: "What is happening?" → name → hear model → repeat
+ *     Stage 1 — Ingredient naming: "What is this?" → 4s spontaneous response
+ *     Stage 2 — Action naming: "What is happening?" → 4s spontaneous response
  *     Stage 3 — Scene description: see cooking scene → 8s free description
- *  3. NEW ASSETS NEEDED: scene_cooking_B.jpg, scene_plating_B.jpg (Group B scenes)
+ *     NOTE: Unlike pretest, posttest does NOT play model audio or ask for a
+ *     repeat — that would contaminate the measurement of what was learned.
+ *  3. NEW ASSETS: scene_cooking_B.jpg, scene_plating_B.jpg (Group B scenes)
+ *
+ * v7.1 FIXES (over initial v7 implementation):
+ *  - Naming text fallback now actually reachable: removed outer mic gate so
+ *    per-item text fallbacks fire when no mic is available.
+ *  - Stage 3 scene description now has a text fallback (typed description).
+ *  - Practice naming trials gated on mic (text-typing practice is pointless).
+ *  - SKIP_NAMING_IF_NO_MIC default flipped to `false` (collect text data by
+ *    default rather than skipping the entire block); set to `true` to restore
+ *    the legacy "skip whole block with notification" behavior.
+ *  - Scene images added to preloader.
  *
  * v6.1.3 FIXES: knife/salt reclassified, Chrome mic gate fix
  */
@@ -24,7 +36,11 @@
   const q = Object.fromEntries(new URLSearchParams(location.search));
 
   /* ---------- CONFIG ---------- */
-  const SKIP_NAMING_IF_NO_MIC = true;
+  // v7.1: default flipped to false — without a mic, fall through to per-item
+  // text fallbacks (better than discarding the entire naming block).
+  // Set to true to restore the legacy "skip whole block + show notification"
+  // behavior.
+  const SKIP_NAMING_IF_NO_MIC = false;
 
   const NAMING_VERBS_ONLY  = false;
   const NAMING_MAX_ITEMS   = 6;
@@ -366,6 +382,8 @@
 
     const preloadImages = [...new Set(PICTURES.flatMap(p => p.variants))];
     preloadImages.push(PRACTICE_IMG);
+    // v7.1: include scene images so failures surface during preload
+    POSTTEST_SCENES.forEach(s => preloadImages.push(s.image));
     const preloadAudio = [...new Set(Object.values(AUDIO_VARIANTS).flat())];
     tl.push({
       type: T('jsPsychPreload'),
@@ -801,13 +819,14 @@
   }
 
   /* ==========================================================================
-   * buildNaming
-   * ======================================================================= */
-  /* ==========================================================================
    * buildNaming — v7: Progressive 3-stage naming (NO model playback)
    * Unlike pretest, posttest does NOT play the model audio or ask for repeat.
    * This is measuring what participants learned — giving the answer would
    * contaminate the measurement.
+   *
+   * v7.1: Per-item text fallback now actually reachable (outer mic gate
+   * removed). Practice trials and Stage 3 audio recording are gated on mic.
+   * Stage 3 has a typed-description text fallback when no mic.
    * ======================================================================= */
   function buildNaming(delayed) {
     const micInit = {
@@ -873,13 +892,62 @@
 
       return [
         { timeline: [recordAudio], timeline_variables: items, randomize_order: true, conditional_function: () => microphoneAvailable },
-        { timeline: [recordText], timeline_variables: items, randomize_order: true, conditional_function: () => !microphoneAvailable }
+        { timeline: [recordText],  timeline_variables: items, randomize_order: true, conditional_function: () => !microphoneAvailable }
       ];
     }
 
-    const tl = [];
+    // v7.1: Stage 3 scene description trials — audio + text fallback
+    function buildSceneTrials() {
+      const sceneItems = POSTTEST_SCENES.map(s => ({ ...s, imageUrl: s.image }));
 
-    // Mic-dependent block
+      const recordAudio = {
+        type: T('jsPsychHtmlAudioResponse'),
+        stimulus: () => {
+          const u = jsPsych.timelineVariable('imageUrl');
+          return `<div style="text-align:center;">
+            <img src="${u}" style="width:450px;border-radius:8px;" onerror="this.style.display='none'"/>
+            <p style="margin-top:15px;font-size:18px;"><b>Describe what you see, hear, and smell.</b></p>
+            <p style="color:#666;">見えるもの、聞こえるもの、匂いを説明してください。</p>
+            <div style="margin-top:12px;background:#ffebee;border-radius:8px;padding:12px;">
+              <p style="margin:0;color:#d32f2f;font-weight:bold;">🔴 Recording… 8 seconds / 録音中… 8秒</p>
+            </div></div>`;
+        },
+        recording_duration: 8000, show_done_button: false, allow_playback: false,
+        data: () => ({
+          task: 'naming_scene_description', scene: jsPsych.timelineVariable('scene'),
+          pid: currentPID, condition: testCondition,
+          phase: 'post', modality: 'audio', stage: 'scene', needs_audio_scoring: true
+        }),
+        on_finish: (d) => { d.audio_filename = `post_${currentPID}_scene_${d.scene || 'x'}.wav`; }
+      };
+
+      const recordText = {
+        type: T('jsPsychSurveyText'),
+        preamble: () => {
+          const u = jsPsych.timelineVariable('imageUrl');
+          return `<div style="text-align:center;">
+            <img src="${u}" style="width:450px;border-radius:8px;" onerror="this.style.display='none'"/>
+            <p style="margin-top:15px;font-size:18px;"><b>Describe what you see, hear, and smell.</b></p>
+            <p style="color:#666;">見えるもの、聞こえるもの、匂いを説明してください。</p>
+            <div class="mic-error-msg" style="margin-top:10px"><b>Note:</b> Mic unavailable; type your description. / マイクが使用できません。説明を入力してください。</div>
+          </div>`;
+        },
+        questions: [{ prompt: '', name: 'response', rows: 4, required: true }],
+        data: () => ({
+          task: 'naming_scene_description', scene: jsPsych.timelineVariable('scene'),
+          pid: currentPID, condition: testCondition,
+          phase: 'post', modality: 'text', stage: 'scene'
+        })
+      };
+
+      return [
+        { timeline: [recordAudio], timeline_variables: sceneItems, randomize_order: false, conditional_function: () => microphoneAvailable },
+        { timeline: [recordText],  timeline_variables: sceneItems, randomize_order: false, conditional_function: () => !microphoneAvailable }
+      ];
+    }
+
+    // v7.1: Naming block now runs unconditionally so per-item text fallbacks
+    // can fire when no mic is available. Practice (audio-only) is gated on mic.
     const namingBlock = {
       timeline: (function () {
         const inner = [];
@@ -898,27 +966,33 @@
 
         inner.push(micInit);
 
-        // Practice
-        inner.push({
-          type: T('jsPsychHtmlButtonResponse'),
-          stimulus: `<div style="text-align:center;">${practiceImgHTML}
-            <p style="margin-top:15px;"><b>Practice:</b> What do you see?</p><p>練習：何が見えますか？</p></div>`,
-          choices: ['Start Practice / 練習開始'], data: { task: 'naming_practice_prepare' }
-        });
-        inner.push({
-          type: T('jsPsychHtmlAudioResponse'),
-          stimulus: `<div style="text-align:center;">${practiceImgHTML}
-            <div style="margin-top:16px;background:#ffebee;border-radius:8px;padding:15px;">
-              <p style="margin:0;color:#d32f2f;font-weight:bold;font-size:18px;">🔴 PRACTICE Recording… / 練習録音中…</p>
-              <p style="margin:8px 0;font-size:14px;">4 seconds!</p></div></div>`,
-          recording_duration: 4000, show_done_button: false, allow_playback: true,
-          data: { task: 'naming_practice_record' }
-        });
-        inner.push({
-          type: T('jsPsychHtmlButtonResponse'),
-          stimulus: '<h3 style="color:green">Practice Complete! / 練習完了！</h3>',
-          choices: ['Continue / 続行']
-        });
+        // Practice — only meaningful with a mic; skipped if text-only.
+        const practiceBlock = {
+          timeline: [
+            {
+              type: T('jsPsychHtmlButtonResponse'),
+              stimulus: `<div style="text-align:center;">${practiceImgHTML}
+                <p style="margin-top:15px;"><b>Practice:</b> What do you see?</p><p>練習：何が見えますか？</p></div>`,
+              choices: ['Start Practice / 練習開始'], data: { task: 'naming_practice_prepare' }
+            },
+            {
+              type: T('jsPsychHtmlAudioResponse'),
+              stimulus: `<div style="text-align:center;">${practiceImgHTML}
+                <div style="margin-top:16px;background:#ffebee;border-radius:8px;padding:15px;">
+                  <p style="margin:0;color:#d32f2f;font-weight:bold;font-size:18px;">🔴 PRACTICE Recording… / 練習録音中…</p>
+                  <p style="margin:8px 0;font-size:14px;">4 seconds!</p></div></div>`,
+              recording_duration: 4000, show_done_button: false, allow_playback: true,
+              data: { task: 'naming_practice_record' }
+            },
+            {
+              type: T('jsPsychHtmlButtonResponse'),
+              stimulus: '<h3 style="color:green">Practice Complete! / 練習完了！</h3>',
+              choices: ['Continue / 続行']
+            }
+          ],
+          conditional_function: () => microphoneAvailable
+        };
+        inner.push(practiceBlock);
 
         // Stage 1: Ingredients
         const ingredientPics = PICTURES.filter(p => GROUP_B_INGREDIENTS.includes(p.word));
@@ -946,51 +1020,33 @@
           inner.push(...buildNamingTrials(actionPics, 'What is happening?', '何をしていますか？', 'action'));
         }
 
-        // Stage 3: Scene description
+        // Stage 3: Scene description (audio + text fallback)
         if (POSTTEST_SCENES.length > 0) {
           inner.push({
             type: T('jsPsychHtmlButtonResponse'),
             stimulus: `<h3>Part 3: Describe the Scene / パート3：場面の説明</h3>
               <p>Describe everything you see, hear, and smell.</p>
               <p>見えるもの、聞こえるもの、匂いを説明してください。</p>
-              <p style="color:#666;">You will have <b>8 seconds</b>. / <b>8秒間</b>です。</p>`,
+              <p style="color:#666;">You will have <b>8 seconds</b> per scene (or type if no mic). / シーンごとに<b>8秒間</b>（マイクなしの場合は入力）。</p>`,
             choices: ['Begin / 開始']
           });
-
-          const sceneItems = POSTTEST_SCENES.map(s => ({ ...s, imageUrl: s.image }));
-
-          inner.push({
-            timeline: [{
-              type: T('jsPsychHtmlAudioResponse'),
-              stimulus: () => {
-                const u = jsPsych.timelineVariable('imageUrl');
-                return `<div style="text-align:center;">
-                  <img src="${u}" style="width:450px;border-radius:8px;" onerror="this.style.display='none'"/>
-                  <p style="margin-top:15px;font-size:18px;"><b>Describe what you see, hear, and smell.</b></p>
-                  <p style="color:#666;">見えるもの、聞こえるもの、匂いを説明してください。</p>
-                  <div style="margin-top:12px;background:#ffebee;border-radius:8px;padding:12px;">
-                    <p style="margin:0;color:#d32f2f;font-weight:bold;">🔴 Recording… 8 seconds / 録音中… 8秒</p>
-                  </div></div>`;
-              },
-              recording_duration: 8000, show_done_button: false, allow_playback: false,
-              data: () => ({
-                task: 'naming_scene_description', scene: jsPsych.timelineVariable('scene'),
-                pid: currentPID, condition: testCondition,
-                phase: 'post', modality: 'audio', stage: 'scene', needs_audio_scoring: true
-              }),
-              on_finish: (d) => { d.audio_filename = `post_${currentPID}_scene_${d.scene || 'x'}.wav`; }
-            }],
-            timeline_variables: sceneItems, randomize_order: false
-          });
+          inner.push(...buildSceneTrials());
         }
 
         return inner;
       })(),
-      conditional_function: () => microphoneAvailable
+      // v7.1: Outer gate now only suppresses the block when SKIP_NAMING_IF_NO_MIC
+      // is true AND there's no mic. With the default (false), the block always
+      // runs and per-item text fallbacks handle the no-mic case.
+      conditional_function: () => microphoneAvailable || !SKIP_NAMING_IF_NO_MIC
     };
 
     const skipMsg = {
-      timeline: [{ type: T('jsPsychHtmlButtonResponse'), stimulus: '<h3>Skipping Picture Naming</h3><p>Microphone not available. / マイクが利用できません。</p>', choices: ['Continue / 続行'] }],
+      timeline: [{
+        type: T('jsPsychHtmlButtonResponse'),
+        stimulus: '<h3>Skipping Picture Naming</h3><p>Microphone not available. / マイクが利用できません。</p>',
+        choices: ['Continue / 続行']
+      }],
       conditional_function: () => SKIP_NAMING_IF_NO_MIC && !microphoneAvailable
     };
 
