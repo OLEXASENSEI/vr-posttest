@@ -1,6 +1,20 @@
 /**
- * posttest.js — VR Post-Test Battery (CORRECTED v7.1)
+ * posttest.js — VR Post-Test Battery (CORRECTED v7.3)
  * GROUP B WORDS: sizzle, mix, stir (iconic) + pour, butter, flour (arbitrary)
+ *
+ * v7.3 FIXES (over v7.2):
+ *  - Fixed Stage 3 silent image hiding: scene images and the naming
+ *    text-fallback image now show a visible "Image missing" placeholder
+ *    when assets are unreachable, matching the pattern already used by
+ *    the audio-recording naming trial. Previously, three <img> tags used
+ *    `onerror="this.style.display='none'"`, which hid the picture without
+ *    any indication, leaving participants staring at a blank prompt.
+ *  - Hardened mic state in buildNaming.micInit: now demotes
+ *    microphoneAvailable when jsPsychInitializeMicrophone reports failure.
+ *    Previously the on_finish handler only promoted ("if mic_allowed
+ *    set true"), so a successful upstream mic gate could leave a stale
+ *    `true` even if the per-block plugin init later failed, leading to
+ *    silent or empty audio recordings.
  *
  * v7 CHANGES (task redesign over v6.1.3):
  *  1. REDESIGN: 4AFC split into Ingredients block (butter, flour + milk/sugar
@@ -13,6 +27,16 @@
  *     NOTE: Unlike pretest, posttest does NOT play model audio or ask for a
  *     repeat — that would contaminate the measurement of what was learned.
  *  3. NEW ASSETS: scene_cooking_B.jpg, scene_plating_B.jpg (Group B scenes)
+ *
+ * v7.2 FIXES (over v7.1):
+ *  - Standardized Group B action targets to base forms in saved data
+ *    (sizzle, mix, stir, pour) while keeping natural display labels
+ *    (sizzling, mixing, stirring, pouring).
+ *  - Reclassified sizzling as an action, not a process.
+ *  - Fixed 4AFC prompt wording ("matches" instead of "is").
+ *  - Removed the misleading spread/butter Foley item; it tested spread, not butter.
+ *  - Balanced delayed Foley sampling so it includes iconic and arbitrary items.
+ *  - Cleaned sequencing wording and Japanese scene-description wording.
  *
  * v7.1 FIXES (over initial v7 implementation):
  *  - Naming text fallback now actually reachable: removed outer mic gate so
@@ -42,10 +66,6 @@
   // behavior.
   const SKIP_NAMING_IF_NO_MIC = false;
 
-  const NAMING_VERBS_ONLY  = false;
-  const NAMING_MAX_ITEMS   = 6;
-  const FOURAFC_VERBS_ONLY = false;
-  const FOURAFC_MAX_ITEMS  = 6;
 
   const PRACTICE_IMG = 'img/park_scene.jpg';
   const practiceImgHTML = `
@@ -83,23 +103,24 @@
 
   /* ---------- STIMULI ---------- */
   const PICTURES = [
-    { word: 'sizzling', category: 'process', iconic: true,  rating: 5.30, variants: ['img/sizzling_01.png', 'img/sizzling_02.png'] },
-    { word: 'mixing',   category: 'action',  iconic: true,  rating: 5.10, variants: ['img/mixing_01.png',   'img/mixing_02.png'] },
-    { word: 'stirring', category: 'action',  iconic: true,  rating: 4.82, variants: ['img/stirring_01.png', 'img/stirring_02.png'] },
-    { word: 'pouring',  category: 'action',  iconic: false, rating: 3.60, variants: ['img/pouring_01.png',  'img/pouring_02.png'] },
-    { word: 'butter',   category: 'ingredient', iconic: false, rating: 3.50, variants: ['img/butter_01.png', 'img/butter_02.png'] },
-    { word: 'flour',    category: 'ingredient', iconic: false, rating: 3.00, variants: ['img/flour_01.png',  'img/flour_02.png'] },
-    { word: 'pancake',  category: 'food',       iconic: null, rating: null, variants: ['img/pancake_01.png', 'img/pancake_02.png'] },
-    { word: 'egg',      category: 'object',     iconic: null, rating: null, variants: ['img/egg_01.png',     'img/egg_02.png'] },
-    { word: 'milk',     category: 'ingredient', iconic: null, rating: null, variants: ['img/milk_01.png',    'img/milk_02.png'] },
-    { word: 'sugar',    category: 'ingredient', iconic: null, rating: null, variants: ['img/sugar_01.png',   'img/sugar_02.png'] },
+    // word = canonical target saved in data; display = natural label for image prompts
+    { word: 'sizzle',  display: 'sizzling', category: 'action', iconic: true,  rating: 5.30, variants: ['img/sizzling_01.png', 'img/sizzling_02.png'] },
+    { word: 'mix',     display: 'mixing',   category: 'action', iconic: true,  rating: 5.10, variants: ['img/mixing_01.png',   'img/mixing_02.png'] },
+    { word: 'stir',    display: 'stirring', category: 'action', iconic: true,  rating: 4.82, variants: ['img/stirring_01.png', 'img/stirring_02.png'] },
+    { word: 'pour',    display: 'pouring',  category: 'action', iconic: false, rating: 3.60, variants: ['img/pouring_01.png',  'img/pouring_02.png'] },
+    { word: 'butter',  display: 'butter',   category: 'ingredient', iconic: false, rating: 3.50, variants: ['img/butter_01.png', 'img/butter_02.png'] },
+    { word: 'flour',   display: 'flour',    category: 'ingredient', iconic: false, rating: 3.00, variants: ['img/flour_01.png',  'img/flour_02.png'] },
+    { word: 'pancake', display: 'pancake',  category: 'food',       iconic: null, rating: null, variants: ['img/pancake_01.png', 'img/pancake_02.png'] },
+    { word: 'egg',     display: 'egg',      category: 'object',     iconic: null, rating: null, variants: ['img/egg_01.png',     'img/egg_02.png'] },
+    { word: 'milk',    display: 'milk',     category: 'ingredient', iconic: null, rating: null, variants: ['img/milk_01.png',    'img/milk_02.png'] },
+    { word: 'sugar',   display: 'sugar',    category: 'ingredient', iconic: null, rating: null, variants: ['img/sugar_01.png',   'img/sugar_02.png'] },
   ];
 
-  const GROUP_B_TARGETS = ['sizzling', 'mixing', 'stirring', 'pouring', 'butter', 'flour'];
+  const GROUP_B_TARGETS = ['sizzle', 'mix', 'stir', 'pour', 'butter', 'flour'];
 
   // v7: Category splits for 4AFC and naming
   const GROUP_B_INGREDIENTS = ['butter', 'flour'];
-  const GROUP_B_ACTIONS = ['sizzling', 'mixing', 'stirring', 'pouring'];
+  const GROUP_B_ACTIONS = ['sizzle', 'mix', 'stir', 'pour'];
   const INGREDIENT_DISTRACTORS = ['milk', 'sugar'];  // from PICTURES, same category
 
   // v7: Scene stimuli for Stage 3 description (Group B context)
@@ -113,7 +134,6 @@
     mix:    ['sounds/mix_1.wav',    'sounds/mix_2.wav'],
     stir:   ['sounds/stir_1.mp3',   'sounds/stir_2.mp3'],
     pour:   ['sounds/pour_1.mp3',   'sounds/pour_2.mp3'],
-    spread: ['sounds/spread_1.mp3', 'sounds/spread_2.mp3'],
     crack:  ['sounds/crack_1.mp3',  'sounds/crack_2.mp3'],
     flip:   ['sounds/flip_1.mp3',   'sounds/flip_2.mp3'],
     whisk:  ['sounds/whisk_1.mp3',  'sounds/whisk_2.mp3'],
@@ -147,11 +167,10 @@
   ];
 
   const foley_stimuli_groupB = [
-    { audio: 'sizzle', options: ['pancake sizzling', 'stirring dry flour'],   correct: 0, group: 'B', iconic: true,  rating: 5.30 },
-    { audio: 'mix',    options: ['mixing batter', 'pouring liquid'],          correct: 0, group: 'B', iconic: true,  rating: 5.10 },
-    { audio: 'stir',   options: ['stirring batter', 'cracking an egg'],       correct: 0, group: 'B', iconic: true,  rating: 4.82 },
-    { audio: 'pour',   options: ['pouring batter', 'flipping a pancake'],     correct: 0, group: 'B', iconic: false, rating: 3.60 },
-    { audio: 'spread', options: ['spreading butter', 'pouring milk'],         correct: 0, group: 'B', iconic: false, rating: 3.50 },
+    { audio: 'sizzle', target_word: 'sizzle', options: ['pancake sizzling', 'stirring dry flour'], correct: 0, group: 'B', iconic: true,  rating: 5.30 },
+    { audio: 'mix',    target_word: 'mix',    options: ['mixing batter', 'pouring liquid'],        correct: 0, group: 'B', iconic: true,  rating: 5.10 },
+    { audio: 'stir',   target_word: 'stir',   options: ['stirring batter', 'cracking an egg'],     correct: 0, group: 'B', iconic: true,  rating: 4.82 },
+    { audio: 'pour',   target_word: 'pour',   options: ['pouring batter', 'flipping a pancake'],   correct: 0, group: 'B', iconic: false, rating: 3.60 },
   ];
 
   const foley_stimuli_groupA = [
@@ -160,7 +179,13 @@
     { audio: 'whisk', options: ['whisking eggs', 'sizzling oil'],        correct: 0, group: 'A', iconic: true, rating: 4.55 },
   ];
 
-  const sequence_steps = ['Crack eggs', 'Mix flour and eggs', 'Heat the pan', 'Pour batter on pan', 'Flip when ready'];
+  const sequence_steps = [
+    'Crack the eggs',
+    'Mix the flour, eggs, and milk',
+    'Heat the pan',
+    'Pour the batter into the pan',
+    'Flip the pancake when it is ready'
+  ];
 
   /* ---------- Helpers ---------- */
   const shuffle = (arr) => {
@@ -169,11 +194,14 @@
     return c;
   };
   const sample = (arr, n) => shuffle(arr).slice(0, Math.min(n, arr.length));
+  const pictureByWord = Object.fromEntries(PICTURES.map(p => [p.word, p]));
   const choiceMap = Object.fromEntries(PICTURES.map(p => [p.word, p.variants]));
+  const displayWord = (picOrWord) => {
+    if (typeof picOrWord === 'string') return pictureByWord[picOrWord]?.display || picOrWord;
+    return picOrWord?.display || picOrWord?.word || '';
+  };
   const randomVariant = (m, k) => { const l = m[k]; return l?.length ? l[Math.floor(Math.random() * l.length)] : null; };
   const asObject = (x) => { if (!x) return {}; if (typeof x === 'string') { try { return JSON.parse(x); } catch { return {}; } } return typeof x === 'object' ? x : {}; };
-  const assetUrl = (p) => p || '';
-
   const pickImageSrc = (w) => {
     const src = randomVariant(choiceMap, w);
     if (!src) {
@@ -188,12 +216,6 @@
     if (!src) console.warn('[posttest] No audio found for:', k);
     return src || PLACEHOLDER_AUDIO;
   };
-
-  function choiceButton(word, src) {
-    return `<button class="choice-card" data-choice="${word}" aria-label="option">
-      <img src="${src || PLACEHOLDER_IMG}" alt="${word}" onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
-    </button>`;
-  }
 
   function kendallTau(target, response) {
     let conc = 0, disc = 0;
@@ -445,13 +467,14 @@
     function make4AFCTrial(targetPic, foilPics) {
       const choices = shuffle([targetPic, ...foilPics]).slice(0, 4);
       const words   = choices.map(c => c.word);
+      const labels  = choices.map(c => displayWord(c));
       const images  = choices.map(c => pickImageSrc(c.word));
-      const correctIndex = words.indexOf(targetPic.word);
+      const correctIndex = choices.findIndex(c => c.word === targetPic.word);
 
       const imageGridHTML = choices.map((c, i) => `
         <div style="width:200px;text-align:center;">
           <div style="font-size:20px;font-weight:bold;margin-bottom:6px;color:#1a237e;">${LABELS[i]}</div>
-          <img src="${images[i]}" alt="Option ${LABELS[i]}"
+          <img src="${images[i]}" alt="Option ${LABELS[i]}: ${labels[i]}"
             style="width:200px;height:150px;object-fit:cover;border-radius:12px;border:1px solid #ccc;box-shadow:0 3px 12px rgba(0,0,0,.08);"
             onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
         </div>`).join('');
@@ -459,15 +482,16 @@
       return {
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `<div style="text-align:center;">
-          <h3 style="margin-bottom:20px;">Which picture is <em>${targetPic.word}</em>?<br>
-          <span style="font-size:14px;">どの画像が「${targetPic.word}」ですか？</span></h3>
+          <h3 style="margin-bottom:20px;">Which picture matches <em>${targetPic.word}</em>?<br>
+          <span style="font-size:14px;">「${targetPic.word}」に合う画像はどれですか？</span></h3>
           <div style="display:flex;flex-wrap:wrap;gap:18px;justify-content:center;margin-bottom:10px;">
             ${imageGridHTML}
           </div>
         </div>`,
         choices: LABELS.slice(0, choices.length),
         data: {
-          task: '4afc', word: targetPic.word, choices: words,
+          task: '4afc', word: targetPic.word, display_word: displayWord(targetPic),
+          choices: words, choice_labels: labels,
           correct: correctIndex, pid: currentPID, condition: testCondition,
           iconic: targetPic.iconic, iconicity_rating: targetPic.rating,
           stimulus_category: targetPic.category,
@@ -499,7 +523,7 @@
       });
     }
 
-    // --- Actions block: sizzling, mixing, stirring, pouring (self-distracting) ---
+    // --- Actions block: sizzle, mix, stir, pour (self-distracting action images) ---
     const actionTargets = PICTURES.filter(p => GROUP_B_ACTIONS.includes(p.word));
 
     if (actionTargets.length > 0) {
@@ -534,10 +558,28 @@
     const shuffled = shuffle(groupBPics);
 
     shuffled.forEach(pic => {
-      combos.push({ word: pic.word, match: true, src: pickImageSrc(pic.word), iconic: pic.iconic, rating: pic.rating });
+      combos.push({
+        word: pic.word,
+        display_word: displayWord(pic),
+        picture_word: pic.word,
+        picture_display: displayWord(pic),
+        match: true,
+        src: pickImageSrc(pic.word),
+        iconic: pic.iconic,
+        rating: pic.rating
+      });
       const foilCandidates = shuffled.filter(p => p !== pic && p.category === pic.category);
       const foil = foilCandidates.length > 0 ? foilCandidates[0] : shuffled.find(p => p !== pic);
-      if (foil) combos.push({ word: pic.word, match: false, src: pickImageSrc(foil.word), iconic: pic.iconic, rating: pic.rating });
+      if (foil) combos.push({
+        word: pic.word,
+        display_word: displayWord(pic),
+        picture_word: foil.word,
+        picture_display: displayWord(foil),
+        match: false,
+        src: pickImageSrc(foil.word),
+        iconic: pic.iconic,
+        rating: pic.rating
+      });
     });
 
     const trial = {
@@ -558,8 +600,9 @@
       data: () => {
         const s = jsPsych.timelineVariable('stim');
         return {
-          task: 'word_picture_speeded', word: s.word, match: s.match,
-          correct_response: s.match ? 'a' : 'l',
+          task: 'word_picture_speeded', word: s.word, display_word: s.display_word,
+          picture_word: s.picture_word, picture_display: s.picture_display,
+          match: s.match, correct_response: s.match ? 'a' : 'l',
           iconic: s.iconic, iconicity_rating: s.rating,
           pid: currentPID, condition: testCondition,
           word_group: 'B', phase: 'post'
@@ -682,7 +725,11 @@
    * buildFoley (Group B)
    * ======================================================================= */
   function buildFoley(delayed) {
-    const pool = delayed ? foley_stimuli_groupB.slice(0, 3) : foley_stimuli_groupB;
+    const pool = delayed ? (() => {
+      const iconicItems = foley_stimuli_groupB.filter(x => x.iconic === true);
+      const arbitraryItems = foley_stimuli_groupB.filter(x => x.iconic === false);
+      return shuffle([...sample(iconicItems, 2), ...sample(arbitraryItems, 1)]);
+    })() : foley_stimuli_groupB;
 
     const trials = shuffle(pool).map((stim, idx) => {
       const audioSrc    = pickAudioSrc(stim.audio);
@@ -700,8 +747,8 @@
         </div>`,
         choices: displayOptions,
         data: {
-          task: 'foley', audio_key: stim.audio, correct: correctDisplayIdx,
-          options: displayOptions, pid: currentPID, condition: testCondition,
+          task: 'foley', audio_key: stim.audio, target_word: stim.target_word || stim.audio,
+          correct: correctDisplayIdx, options: displayOptions, pid: currentPID, condition: testCondition,
           audio_src: audioSrc, word_group: stim.group,
           iconic: stim.iconic, iconicity_rating: stim.rating, phase: 'post'
         },
@@ -832,13 +879,17 @@
     const micInit = {
       type: T('jsPsychInitializeMicrophone'),
       data: { task: 'mic_init' },
-      on_finish: (d) => { if (d.mic_allowed) microphoneAvailable = true; }
+      // v7.3: trust the plugin's verdict in BOTH directions, not just promotion.
+      // The previous `if (d.mic_allowed) microphoneAvailable = true;` could
+      // leave microphoneAvailable=true (set by the upstream gate) even when
+      // jsPsychInitializeMicrophone failed here, leading to empty recordings.
+      on_finish: (d) => { microphoneAvailable = !!d.mic_allowed; }
     };
 
     // Helper: build naming trials for a set of PICTURES items
     function buildNamingTrials(pics, prompt, promptJP, stageName) {
       const items = shuffle(pics).map(pic => ({
-        target: pic.word, category: pic.category, image: pickImageSrc(pic.word),
+        target: pic.word, display: displayWord(pic), category: pic.category, image: pickImageSrc(pic.word),
         iconic: pic.iconic, rating: pic.rating
       }));
 
@@ -858,6 +909,7 @@
         recording_duration: 4000, show_done_button: false, allow_playback: false, post_trial_gap: 800,
         data: () => ({
           task: `naming_${stageName}_spontaneous`, target: jsPsych.timelineVariable('target'),
+          display_word: jsPsych.timelineVariable('display'),
           category: jsPsych.timelineVariable('category'), iconic: jsPsych.timelineVariable('iconic'),
           iconicity_rating: jsPsych.timelineVariable('rating'),
           pid: currentPID, condition: testCondition,
@@ -875,7 +927,7 @@
           const img = jsPsych.timelineVariable('image');
           return `<div style="text-align:center;">
             <img src="${img}" alt="" style="width:260px;height:170px;object-fit:cover;border-radius:12px;border:1px solid #ccc;"
-              onerror="this.style.display='none'">
+              onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';">
             <p style="margin-top:10px;font-size:18px;"><b>${prompt}</b></p>
             <p style="color:#666;">${promptJP}</p>
             <div class="mic-error-msg" style="margin-top:10px"><b>Note:</b> Type your answer. / 回答を入力してください。</div></div>`;
@@ -883,6 +935,7 @@
         questions: [{ prompt: '', name: 'response', rows: 1, required: true }],
         data: () => ({
           task: `naming_${stageName}_spontaneous`, target: jsPsych.timelineVariable('target'),
+          display_word: jsPsych.timelineVariable('display'),
           category: jsPsych.timelineVariable('category'), iconic: jsPsych.timelineVariable('iconic'),
           iconicity_rating: jsPsych.timelineVariable('rating'),
           pid: currentPID, condition: testCondition,
@@ -905,9 +958,9 @@
         stimulus: () => {
           const u = jsPsych.timelineVariable('imageUrl');
           return `<div style="text-align:center;">
-            <img src="${u}" style="width:450px;border-radius:8px;" onerror="this.style.display='none'"/>
+            <img src="${u}" style="width:450px;border-radius:8px;" onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';"/>
             <p style="margin-top:15px;font-size:18px;"><b>Describe what you see, hear, and smell.</b></p>
-            <p style="color:#666;">見えるもの、聞こえるもの、匂いを説明してください。</p>
+            <p style="color:#666;">見えるもの、聞こえるもの、どんな匂いがするかを説明してください。</p>
             <div style="margin-top:12px;background:#ffebee;border-radius:8px;padding:12px;">
               <p style="margin:0;color:#d32f2f;font-weight:bold;">🔴 Recording… 8 seconds / 録音中… 8秒</p>
             </div></div>`;
@@ -926,9 +979,9 @@
         preamble: () => {
           const u = jsPsych.timelineVariable('imageUrl');
           return `<div style="text-align:center;">
-            <img src="${u}" style="width:450px;border-radius:8px;" onerror="this.style.display='none'"/>
+            <img src="${u}" style="width:450px;border-radius:8px;" onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';"/>
             <p style="margin-top:15px;font-size:18px;"><b>Describe what you see, hear, and smell.</b></p>
-            <p style="color:#666;">見えるもの、聞こえるもの、匂いを説明してください。</p>
+            <p style="color:#666;">見えるもの、聞こえるもの、どんな匂いがするかを説明してください。</p>
             <div class="mic-error-msg" style="margin-top:10px"><b>Note:</b> Mic unavailable; type your description. / マイクが使用できません。説明を入力してください。</div>
           </div>`;
         },
@@ -959,7 +1012,7 @@
             <ol style="text-align:left;max-width:500px;margin:0 auto;">
               <li><b>Name ingredients</b> — What is this? / これは何？</li>
               <li><b>Name actions</b> — What is happening? / 何をしている？</li>
-              <li><b>Describe a scene</b> — What do you see, hear, smell? / 何が見える、聞こえる、匂う？</li>
+              <li><b>Describe a scene</b> — What do you see, hear, smell? / 何が見えますか。何が聞こえますか。どんな匂いがしますか。</li>
             </ol>`,
           choices: ['Continue / 続行']
         });
@@ -1026,7 +1079,7 @@
             type: T('jsPsychHtmlButtonResponse'),
             stimulus: `<h3>Part 3: Describe the Scene / パート3：場面の説明</h3>
               <p>Describe everything you see, hear, and smell.</p>
-              <p>見えるもの、聞こえるもの、匂いを説明してください。</p>
+              <p>見えるもの、聞こえるもの、どんな匂いがするかを説明してください。</p>
               <p style="color:#666;">You will have <b>8 seconds</b> per scene (or type if no mic). / シーンごとに<b>8秒間</b>（マイクなしの場合は入力）。</p>`,
             choices: ['Begin / 開始']
           });
