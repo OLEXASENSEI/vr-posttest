@@ -1,329 +1,329 @@
-# Post-Test Battery — VR Iconicity Study (v7.1)
+# Sound Meets Space — v8.0 Test Battery
 
-## Purpose
-This post-test measures learning gains after the training conditions (VR / 2D / Text), focusing on whether iconic words (sound-symbolic) are acquired more readily than arbitrary words. It uses Group B words exclusively for the core vocabulary assessments to enable uncontaminated pre/post comparison via the split-half design.
+**Author:** Robert Anthony Olexa (Hakodate KOSEN / iST Cross Lab)
+**Chapter:** Dissertation Ch. 5 — Sound Meets Space
+**Defense:** July 1, 2026 (preliminary May 2026)
+**Status:** v8.0 pretest + posttest live; spatial reconstruction deferred to v8.1
+**Last update:** 2026-04-29 (v1.1 — post script-reality reconciliation)
 
-## Design
-Balanced 6×6 split-half — Group B assessed here:
+---
 
-| | Iconic (≥ 4.5) | Arbitrary (< 4.5) |
-|---|---|---|
-| **Group A (pre-test only)** | flip (5.70), crack (5.40), whisk (4.55) | bowl (3.00), spatula (3.91), pan (3.45) |
-| **Group B (post-test)** | sizzle (5.30), mix (5.10), stirring (4.82) | pour (3.60), butter (3.50), flour (3.00) |
-| **Foils (never trained)** | glug (6.20), splash (6.09), drizzle (6.00), knife (5.29), salt (4.62) | fork (3.90), cup (3.83) |
+## 1. Reframe summary
 
-All 6 Group B words are tested in every applicable task. The `FOURAFC_VERBS_ONLY` and `NAMING_VERBS_ONLY` flags are set to `false` to maintain the 3 iconic + 3 arbitrary balance — changing these would break the experimental design.
+v7.x measured vocabulary knowledge (lexical decision, receptive 4AFC, recognition). For Japanese KOSEN students who already know basic kitchen vocabulary, those measures are floor-effect-prone and don't address the dissertation's claim. v8.0 measures **production intelligibility on iconicity-bearing phonemes**, pre→post, across three training conditions. Receptive vocabulary is gone; phoneme-level articulation is the dependent variable.
 
-All iconicity ratings verified against Winter et al. database (14,777 words).
+The reframing also reckoned with **what training actually does**. v7.x design assumed participants passively perceive iconic words; v8.0 reflects that participants actively produce them. Each utterance ("crack the egg," "flip the pancake") is gated by Whisper intelligibility — say it intelligibly, the visual event happens with synchronized SFX. The participant is the agent of every event. This makes training **forced production with multimodal contingent feedback**, much closer to motor-learning paradigms than to receptive vocabulary studies.
 
-**Note on "stir":** The base form "stir" has a rating of 4.30 (below threshold), but the -ing form "stirring" has 4.82 (above threshold). The study uses 4.82 throughout. This discrepancy should be documented in the methods section.
+The chapter argues a two-step claim:
+1. **Replication:** standard psycholinguistic iconicity effects (high-iconicity words produced more accurately than low-iconicity) appear across all three conditions, validating that VR's third-space (Ch. 3, Olexa & Taquet 2026) doesn't erode learning.
+2. **Amplification:** iconicity gains are steepest in VR > 2D > Text — VR's spatial-acoustic co-location amplifies the iconicity-production loop because SFX, visual event, and articulation share a spatial frame.
 
-## Conditions
-- **Immediate:** Full battery administered right after training (~30 min)
-- **Delayed:** Reduced battery — fewer foley trials, no speeded match, no sequencing, no Group A foley, no transfer test (~20 min)
+---
 
-## Duration
-~30 minutes (immediate) / ~20 minutes (delayed)
+## 2. Primary statistical contrast
 
-## Entry Point
-```javascript
-window.__START_POSTTEST(participantID, isDelayed)
+```
+DV:        pre→post change in production intelligibility (per phoneme target)
+Predictors:
+  Condition (VR / 2D / Text)        — between subjects
+  Iconicity class (iconic / conv.)  — within subjects, item-level
+  Time (pre / post)                 — within subjects
+  Item role (target / control)      — within subjects
+Random effects: (1 | participant) + (1 | word)
+Covariates: phoneme discrimination, foley iconicity, Corsi, digit span,
+            English years, TOEIC/EIKEN, VR experience
 ```
 
-## Version History
-- **v1–v2:** Initial implementations with various fixes
-- **v3:** 4AFC word labels, sequencing undo/reset, revised Likert items, mic initialization before audio tasks
-- **v4:** Fixed stirring images (now uses own files), restored mix/stir audio, restored 5 foley trials, added Group A foley comparison, added milk/sugar distractors, closure-captured sequencing data, consistent save with POST support
-- **v5:** Blind retell preparation step, conditional VR reuse Likert wording, mic gate button-filtering fix, foley on_load null guards
-- **v6:** 4AFC delayed parameter fix, 4AFC choice card layout fix (images in stimulus HTML, A/B/C/D label buttons), foley button locking for jsPsych 7.3, micInit moved inside conditional block, buildTeachSomeone prepare step added
-- **v6.1:** Removed cache-busting query strings from assetUrl (broke local servers), removed async HEAD-fetch image validation, removed random query string from PRACTICE_IMG
-- **v6.1.2:** Minor cleanup
-- **v6.1.3:** Fixed knife classification (iconic=true, rating=5.29, foil_iconic) and salt classification (iconic=true, rating=4.62, foil_iconic) per Winter et al. database. Applied Chrome mic gate button detection fix (`.jspsych-html-button-response-button button` selector).
-- **v7:** Task redesign over v6.1.3.
-  1. **4AFC redesign** — split into two category-pure blocks: an Ingredients block (butter, flour with milk/sugar distractors) and an Actions block (sizzling, mixing, stirring, pouring — self-distracting within category). Prevents the previous "category giveaway" where a verb target shown alongside noun distractors made the answer trivial.
-  2. **Picture Naming redesigned** as a 3-stage progressive task:
-     - **Stage 1 — Ingredient naming:** "What is this?" (4 s recording per item)
-     - **Stage 2 — Action naming:** "What is happening?" (4 s recording per item)
-     - **Stage 3 — Scene description:** 8 s free description over a Group B cooking scene
-     The post-test deliberately does **not** play a model pronunciation or ask for a repeat — that would contaminate the measurement of what participants learned.
-  3. **New assets required:** `scene_cooking_B.jpg`, `scene_plating_B.jpg` for Stage 3.
-- **v7.1:** Fixes over v7.
-  1. **Naming text fallback now reachable.** v7's outer `conditional_function: () => microphoneAvailable` on the naming block prevented the per-item text fallbacks inside `buildNamingTrials` from ever firing — without a mic, the entire block was skipped. The outer gate is removed; per-item audio/text branches now fire correctly based on mic availability.
-  2. **Stage 3 scene description text fallback added.** Previously audio-only; now provides a typed-description survey when no mic is available.
-  3. **Practice trials gated on mic.** Audio-only practice is skipped (rather than hanging) when no mic is available.
-  4. **`SKIP_NAMING_IF_NO_MIC` default flipped to `false`.** New default is "collect text data when there's no mic." Set the flag back to `true` to restore the legacy "skip whole block with notification" behavior.
-  5. **Scene images preloaded.** `scene_cooking_B.jpg` and `scene_plating_B.jpg` added to the preloader's image list so failures surface up front.
-  6. **Stale top-of-file comment cleaned up.** The v7 header no longer claims Stages 1–2 do "name → hear model → repeat"; it now matches the actual implementation.
+**Predicted three-way interaction:** Condition × Iconicity × Time, with the iconicity slope (post − pre) being VR > 2D > Text. Control items lane (chop, peel, ladle, kettle) subtracts pure testing/familiarization gain.
 
-## Tasks
+**Sensitivity analysis:** the same model with continuous Winter ratings instead of categorical iconic/conventional. Convergence supports the categorical operationalization.
 
-### 1. Microphone Setup Gate (1 min)
-Interactive mic permission with audio level meter. Required for full audio capture in naming, retell, and teach tasks. With `SKIP_NAMING_IF_NO_MIC = false` (the v7.1 default), all three of those tasks fall through to typed text fallbacks when no mic is available — no data is lost. With the flag set to `true`, the naming block is skipped entirely (with a notification) when no mic is available; retell and teach still fall through to text.
+---
 
-Button detection uses the `.jspsych-html-button-response-button button` selector (v6.1.3 Chrome fix retained).
+## 3. Stimulus design (locked against Winter et al. 2024 + canonical training script)
 
-### 2. 4AFC Vocabulary Check — Group B (2–3 min) — *redesigned in v7*
-Two category-pure blocks, each with its own intro screen.
+### 3.1 Production targets (8 trained items)
 
-**Block A — Ingredients (2 trials):**
-- Targets: `butter`, `flour`
-- Distractor pool: `milk`, `sugar` (other ingredient nouns; never trained as targets)
-- Each trial shows the target plus 3 of the remaining ingredient pictures → 4 labeled choices (A/B/C/D).
+All 8 are pretested AND posttested for every participant. No split-half — pretest production with no feedback is minimal contamination.
 
-**Block B — Actions (4 trials):**
-- Targets: `sizzling`, `mixing`, `stirring`, `pouring`
-- Each trial shows the target plus the 3 other action pictures → 4 labeled choices. Distractors are the other Group B verbs themselves, so the block is self-distracting.
+| Word | Class | Rating | Form-selection notes |
+|---|---|---:|---|
+| crack | iconic | 5.40 | Target form: bare. Gerund alternative: cracking. |
+| flip | iconic | 5.70 | Target form: bare. Gerund alternative: flipping. |
+| slice | iconic | 5.27 | Target form: bare. Gerund alternative: slicing. |
+| stir | marginal iconic | 4.30 | Target form: bare. Form-selection probe. |
+| bowl | conventional | 3.00 | — |
+| pan | conventional | 3.45 | — |
+| flour | conventional | 3.00 | — |
+| butter | conventional | 3.50 | — |
 
-Total: 6 trials, same as v6, but with no cross-category cues.
+**Class means:** iconic (excl. stir) 5.46, conventional 3.24, Δ = 2.22. Difference exceeds the database interquartile range.
 
-Trials are tagged with `iconic`, `iconicity_rating`, `word_group: 'B'`, and a new `stimulus_category` field (`ingredient` / `action` / `process`).
+### 3.2 Parallel controls (4 untrained items)
 
-Measures: receptive vocabulary learning under category-controlled distractor conditions.
+| Word | Class | Rating |
+|---|---|---:|
+| chop | iconic control | 5.50 |
+| peel | iconic control | 5.60 |
+| ladle | conventional control | 3.67 |
+| kettle | conventional control | 3.80 |
 
-### 3. Speeded Word-Picture Match (immediate only, 3–4 min)
-- See word + image → press A (match) or L (no match)
-- 500 ms fixation cross between trials; 3500 ms response window
-- Group B words only; match and mismatch trials
-- Measures: lexical access speed, form-meaning link strength
+Iconicity gradient parallels targets'. Pre→post change on these estimates pure testing effect.
 
-### 4. Procedural Recall — Free Response (2–3 min)
-- Write 5 pancake-making steps from memory (no pictures shown)
-- Japanese instruction: "1行に1つのステップを、順番に書いてください"
-- Measures: procedural knowledge retention from training
+### 3.3 Passive/implicit iconic — `sizzle`
 
-### 5. Sequencing — Click in Order (immediate only, 2–3 min)
-- 5 scrambled steps displayed as buttons → click in correct order
-- **Undo and Reset buttons** for correcting mistakes
-- Submit button enables when all 5 selected
-- Scored: correct positions, Kendall's tau correlation
-- Measures: procedural sequencing accuracy
+**`sizzle` is not in the production block.** Rationale: participants never produce `sizzle` during training. They produce `butter the pan` or `heat the pan`, and `sizzle` is the SFX consequence. Eliciting production of an unproduced word measures baseline articulation with no training comparison possible.
 
-### 6. Foley Sound Recognition — Group B (2–3 min)
-Play cooking sounds → choose what it represents (2AFC).
-- **5 trials** (immediate) or **3 trials** (delayed):
-  1. `sizzle` — pancake sizzling vs. stirring dry flour
-  2. `mix` — mixing batter vs. pouring liquid
-  3. `stir` — stirring a bowl vs. cracking an egg
-  4. `pour` — pouring batter vs. flipping a pancake
-  5. `spread` — spreading butter vs. pouring milk
-- Option display order randomized per trial
-- Audio cleaned up between trials
-- Answer buttons locked until audio playback completes
-- Tagged with `iconic`, `iconicity_rating` per sound
-- Measures: sound-meaning mapping for trained sounds
+Tested instead in the posttest **multi-probe binding task** as the unique passive-iconic case. Predicted: VR's spatial-acoustic affordance produces stronger SFX-word binding for `sizzle` than 2D > Text, even without articulation.
 
-### 7. Group A Foley Comparison (immediate only, 1–2 min)
-Tests recognition of Group A cooking sounds for cross-group comparison.
-- **3 trials** using Group A audio variants:
-  1. `crack` — cracking an egg vs. stirring a pot
-  2. `flip` — flipping a pancake vs. pouring batter
-  3. `whisk` — whisking eggs vs. sizzling oil
-- Same format as Group B foley
-- Tagged with `task: 'foley_groupA'`, `word_group: 'A'`
+### 3.4 Why class, not continuous Winter rating
 
-### 8. Progressive Naming & Description — Group B (4–6 min) — *new in v7*
-Replaces the v6 Picture Naming task. Three sequential stages, each with its own intro screen and shared mic-init / practice front-end.
+Per-item rating SEs are 1.5–2.5 with n ≈ 10 raters per word. A continuous predictor with that much measurement error would swamp any condition × iconicity interaction. Class-based contrast is more robust; continuous rating is a sensitivity analysis.
 
-**Front-end (once):**
-- Section overview screen listing the three parts
-- `jsPsychInitializeMicrophone` step
-- Practice trial: `park_scene.jpg` (non-cooking), 4 s recording, with playback enabled and a "Practice Complete" confirmation
+Some Winter ratings are intuitively suspect (e.g., `knife` 5.29, `milk` 5.09, `mix` 5.10 in the top decile alongside `sizzle`/`crack`) — likely rater drift. Items in this rating-anomaly territory are excluded from the iconic class and live in the unanalyzed filler role.
 
-**Stage 1 — Ingredient naming**
-- Items: `butter`, `flour`
-- Prompt: "What is this? / これは何ですか？"
-- 4 s recording per item, no model audio, no repeat
-- Task tag: `naming_ingredient_spontaneous`, `stage: 'ingredient'`
+---
 
-**Stage 2 — Action naming**
-- Items: `sizzling`, `mixing`, `stirring`, `pouring`
-- Prompt: "What is happening? / 何をしていますか？"
-- 4 s recording per item, no model audio, no repeat
-- Task tag: `naming_action_spontaneous`, `stage: 'action'`
+## 4. Form-selection secondary analysis
 
-**Stage 3 — Scene description**
-- 2 cooking scenes shown in fixed order: `scene_cooking_B.jpg` (batter being poured/cooked), `scene_plating_B.jpg` (finished pancake with butter)
-- Prompt: "Describe everything you see, hear, and smell."
-- 8 s recording per scene (audio); typed description (text fallback)
-- Task tag: `naming_scene_description`, `stage: 'scene'`
+The marginal-iconic word `stir` (rating 4.30 bare / 4.82 gerund) carries a specific theoretical bet. The gerund form `stirring` is more iconic than the bare imperative because the /-ɪŋ/ ending phonologically lengthens the action, mapping iconically onto the continuous nature of stirring. For Japanese L2 learners (whose L1 mimetic system is rich with durational iconicity, e.g., gitaigo doubling: `guruguru` for stirring/swirling), the gerund form may be preferred over the bare imperative for iconic action verbs as a sound-meaning-driven form-selection error.
 
-**Mic dependency (v7.1):** the naming block runs whenever `SKIP_NAMING_IF_NO_MIC` is `false` (default) **or** a mic is available. When no mic is available:
-- Practice trials are skipped (audio-only, not meaningful as typing practice).
-- Stages 1, 2, and 3 each fall through to per-item typed-text fallbacks.
-- If `SKIP_NAMING_IF_NO_MIC` is set to `true`, the entire naming block is skipped instead and a notification is shown.
+All action verbs in v8.0 (crack, flip, slice, stir) carry `target_form: 'bare'` in their trial data. Post-hoc Whisper transcription on isolated-pass audio scores whether the participant produced the bare form, the gerund, or another variant. Form-selection analysis: gerund-substitution rate by iconicity × condition.
 
-Each audio trial writes `audio_filename` (e.g. `post_<PID>_butter_ingredient.wav`, `post_<PID>_scene_cooking_groupB.wav`) and is flagged `needs_audio_scoring: true`. Text-fallback trials carry `modality: 'text'` and the typed response in the trial's `response` field.
+**Predicted:** higher gerund-substitution rate for iconic verbs, amplified in VR > 2D > Text. Reported as a secondary finding (exploratory but theoretically grounded).
 
-Measures: productive vocabulary at item level (Stages 1–2) and connected description / vocabulary deployment at scene level (Stage 3).
+---
 
-### 9. Transfer Recognition Test (immediate only, 3–4 min)
-- All 12 trained words + 7 foils presented one at a time
-- "Did this word appear in the training?" → YES/NO + confidence (1–4)
-- Foils: glug, splash, drizzle, knife, salt (iconic) + fork, cup (arbitrary) — **5 iconic + 2 arbitrary** (per v6.1.3 reclassification)
-- Tagged: `trained`, `type`, `iconic`, `word_group`
-- Measures: recognition memory, d-prime (hits vs. false alarms), iconicity advantage in recognition
+## 5. Pretest structure (~15 min)
 
-### 10. Blind Retell (45 seconds)
-- Preparation step with instructions before recording begins
-- No pictures — explain pancake-making from memory
-- Audio recording (45 s) or text fallback
-- Measures: narrative production, vocabulary use in context
-
-### 11. Teach a Friend (60 seconds)
-- Preparation step with instructions before recording begins
-- No pictures — teach a beginner how to make a pancake
-- Should include: tools, ingredients, key actions, safety tips, success checks
-- Audio recording (60 s) or text fallback
-- Measures: depth of procedural knowledge, vocabulary deployment
-
-### 12. Likert Feedback (1–2 min)
-Seven 5-point scales (1 = strongly disagree, 5 = strongly agree):
-
-| Item | Variable Name | Construct |
-|---|---|---|
-| Recall of cooking action words | `recall_actions` | Vocabulary confidence (verbs) |
-| Recall of ingredient/tool words | `recall_objects` | Vocabulary confidence (nouns) |
-| Training sounds helped learning | `sound_helpfulness` | Sound-aided learning |
-| Words "sounded like" their meaning | `iconicity_awareness` | Iconicity metacognition |
-| Training felt like real cooking | `immersion` | Presence / immersion |
-| Could explain procedure in English | `procedural_confidence` | Procedural confidence |
-| Would use VR for English again | `willingness_vr` | Technology acceptance |
-
-### 13. Exit Comments
-Open-ended free response:
-- Which words were easiest/hardest to remember and why
-- General comments about training or test
-
-## Technical Requirements
-- Modern browser (Chrome, Brave, Firefox, Safari)
-- Headphones or speakers
-- Microphone (recommended; v7.1 provides typed-text fallbacks for all naming, retell, and teach tasks when no mic is available)
-- HTTPS required for microphone access
-- jsPsych 7.x with plugins:
-  - `jsPsychHtmlButtonResponse`
-  - `jsPsychHtmlKeyboardResponse`
-  - `jsPsychSurveyText`
-  - `jsPsychSurveyLikert`
-  - `jsPsychPreload`
-  - `jsPsychInitializeMicrophone`
-  - `jsPsychHtmlAudioResponse`
-
-## Asset Requirements
-
-### Images (`/img/`)
-Each Group B word has 2 variants (randomly selected per trial):
-
-| Word | Files |
-|---|---|
-| sizzling | `sizzling_01.png`, `sizzling_02.png` |
-| mixing | `mixing_01.png`, `mixing_02.png` |
-| stirring | `stirring_01.png`, `stirring_02.png` |
-| pouring | `pouring_01.png`, `pouring_02.png` |
-| butter | `butter_01.png`, `butter_02.png` |
-| flour | `flour_01.png`, `flour_02.png` |
-| pancake (distractor) | `pancake_01.png`, `pancake_02.png` |
-| egg (distractor) | `egg_01.png`, `egg_02.png` |
-| milk (distractor / 4AFC ingredient foil) | `milk_01.png`, `milk_02.png` |
-| sugar (distractor / 4AFC ingredient foil) | `sugar_01.png`, `sugar_02.png` |
-| practice | `park_scene.jpg` |
-| **scene — cooking (Group B)** *(new in v7)* | `scene_cooking_B.jpg` |
-| **scene — plating (Group B)** *(new in v7)* | `scene_plating_B.jpg` |
-
-The two scene images are single-file (no variants) and are used only by Stage 3 of the naming task. As of v7.1 they are included in the preloader's image list, so a missing scene file will surface during the loading screen rather than at run time.
-
-### Audio (`/sounds/`)
-Each has 2 variants (randomly selected per trial):
-
-| Sound | Files | Format |
-|---|---|---|
-| sizzle | `sizzle_1.mp3`, `sizzle_2.mp3` | MP3 |
-| mix | `mix_1.wav`, `mix_2.wav` | WAV |
-| stir | `stir_1.mp3`, `stir_2.mp3` | MP3 |
-| pour | `pour_1.mp3`, `pour_2.mp3` | MP3 |
-| spread | `spread_1.mp3`, `spread_2.mp3` | MP3 |
-| crack (Group A) | `crack_1.mp3`, `crack_2.mp3` | MP3 |
-| flip (Group A) | `flip_1.mp3`, `flip_2.mp3` | MP3 |
-| whisk (Group A) | `whisk_1.mp3`, `whisk_2.mp3` | MP3 |
-
-> **Note:** Mix audio files are `.wav` while all others are `.mp3`. Both formats are supported by modern browsers. Consider converting to `.mp3` for consistency in future versions.
-
-Missing assets display SVG placeholders (images) or silent audio rather than crashing.
-
-## Data Output
-Auto-downloads JSON: `posttest_[PID]_[condition].json`. Optionally POSTed to a server via `?post=[URL]` query parameter (consistent with pretest).
-
-### Key data fields per trial
-
-| Field | Description |
-|---|---|
-| `task` | Task identifier (e.g., `4afc`, `naming_ingredient_spontaneous`, `naming_action_spontaneous`, `naming_scene_description`, `transfer_test`, `foley_groupA`) |
-| `iconic` | `true`/`false`/`null` — target word's iconicity |
-| `iconicity_rating` | Winter et al. rating (1–7) |
-| `word_group` | `A`, `B`, `foil` |
-| `phase` | Always `post` |
-| `condition` | `immediate` or `delayed` |
-| `correct` / `is_correct` | Boolean accuracy |
-| `rt` | Response time (ms) |
-| `needs_audio_scoring` | `true` for trials requiring manual transcription scoring |
-| `modality` | `audio` or `text` (for mic/fallback tasks) |
-| `type` | Transfer test word type (e.g., `target_iconic`, `foil_arbitrary`, `foil_iconic`) |
-| `trained` | `true`/`false` — whether word appeared in training (transfer test) |
-| `confidence` | 1–4 confidence rating (transfer test) |
-| `stimulus_category` *(new in v7)* | 4AFC trial category (`ingredient`, `action`, `process`, etc.) |
-| `stage` *(new in v7)* | Naming stage (`ingredient`, `action`, `scene`) |
-| `scene` *(new in v7)* | Scene identifier on Stage 3 (`cooking_groupB`, `plating_groupB`) |
-| `audio_filename` | For naming and scene trials, suggested filename for the recorded clip |
-
-## Analysis Notes
-
-### Primary comparison
-- Within post-test: Group B iconic (n=3) vs. Group B arbitrary (n=3) on 4AFC, Stages 1–2 of naming, speeded match
-- Pre/post: compare Group A pre-test scores with Group B post-test scores (matched on iconicity)
-- Between conditions: compare Group B post-test scores across VR vs. 2D vs. Text conditions
-
-### 4AFC analysis (v7-specific)
-- The two blocks intentionally trade off some statistical convenience for measurement validity: in v6, mixed-category 4AFC trials gave away the answer by category, so v7 keeps distractors within-category. The unavoidable consequence is that ingredient targets are all arbitrary and 3 of the 4 action targets are iconic — i.e., category and iconicity are partially confounded **within blocks**. This is a property of the lexicon being sampled (food/object nouns tend toward arbitrary; sound/motion verbs tend toward iconic), not a flaw in the design.
-- The 3-iconic-vs-3-arbitrary balance is preserved at the **task level**, so iconic-vs-arbitrary contrasts should be analyzed across the full 6-item set rather than within a single block. Item-level mixed-effects models with `stimulus_category` as a covariate (or stratification factor) are the natural approach.
-- Note also that raw accuracy across blocks is not directly comparable: the Ingredients block has 2 targets drawn from a 4-item ingredient pool, while the Actions block has 4 targets drawn from a 4-item action pool, so chance level and competitor strength differ.
-
-### Naming analysis (v7-specific)
-- Stages 1 and 2 yield item-level production data analogous to v6 picture naming, scoreable for target word use, pronunciation, and latency.
-- Stage 3 yields connected speech that can be coded for trained vocabulary use, sequence accuracy, and iconicity-related lexical choices. Note that scene order is fixed (cooking before plating), so any order effects across the two scenes are confounded with content.
-
-### Cross-group foley comparison
-- Group B foley performance vs. Group A foley performance in post-test
-- Tests whether iconic sounds from both groups are recognized equally after training
-- Since Group A sounds were also present during training but Group A *vocabulary* was baseline-tested in the pre-test, foley recognition provides a complementary measure
-
-### Transfer test scoring
-- Compute d-prime: hit rate (trained words correctly recognized) vs. false alarm rate (foils incorrectly endorsed)
-- Compare d-prime for iconic vs. arbitrary trained words
-- Confidence ratings allow signal detection analysis
-- Foil set is 5 iconic + 2 arbitrary (knife and salt reclassified in v6.1.3) — provides more statistical power for testing whether untrained iconic words show a general recognition advantage independent of training.
-
-### Critical config flags
-```javascript
-NAMING_VERBS_ONLY  = false  // MUST be false — otherwise loses butter/flour (arbitrary)
-FOURAFC_VERBS_ONLY = false  // MUST be false — otherwise loses butter/flour (arbitrary)
-SKIP_NAMING_IF_NO_MIC = false // v7.1 default — fall through to text fallbacks
-                              // when no mic. Set to true to skip the whole
-                              // naming block with a notification instead.
 ```
-Changing the first two to `true` would remove the arbitrary noun targets, destroying the iconic/arbitrary balance. The third controls behavior of the naming block when no microphone is available.
+1.  Asset launch-check (only if missing assets)
+2.  Welcome
+3.  Participant info → stamps counterbalance for analysis
+4.  Mic setup gate
+5.  Forward digit span (3, 4, 5)              — WM covariate
+6.  Phoneme discrimination (12 trials)        — phonological perception covariate
+7.  Foley iconicity (4 trials)                — iconicity-sensitivity moderator
+8.  Spatial span / Corsi (3, 4)               — spatial WM covariate
+9.  Production practice (1 trial, park scene)
+10. Production controls (4 items × phrase + isolated × 2 reps each = 32 recordings)
+11. Production targets (8 items × phrase + isolated × 2 reps each = 64 recordings)
+12. Save
+```
 
-## Task Availability by Condition
+### 5.1 Two-pass elicitation per production item
 
-| Task | Immediate | Delayed |
+**Phrase pass (4s recording):**
+- Object items: "What is this?" → expected "It's a [word]"
+- Action items: "What is happening?" → expected "She is [word]ing"
+- Matches what training does; preserves ecological validity.
+
+**Isolated pass (3s recording):**
+- Same picture: "Say just the word."
+- Forces single-word production. Primary measurement signal because there's no carrier-phrase context for Whisper or naïve listener to compensate with.
+
+Phrase block runs across all items first, then isolated, with a transition screen between. This separates passes so phrase production doesn't immediately prime isolated.
+
+### 5.2 Phoneme discrimination contrasts (12 trials)
+
+10 different-pair trials targeting phonemes in v8.0 stimuli, plus 2 identity-control trials (same audio file played twice; participants who score 0/2 on these are excluded as non-attenders).
+
+| # | Pair | Contrast | Targets |
+|---:|---|---|---|
+| 1 | slice / sris | /sl/–/sɹ/ | slice |
+| 2 | crack / clack | /kr/–/kl/ | crack |
+| 3 | flip / frip | /fl/–/fɹ/ | flip |
+| 4 | sizzle / siddle | medial /z/–/d/ | sizzle |
+| 5 | bowl / vowl | /b/–/v/ | bowl |
+| 6 | pan / pun | /æ/–/ʌ/ | pan |
+| 7 | flour / floor | /aʊə/–/ɔː/ | flour |
+| 8 | butter / batter | /ʌ/–/æ/ | butter |
+| 9 | spoon / soon | /sp/ cluster | spoon (filler) |
+| 10 | stir / star | /ɜːr/–/ɑːr/ | stir |
+| 11 | crack / crack | identity | attention check |
+| 12 | pan / pan | identity | attention check |
+
+Each trial yields per-target perceptual baseline as a moderator for production gain.
+
+---
+
+## 6. Posttest structure (~25 min immediate; ~20 min delayed)
+
+```
+1.  Asset launch-check
+2.  Welcome
+3.  Participant confirm (pid + training condition)
+4.  Mic gate
+5.  Mic plugin init (HOISTED — fixes v7.4 double-prompt bug)
+6.  Production practice
+7.  Production controls — phrase + isolated × 2 reps (32 recordings)
+8.  Production targets — phrase + isolated × 2 reps (64 recordings)
+9.  Multi-probe binding task — sizzle, crack, bowl × 3 probes
+10. Foley recognition (4 trained sounds)
+11. Procedural recall (free typing)
+12. Sequencing (drag-to-order)
+13. Blind retell (45s audio)
+14. Teach a friend (60s audio)
+15. Recognition + confidence (12 items: 8 trained + 4 foils)
+16. Likert (7 items)
+17. Exit comments
+18. Save
+```
+
+### 6.1 Cuts from v7.4
+
+- **4AFC ingredients/actions block** — pre-taught Group B targets before naming. Cut.
+- **Speeded word-picture match** — pre-taught targets and tested recognition speed (didn't address hypothesis). Cut.
+- **Group A naming as separate block** — merged into single production block.
+- **Naming Stage 3 scene description** — replaced by spatial multi-probe.
+- **Foley split into Group A + B** — merged into single 4-item block.
+- **19-item recognition test** — trimmed to 12.
+
+### 6.2 Multi-probe binding task
+
+For each of 3 words (`sizzle` — passive iconic; `crack` — produced iconic; `bowl` — produced conventional), three probes:
+
+| Probe | Question | All conditions can encode? |
 |---|---|---|
-| 4AFC Vocabulary (Ingredients + Actions) | ✅ | ✅ |
-| Speeded Match | ✅ | ❌ |
-| Procedural Recall | ✅ | ✅ |
-| Sequencing | ✅ | ❌ |
-| Foley — Group B | ✅ (5 trials) | ✅ (3 trials) |
-| Foley — Group A | ✅ (3 trials) | ❌ |
-| Progressive Naming & Description (3 stages) | ✅ | ✅ |
-| Transfer Recognition | ✅ | ❌ |
-| Blind Retell | ✅ | ✅ |
-| Teach a Friend | ✅ | ✅ |
-| Likert Feedback | ✅ | ✅ |
-| Exit Comments | ✅ | ✅ |
+| 1. Event association | "When you said/heard X, what was happening?" 4-AFC | Yes — event memory is condition-invariant |
+| 2. SFX recognition | "Did you hear this sound during training?" Yes/No + confidence | Yes — SFX held constant across conditions |
+| 3. Location | "Where in the kitchen did this happen?" Ingredient / Cooking / Plating | Yes — three regions are schematic, modality-neutral |
+
+Probe 3 is the **spatial-affordance signal**. Predicted: VR > 2D > Text on Probe 3, uniform across conditions on Probes 1 and 2. The location advantage is convergent evidence for the spatial-affordance hypothesis alongside the production-intelligibility result.
+
+### 6.3 Why no drag-and-place spatial reconstruction
+
+v8.0 originally proposed a drag-and-place spatial reconstruction task as the strongest spatial-encoding measure. After auditing the actual training conditions, this was deferred:
+
+- The 2D condition shows objects as pictures at fixed canvas positions (Euclidean spatial encoding).
+- The Text condition shows word labels in container boxes (containment/relational encoding) — fundamentally different from Euclidean.
+- A single ground-truth Euclidean layout would unfairly favor the 2D condition because it's the only group that encoded Euclidean positions.
+
+The schematic 3-region location probe (Probe 3) is the conservative, defensible version of the spatial test: all three conditions could have encoded "ingredient area vs cooking area vs plating area" regardless of modality. A pixel-precise drag-and-place task is deferred to v8.1 as a follow-up study with appropriate controls (e.g., counterbalanced ground-truth layouts, separate per-condition encoding metrics).
+
+---
+
+## 7. Audio measurement pipeline (downstream)
+
+Audio filename schema:
+
+```
+pre_{pid}_{role}_{word}_{pass}_rep{N}.wav
+post_{pid}_{role}_{word}_{pass}_rep{N}.wav
+```
+
+This lets analysts pair pre/post by participant + word + pass for change-score analysis.
+
+Three measurement tracks:
+
+1. **Forced alignment + per-segment scoring** (Montreal Forced Aligner). Primary for cluster/duration features. Produces per-phoneme accuracy for each token.
+2. **Naïve L1-English raters → intelligibility Likert** on isolated-pass audio. Primary for "did this sound like the target word?" Most aligned with downstream communicative use.
+3. **Acoustic measures** (VOT for /p t k/, F1/F2 for /æ/ /ʌ/ /ɜː/, sibilant centroid for /s/ /ʃ/ /z/, duration ratios). Diagnostic where specific predictions exist.
+
+The isolated-pass audio is the primary input. Phrase-pass audio supports a secondary analysis on naturalness/lexical-retrieval. Whisper transcripts on isolated audio also drive the form-selection (bare-vs-gerund) analysis.
+
+---
+
+## 8. Required assets
+
+### Audio files (sounds/)
+
+**Phoneme discrimination — new for v8.0 (11):**
+slice, sris, crack, clack, sizzle, siddle, vowl, pun, floor, spoon, soon
+
+**Phoneme discrimination — carry-over from v7.3 (9):**
+flip, frip, bowl, pan, flour, butter, batter, stir, star
+
+**Foley iconicity — pretest (4):** high_tinkle, liquid_flow, egg_crack, sizzle
+
+**Foley recognition — posttest (4):**
+sfx_cracking, sfx_sizzling, sfx_flipping, sfx_slicing
+
+### Image files (img/)
+
+**Production targets (8):** cracking, flipping, slicing, stirring, bowl, pan, flour, butter
+
+**Production controls (4):** chopping, peeling, ladle, kettle
+
+**Practice:** park_scene
+
+---
+
+## 9. File layout
+
+```
+/
+├── pretest.html              # entry point — loads jsPsych + pretest.js
+├── pretest.js                # v8.0
+├── posttest.html             # entry point — loads jsPsych + posttest.js
+├── posttest.js               # v8.0
+├── img/                      # all picture stimuli
+├── sounds/                   # all audio (phoneme + foley + SFX)
+└── README.md                 # this document
+```
+
+---
+
+## 10. Counterbalance hash (pretest + posttest synced)
+
+Both pretest and posttest use the same hash function on participant ID:
+
+```js
+function pidToCounterbalance(pid) {
+  const s = String(pid || 'unknown');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) - hash) + s.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % 2;
+}
+```
+
+In v8.0, all 8 trained targets are pretested and posttested for everyone — counterbalance is **stamped in trial data but does not gate stimuli**. This is so future analyses (or a v8.1 split-half re-introduction) can use the same field without re-architecting code.
+
+**Lock pid format before data collection begins.** Hash distribution depends on pid format; switching from numeric to alphanumeric mid-study would shift counterbalance distribution.
+
+---
+
+## 11. Decisions made and trade-offs accepted
+
+| Decision | Trade-off accepted |
+|---|---|
+| Class-based iconicity contrast over continuous Winter rating | Lose granularity; gain robustness against per-item rating noise |
+| Drop receptive 4AFC entirely | Lose receptive baseline; gain ~3 min and remove pre-teaching |
+| Drop lexical decision | Lose word-recognition speed covariate; gain ~3 min |
+| No split-half — pretest all 8 targets for everyone | Slight pretest contamination risk, mitigated by parallel controls. Gain 8-vs-8 within-subject coverage and clean change-score analysis |
+| `sizzle` not a production target | Loss of one iconic data point in production. Gain: honest acknowledgment that participants never produce `sizzle` during training. Tested instead via multi-probe binding |
+| Stir as marginal-iconic with form-selection analysis | Adds one item that's analyzed separately. Gain: secondary publishable finding on durational iconicity in L2 |
+| Phrase + isolated two-pass elicitation | +90s per block; solves Whisper-rescue confound for phoneme-level analysis |
+| Drop drag-and-place spatial reconstruction | Lose strongest spatial-encoding measure; gain defensibility (avoids Euclidean-vs-containment confound). Schematic 3-region probe is conservative dunk; full version deferred to v8.1 |
+| Pretest 15 min + Posttest 25 min in 1-hour total session | Hard ceiling, drives every cut |
+
+---
+
+## 12. Reproducibility notes
+
+- Counterbalance assignment is **deterministic from participant ID** via the hash function above. Re-running with the same pid produces the same stamp.
+- All trial records carry: `pid`, `phase` (pre/post), `training_condition`, `counterbalance_list`, `target_word`, `iconic`, `iconicity_rating`, `iconicity_marginal`, `target_form`, `item_role`, `pass`, `audio_filename` (audio mode) / `response` (text mode).
+- Audio files use the canonical naming schema in §7 — analysts can pair pre/post tokens without parsing trial logs.
+- The form-selection analysis requires post-hoc Whisper transcription of isolated-pass audio; the test does NOT perform this scoring during the session.
+
+---
+
+## 13. Citation
+
+Olexa, R. A. (in preparation). *Sound Meets Space: Iconicity amplification through spatial affordance in immersive VR language learning* [Doctoral dissertation, Institute of Science Tokyo].
+
+Olexa, R. A., & Taquet, D. (2026). Virtual reality study abroad and language contact patterns in Japanese EFL learners. *Discover Education*.
+
+Winter, B., et al. (2024). Iconicity ratings for 14,000+ English words.
+
+---
+
+*Document version 1.1 (2026-04-29). Update header date and changelog on every substantive revision.*
+
+## Changelog
+
+- **v1.1 (2026-04-29):** Reconciled with canonical training script. Removed `sizzle` from production targets (it's an SFX consequence, not a participant utterance). Added `stir` as marginal-iconic with form-selection secondary analysis. Dropped split-half — pretest all 8 targets. Added multi-probe binding task with 3-region location probe as conservative spatial-affordance test. Deferred drag-and-place spatial reconstruction to v8.1. Posttest fully redesigned: cut 4AFC + speeded match, mic-init hoisted, word lists synced with pretest, two-pass production added.
+- **v1.0 (2026-04-29):** Initial v8.0 documentation with split-half counterbalance, sizzle as production target, drag-and-place spatial reconstruction.
