@@ -34,7 +34,7 @@
 // PARALLEL CONTROLS (4) — never trained, pretested + posttested for every
 // participant. Pre→post change estimates testing/familiarization.
 //   ICONIC: chop, peel
-//   CONVENTIONAL: ladle, kettle
+//   CONVENTIONAL: spoon, plate
 //
 // PASSIVE/IMPLICIT ICONIC (1, NOT in production block):
 //   sizzle 5.30 — never produced during training (it's the SFX consequence
@@ -53,7 +53,7 @@
 //   4.  Mic gate
 //   5.  Mic plugin init (HOISTED to right after gate — fixes v7.4 mic bugs)
 //   6.  Production practice (1 trial — same park scene as pretest)
-//   7.  Production controls (chop, peel, ladle, kettle — phrase + isolated × 2)
+//   7.  Production controls (chop, peel, spoon, plate — phrase + isolated × 2)
 //   8.  Production targets (all 8 — phrase + isolated × 2)
 //   9.  Multi-probe binding task — sizzle and a few comparators
 //   10. Foley recognition (trained sounds: cracking, flipping, slicing, sizzling)
@@ -158,10 +158,10 @@
   ];
 
   const PRODUCTION_CONTROLS = [
-    { word: 'chop',   display: 'chopping', image: 'img/chopping.jpg', prompt_type: 'action', iconic: true,  iconicity_marginal: false, target_form: 'bare', rating: 5.50 },
-    { word: 'peel',   display: 'peeling',  image: 'img/peeling.jpg',  prompt_type: 'action', iconic: true,  iconicity_marginal: false, target_form: 'bare', rating: 5.60 },
-    { word: 'ladle',  display: 'ladle',    image: 'img/ladle.jpg',    prompt_type: 'object', iconic: false, iconicity_marginal: false, target_form: 'bare', rating: 3.67 },
-    { word: 'kettle', display: 'kettle',   image: 'img/kettle.jpg',   prompt_type: 'object', iconic: false, iconicity_marginal: false, target_form: 'bare', rating: 3.80 },
+    { word: 'chop',  display: 'chopping', image: 'img/chopping.jpg', prompt_type: 'action', iconic: true,  iconicity_marginal: false, target_form: 'bare', rating: 5.50 },
+    { word: 'peel',  display: 'peeling',  image: 'img/peeling.jpg',  prompt_type: 'action', iconic: true,  iconicity_marginal: false, target_form: 'bare', rating: 5.60 },
+    { word: 'spoon', display: 'spoon',    image: 'img/spoon.jpg',    prompt_type: 'object', iconic: false, iconicity_marginal: false, target_form: 'bare', rating: 3.30 },
+    { word: 'plate', display: 'plate',    image: 'img/plate.jpg',    prompt_type: 'object', iconic: false, iconicity_marginal: false, target_form: 'bare', rating: 3.00 },
   ];
 
   // SFX file schema: sounds/sfx_{word}_{1|2}.mp3

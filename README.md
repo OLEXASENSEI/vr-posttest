@@ -4,7 +4,7 @@
 **Chapter:** Dissertation Ch. 5 — Sound Meets Space
 **Defense:** July 1, 2026 (preliminary May 2026)
 **Status:** v8.0 pretest + posttest live; spatial reconstruction deferred to v8.1
-**Last update:** 2026-04-29 (v1.1 — post script-reality reconciliation)
+**Last update:** 2026-04-29 (v1.3 — spoon/plate replace ladle/kettle as conventional controls)
 
 ---
 
@@ -65,10 +65,14 @@ All 8 are pretested AND posttested for every participant. No split-half — pret
 |---|---|---:|
 | chop | iconic control | 5.50 |
 | peel | iconic control | 5.60 |
-| ladle | conventional control | 3.67 |
-| kettle | conventional control | 3.80 |
+| spoon | conventional control | 3.30 |
+| plate | conventional control | 3.00 |
 
 Iconicity gradient parallels targets'. Pre→post change on these estimates pure testing effect.
+
+**Why spoon/plate, not ladle/kettle:** earlier draft used ladle and kettle as conventional controls. Pilot intuition predicted these would produce floor effects (silence) at pretest because they're outside KOSEN second-year vocabulary, making their pre→post change uninformative as a testing-effect baseline. spoon and plate are basic kitchen vocabulary present in the training scene visually but never spoken as utterances, giving us a real production baseline to detect testing/familiarization gain on.
+
+**Note on `peel`:** retained as iconic control with `target_form: 'bare'` even though students likely produce `peeling` more readily than the bare form. This is by design — it gives the form-selection secondary analysis a clean comparator. If trained iconic verbs show gerund-substitution because of training × iconicity, untrained `peel` showing the same pattern would isolate the iconicity-driven component of form-selection from any training-specific contribution.
 
 ### 3.3 Passive/implicit iconic — `sizzle`
 
@@ -249,7 +253,7 @@ For words with two variants, the test picks `_1` or `_2` randomly per trial and 
 
 **Production targets (8):** cracking, flipping, slicing, stirring, bowl, pan, flour, butter
 
-**Production controls (4):** chopping, peeling, ladle, kettle
+**Production controls (4):** chopping, peeling, spoon, plate
 
 **Practice:** park_scene
 
@@ -331,6 +335,7 @@ Winter, B., et al. (2024). Iconicity ratings for 14,000+ English words.
 
 ## Changelog
 
-- **v1.2 (2026-04-29):** Foley recognition expanded from 4 to 5 items (added stir). SFX file schema standardized to `sfx_{word}_{1|2}.mp3` with random variant selection per trial; slice uses single take. `sfx_variant` (1 or 2) stamped in trial data.
+- **v1.3 (2026-04-29):** Replaced conventional controls ladle/kettle with spoon/plate. Pilot intuition predicted ladle/kettle would produce floor effects (silence) for KOSEN second-year students, making their pre→post change uninformative as a testing-effect baseline. spoon/plate are basic kitchen vocabulary, never spoken in training, giving a real production baseline. peel retained as iconic control despite likely gerund-preference — it now serves as a clean form-selection comparator (untrained iconic verb).
+- **v1.2 (2026-04-29):** Foley recognition expanded from 4 to 5 items (added stir). SFX file schema standardized to `sfx_{word}_{1|2}.mp3` with random variant selection per trial; slice uses single take. `sfx_variant` (1 or 2) stamped in trial data. Fixed pretest foley sizzle path (was pointing at spoken-word file, now points at SFX).
 - **v1.1 (2026-04-29):** Reconciled with canonical training script. Removed `sizzle` from production targets (it's an SFX consequence, not a participant utterance). Added `stir` as marginal-iconic with form-selection secondary analysis. Dropped split-half — pretest all 8 targets. Added multi-probe binding task with 3-region location probe as conservative spatial-affordance test. Deferred drag-and-place spatial reconstruction to v8.1. Posttest fully redesigned: cut 4AFC + speeded match, mic-init hoisted, word lists synced with pretest, two-pass production added.
 - **v1.0 (2026-04-29):** Initial v8.0 documentation with split-half counterbalance, sizzle as production target, drag-and-place spatial reconstruction.
