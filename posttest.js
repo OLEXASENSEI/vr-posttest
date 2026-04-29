@@ -164,16 +164,29 @@
     { word: 'kettle', display: 'kettle',   image: 'img/kettle.jpg',   prompt_type: 'object', iconic: false, iconicity_marginal: false, target_form: 'bare', rating: 3.80 },
   ];
 
-  // Foley recognition — 4 trained sounds. Each pairs the canonical SFX
+  // SFX file schema: sounds/sfx_{word}_{1|2}.mp3
+  // - crack, flip, sizzle, stir each have 2 variants → randomized per trial
+  // - slice has only 1 take (recording was harder) → always uses _1
+  // - sfxPath() picks the file at trial time and stamps `sfx_variant` in data
+  function sfxPath(word) {
+    if (word === 'slice') return { path: 'sounds/sfx_slice_1.mp3', variant: 1 };
+    const v = (Math.random() < 0.5) ? 1 : 2;
+    return { path: `sounds/sfx_${word}_${v}.mp3`, variant: v };
+  }
+
+  // Foley recognition — 5 trained sounds. Each pairs the canonical SFX
   // from training with a 4AFC of action verbs. `sizzle` is uniquely
   // important here because it's the only iconic word the participant
   // never produced during training — its recognition is the cleanest
-  // measure of passive multimodal binding.
+  // measure of passive multimodal binding. `stir` is a marginal-iconic
+  // case present in the production block; including it in foley adds
+  // a within-subject convergent point for the form-selection analysis.
   const FOLEY_RECOGNITION = [
-    { audio: 'sounds/sfx_cracking.mp3', target: 'cracking', options: ['cracking', 'flipping', 'mixing', 'pouring'],   correct: 0, iconic: true, target_word: 'crack',  produced_in_training: true  },
-    { audio: 'sounds/sfx_sizzling.mp3', target: 'sizzling', options: ['boiling', 'sizzling', 'pouring', 'cracking'],  correct: 1, iconic: true, target_word: 'sizzle', produced_in_training: false },
-    { audio: 'sounds/sfx_flipping.mp3', target: 'flipping', options: ['stirring', 'cracking', 'flipping', 'slicing'], correct: 2, iconic: true, target_word: 'flip',   produced_in_training: true  },
-    { audio: 'sounds/sfx_slicing.mp3',  target: 'slicing',  options: ['pouring', 'mixing', 'cracking', 'slicing'],    correct: 3, iconic: true, target_word: 'slice',  produced_in_training: true  },
+    { sfx_word: 'crack',  target: 'cracking', options: ['cracking', 'flipping', 'mixing', 'pouring'],   correct: 0, iconic: true, target_word: 'crack',  produced_in_training: true,  iconicity_marginal: false },
+    { sfx_word: 'sizzle', target: 'sizzling', options: ['boiling', 'sizzling', 'pouring', 'cracking'],  correct: 1, iconic: true, target_word: 'sizzle', produced_in_training: false, iconicity_marginal: false },
+    { sfx_word: 'flip',   target: 'flipping', options: ['stirring', 'cracking', 'flipping', 'slicing'], correct: 2, iconic: true, target_word: 'flip',   produced_in_training: true,  iconicity_marginal: false },
+    { sfx_word: 'slice',  target: 'slicing',  options: ['pouring', 'mixing', 'cracking', 'slicing'],    correct: 3, iconic: true, target_word: 'slice',  produced_in_training: true,  iconicity_marginal: false },
+    { sfx_word: 'stir',   target: 'stirring', options: ['stirring', 'flipping', 'pouring', 'slicing'],  correct: 0, iconic: true, target_word: 'stir',   produced_in_training: true,  iconicity_marginal: true  },
   ];
 
   // Multi-probe binding task — focuses on SIZZLE (the unique passive-iconic
@@ -198,7 +211,7 @@
       probe1_q_jp: 'トレーニングで <b>sizzling</b> という音を聞いたとき、何が起こっていましたか？',
       probe1_options: ['oil heating in the pan', 'water boiling on the stove', 'an egg cracking', 'flour falling into the bowl'],
       probe1_correct: 0,
-      probe2_audio: 'sounds/sfx_sizzling.mp3',
+      probe2_sfx_word: 'sizzle',  // resolved to a random variant via sfxPath() at trial time
       probe3_correct: 'cooking',
     },
     {
@@ -208,7 +221,7 @@
       probe1_q_jp: 'トレーニングで <b>crack</b> と言ったとき、何が起こっていましたか？',
       probe1_options: ['butter melting in the pan', 'the egg breaking open', 'flour pouring into the bowl', 'milk being poured'],
       probe1_correct: 1,
-      probe2_audio: 'sounds/sfx_cracking.mp3',
+      probe2_sfx_word: 'crack',
       probe3_correct: 'ingredient',
     },
     {
@@ -218,7 +231,7 @@
       probe1_q_jp: 'トレーニングで <b>bowl</b> と言ったとき、何が起こっていましたか？',
       probe1_options: ['pancake on a plate', 'pan heating on stove', 'ingredients combining', 'butter melting'],
       probe1_correct: 2,
-      probe2_audio: null,  // bowl has no SFX — Probe 2 skipped for this word
+      probe2_sfx_word: null,  // bowl has no SFX — Probe 2 skipped for this word
       probe3_correct: 'ingredient',
     },
   ];
@@ -284,8 +297,24 @@
     const allImages = new Set();
     for (const s of PRODUCTION_TARGETS) allImages.add(s.image);
     for (const s of PRODUCTION_CONTROLS) allImages.add(s.image);
-    for (const s of FOLEY_RECOGNITION) allAudio.add(s.audio);
-    for (const s of BINDING_PROBES) { if (s.probe2_audio) allAudio.add(s.probe2_audio); }
+    // SFX: enumerate every variant we might pick at trial time
+    for (const s of FOLEY_RECOGNITION) {
+      if (s.sfx_word === 'slice') {
+        allAudio.add('sounds/sfx_slice_1.mp3');
+      } else {
+        allAudio.add(`sounds/sfx_${s.sfx_word}_1.mp3`);
+        allAudio.add(`sounds/sfx_${s.sfx_word}_2.mp3`);
+      }
+    }
+    for (const s of BINDING_PROBES) {
+      if (!s.probe2_sfx_word) continue;
+      if (s.probe2_sfx_word === 'slice') {
+        allAudio.add('sounds/sfx_slice_1.mp3');
+      } else {
+        allAudio.add(`sounds/sfx_${s.probe2_sfx_word}_1.mp3`);
+        allAudio.add(`sounds/sfx_${s.probe2_sfx_word}_2.mp3`);
+      }
+    }
     allImages.add('img/park_scene.jpg');
 
     for (const url of allAudio) {
@@ -725,7 +754,12 @@
       });
 
       // Probe 2: SFX recognition (Yes/No + confidence) — skip if no audio
-      if (probe.probe2_audio) {
+      if (probe.probe2_sfx_word) {
+        // Resolve the SFX file at TRIAL CONSTRUCTION time so the on_load
+        // closure and data field both reference the same variant. (Doing it
+        // inside the data callback would risk picking different variants
+        // for `audio` and `data.audio_file`.)
+        const sfx = sfxPath(probe.probe2_sfx_word);
         tl.push({
           type: T('jsPsychHtmlButtonResponse'),
           stimulus: `<div style="text-align:center;">
@@ -740,7 +774,8 @@
             word: probe.word,
             iconic: probe.iconic,
             produced_in_training: probe.produced,
-            audio_file: probe.probe2_audio,
+            audio_file: sfx.path,
+            sfx_variant: sfx.variant,
             correct_answer: 0,  // all SFX in BINDING_PROBES were heard during training
             training_condition: assignedTrainingCondition,
             phase: 'post'
@@ -748,7 +783,7 @@
           on_load: function () {
             const btn = document.getElementById('binding-play');
             const status = document.getElementById('binding-status');
-            const audio = new Audio(audioSrc(probe.probe2_audio));
+            const audio = new Audio(audioSrc(sfx.path));
             const answerBtns = [...document.querySelectorAll('.jspsych-html-button-response-button button')];
             let unlocked = false;
             function lockAnswers(lock) { answerBtns.forEach(b => { b.disabled = lock; b.style.opacity = lock ? '0.5' : '1'; }); }
@@ -805,7 +840,7 @@
     return tl;
   }
 
-  /* ======================== FOLEY RECOGNITION (4 trained sounds) ======================== */
+  /* ======================== FOLEY RECOGNITION (5 trained sounds) ======================== */
   function buildFoleyRecognition() {
     const tl = [];
     tl.push({
@@ -817,6 +852,9 @@
     shuffle(FOLEY_RECOGNITION).forEach((stim, idx) => {
       const opts = shuffle(stim.options.map((o, i) => ({ text: o, origIdx: i })));
       const correctIdx = opts.findIndex(o => o.origIdx === stim.correct);
+      // Resolve the SFX file (and variant) at trial-construction time so
+      // the on_load closure and data field reference the same variant.
+      const sfx = sfxPath(stim.sfx_word);
 
       tl.push({
         type: T('jsPsychHtmlButtonResponse'),
@@ -830,17 +868,19 @@
           target: stim.target,
           target_word: stim.target_word,
           iconic: stim.iconic,
+          iconicity_marginal: stim.iconicity_marginal,
           produced_in_training: stim.produced_in_training,
           correct_answer: correctIdx,
           options: opts.map(o => o.text),
-          audio_file: stim.audio,
+          audio_file: sfx.path,
+          sfx_variant: sfx.variant,
           training_condition: assignedTrainingCondition,
           phase: 'post'
         },
         on_load: function () {
           const btn = document.getElementById(`foley-play-${idx}`);
           const status = document.getElementById(`foley-status-${idx}`);
-          const audio = new Audio(audioSrc(stim.audio));
+          const audio = new Audio(audioSrc(sfx.path));
           window.__foley_audio = audio;
           const answerBtns = [...document.querySelectorAll('.jspsych-html-button-response-button button')];
           let unlocked = false;

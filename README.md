@@ -159,7 +159,7 @@ Each trial yields per-target perceptual baseline as a moderator for production g
 7.  Production controls — phrase + isolated × 2 reps (32 recordings)
 8.  Production targets — phrase + isolated × 2 reps (64 recordings)
 9.  Multi-probe binding task — sizzle, crack, bowl × 3 probes
-10. Foley recognition (4 trained sounds)
+10. Foley recognition (5 trained sounds: crack, sizzle, flip, slice, stir)
 11. Procedural recall (free typing)
 12. Sequencing (drag-to-order)
 13. Blind retell (45s audio)
@@ -236,8 +236,14 @@ flip, frip, bowl, pan, flour, butter, batter, stir, star
 
 **Foley iconicity — pretest (4):** high_tinkle, liquid_flow, egg_crack, sizzle
 
-**Foley recognition — posttest (4):**
-sfx_cracking, sfx_sizzling, sfx_flipping, sfx_slicing
+**Foley recognition + binding probes — posttest (9 files):**
+- `sfx_crack_1.mp3`, `sfx_crack_2.mp3`
+- `sfx_flip_1.mp3`, `sfx_flip_2.mp3`
+- `sfx_sizzle_1.mp3`, `sfx_sizzle_2.mp3`
+- `sfx_stir_1.mp3`, `sfx_stir_2.mp3`
+- `sfx_slice_1.mp3` (single take, no variant)
+
+For words with two variants, the test picks `_1` or `_2` randomly per trial and records `sfx_variant` (1 or 2) in trial data. Slice always uses `_1`.
 
 ### Image files (img/)
 
@@ -325,5 +331,6 @@ Winter, B., et al. (2024). Iconicity ratings for 14,000+ English words.
 
 ## Changelog
 
+- **v1.2 (2026-04-29):** Foley recognition expanded from 4 to 5 items (added stir). SFX file schema standardized to `sfx_{word}_{1|2}.mp3` with random variant selection per trial; slice uses single take. `sfx_variant` (1 or 2) stamped in trial data.
 - **v1.1 (2026-04-29):** Reconciled with canonical training script. Removed `sizzle` from production targets (it's an SFX consequence, not a participant utterance). Added `stir` as marginal-iconic with form-selection secondary analysis. Dropped split-half — pretest all 8 targets. Added multi-probe binding task with 3-region location probe as conservative spatial-affordance test. Deferred drag-and-place spatial reconstruction to v8.1. Posttest fully redesigned: cut 4AFC + speeded match, mic-init hoisted, word lists synced with pretest, two-pass production added.
 - **v1.0 (2026-04-29):** Initial v8.0 documentation with split-half counterbalance, sizzle as production target, drag-and-place spatial reconstruction.
