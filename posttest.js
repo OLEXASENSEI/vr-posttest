@@ -111,6 +111,25 @@
   const IMG_ONERROR = `onerror="this.onerror=null;this.src='${PLACEHOLDER_IMG}';"`;
   function audioSrc(path) { return path ? asset(path) : PLACEHOLDER_AUDIO; }
 
+  // Preloaded images including variants — populated by validateAssets().
+  // Used by imagePath() to randomize between _01/_02 variants when both
+  // are available for an item.
+  let PRELOAD_IMAGES = [];
+
+  function imagePath(base) {
+    const m = base.match(/^(.+?)\.(jpg|jpeg|png)$/i);
+    if (!m) return { path: base, variant: 0 };
+    const stem = m[1], ext = m[2];
+    const v01 = `${stem}_01.${ext}`;
+    const v02 = `${stem}_02.${ext}`;
+    if (PRELOAD_IMAGES.includes(v01) && PRELOAD_IMAGES.includes(v02)) {
+      const v = (Math.random() < 0.5) ? 1 : 2;
+      return { path: (v === 1) ? v01 : v02, variant: v };
+    }
+    if (PRELOAD_IMAGES.includes(v01)) return { path: v01, variant: 1 };
+    return { path: base, variant: 0 };
+  }
+
   // Counterbalance hash — same function as pretest v8.0 so trial data
   // matches across pre and post for any later split-half analysis.
   function pidToCounterbalance(pid) {
@@ -181,12 +200,25 @@
   // measure of passive multimodal binding. `stir` is a marginal-iconic
   // case present in the production block; including it in foley adds
   // a within-subject convergent point for the form-selection analysis.
+  // Foley recognition options use overlap-style distractors (multiple
+  // plausible cooking-action words for each SFX, not obvious mismatches).
+  // The participant must actually have bound the SFX to the verb during
+  // training, not just rule out implausible options.
   const FOLEY_RECOGNITION = [
-    { sfx_word: 'crack',  target: 'cracking', options: ['cracking', 'flipping', 'mixing', 'pouring'],   correct: 0, iconic: true, target_word: 'crack',  produced_in_training: true,  iconicity_marginal: false },
-    { sfx_word: 'sizzle', target: 'sizzling', options: ['boiling', 'sizzling', 'pouring', 'cracking'],  correct: 1, iconic: true, target_word: 'sizzle', produced_in_training: false, iconicity_marginal: false },
-    { sfx_word: 'flip',   target: 'flipping', options: ['stirring', 'cracking', 'flipping', 'slicing'], correct: 2, iconic: true, target_word: 'flip',   produced_in_training: true,  iconicity_marginal: false },
-    { sfx_word: 'slice',  target: 'slicing',  options: ['pouring', 'mixing', 'cracking', 'slicing'],    correct: 3, iconic: true, target_word: 'slice',  produced_in_training: true,  iconicity_marginal: false },
-    { sfx_word: 'stir',   target: 'stirring', options: ['stirring', 'flipping', 'pouring', 'slicing'],  correct: 0, iconic: true, target_word: 'stir',   produced_in_training: true,  iconicity_marginal: true  },
+    // crack SFX = sharp percussive sound. Distractors: other percussive/
+    // sharp actions and snapping sounds.
+    { sfx_word: 'crack',  target: 'cracking', options: ['cracking',  'snapping', 'chopping', 'slicing'],   correct: 0, iconic: true, target_word: 'crack',  produced_in_training: true,  iconicity_marginal: false },
+    // sizzle SFX = continuous high-frequency hiss. Distractors: other
+    // continuous sound-producing actions involving heat or liquid.
+    { sfx_word: 'sizzle', target: 'sizzling', options: ['simmering', 'sizzling', 'bubbling',  'whisking'],   correct: 1, iconic: true, target_word: 'sizzle', produced_in_training: false, iconicity_marginal: false },
+    // flip SFX = pan-spatula-pancake interaction. Distractors: other
+    // pan-based actions with similar acoustic profile.
+    { sfx_word: 'flip',   target: 'flipping', options: ['stirring',  'flipping', 'tossing',   'scraping'],   correct: 1, iconic: true, target_word: 'flip',   produced_in_training: true,  iconicity_marginal: false },
+    // slice SFX = knife-on-board action. Distractors: other knife/cutting actions.
+    { sfx_word: 'slice',  target: 'slicing',  options: ['chopping',  'grating',  'slicing',   'peeling'],    correct: 2, iconic: true, target_word: 'slice',  produced_in_training: true,  iconicity_marginal: false },
+    // stir SFX = circular motion in liquid/batter. Distractors: other
+    // bowl-action verbs.
+    { sfx_word: 'stir',   target: 'stirring', options: ['stirring',  'whisking', 'folding',   'mixing'],     correct: 0, iconic: true, target_word: 'stir',   produced_in_training: true,  iconicity_marginal: true  },
   ];
 
   // Multi-probe binding task — focuses on SIZZLE (the unique passive-iconic
@@ -203,36 +235,98 @@
   //
   // Predicted: VR > 2D > Text on Probe 3 specifically (location), uniform
   // on 1 and 2. The location advantage is the spatial-affordance signal.
+  // Multi-probe binding task — focuses on SIZZLE (the unique passive-iconic
+  // case) but tests two comparators (one produced-iconic, one conventional)
+  // to anchor the measurement.
+  //
+  // PROBE DESIGN (v1.5 — post-pilot rewrite):
+  //   Probe 1 (Event association, 4-AFC): "When you said/heard X, what
+  //     was happening?" — Distractors are now plausible scenes from the
+  //     SAME training that overlap with the target item's context. A
+  //     participant who knows the OTHER words but not the target word
+  //     can no longer deduce the answer by elimination.
+  //   Probe 2 (SFX recognition, Yes/No + confidence): "Did you hear this
+  //     sound during training?" — Played SFX always was in training, so
+  //     correct answer is always Yes. Confidence rating differentiates
+  //     strong vs weak binding.
+  //   Probe 3 (Adjacency, 4-AFC): "What item was placed/used next to X
+  //     during training?" — Tests spatial-relational binding. Works for
+  //     all three conditions: VR encoded through traversal, 2D through
+  //     fixed canvas positions, Text through container layout. Stronger
+  //     encoding is predicted in VR > 2D > Text.
+  //
+  // The previous 3-region location probe (Ingredient/Cooking/Plating)
+  // was dropped because Text-condition canvases use containment encoding
+  // rather than spatial regions, making the question unfair across
+  // conditions. Adjacency works because all conditions encoded SOME
+  // form of relative position even if the encoding mode differs.
+  //
+  // The 3×3 grid arrangement task (Probe 4, separate function below)
+  // is a coarse-grained spatial reconstruction task that all three
+  // conditions can plausibly answer.
   const BINDING_PROBES = [
     {
       word: 'sizzle',
       iconic: true, produced: false,
       probe1_q: 'When you heard <b>sizzling</b> during training, what was happening?',
       probe1_q_jp: 'トレーニングで <b>sizzling</b> という音を聞いたとき、何が起こっていましたか？',
-      probe1_options: ['oil heating in the pan', 'water boiling on the stove', 'an egg cracking', 'flour falling into the bowl'],
+      // All four options are plausible heat/cooking events that produce
+      // sound. Participant must remember which specific event was paired
+      // with the sizzling SFX — knowing only the other words doesn't help.
+      probe1_options: [
+        'butter melting in a hot pan',           // ← correct (sizzle paired with butter+pan)
+        'cracking an egg into the pan',          // distractor: also pan-event, also iconic-action
+        'pouring milk into the batter',          // distractor: pouring-sound, similar texture
+        'flour falling into the bowl from above' // distractor: also kitchen sound event
+      ],
       probe1_correct: 0,
-      probe2_sfx_word: 'sizzle',  // resolved to a random variant via sfxPath() at trial time
-      probe3_correct: 'cooking',
+      probe2_sfx_word: 'sizzle',
+      probe3_q: 'What was the <b>pan</b> placed near during training?',
+      probe3_q_jp: 'トレーニングで<b>フライパン</b>はどの近くに置かれていましたか？',
+      probe3_options: ['the bowl with ingredients', 'the plate', 'the spoon and spatula', 'the flour container'],
+      probe3_correct: 0,
     },
     {
       word: 'crack',
       iconic: true, produced: true,
       probe1_q: 'When you said <b>crack</b> during training, what was happening?',
       probe1_q_jp: 'トレーニングで <b>crack</b> と言ったとき、何が起こっていましたか？',
-      probe1_options: ['butter melting in the pan', 'the egg breaking open', 'flour pouring into the bowl', 'milk being poured'],
-      probe1_correct: 1,
+      // All four are ingredient-action pairings the participant produced
+      // during training. Must remember which specific verb went with which
+      // event — not just "which one breaks?"
+      probe1_options: [
+        'eggshell breaking open into the bowl',  // ← correct
+        'butter being cut with a knife',          // distractor: also a sharp-action verb
+        'flour being measured into a cup',        // distractor: also ingredient-prep
+        'milk pouring out of a carton'            // distractor: also liquid-into-bowl
+      ],
+      probe1_correct: 0,
       probe2_sfx_word: 'crack',
-      probe3_correct: 'ingredient',
+      probe3_q: 'What was <b>next to the bowl</b> when you cracked the egg?',
+      probe3_q_jp: '卵を割ったとき、<b>ボウルの隣</b>にあったものは？',
+      probe3_options: ['the flour container', 'the milk carton', 'the spoon for stirring', 'the empty pan'],
+      probe3_correct: 0,
     },
     {
       word: 'bowl',
       iconic: false, produced: true,
       probe1_q: 'When you said <b>bowl</b> during training, what was happening?',
       probe1_q_jp: 'トレーニングで <b>bowl</b> と言ったとき、何が起こっていましたか？',
-      probe1_options: ['pancake on a plate', 'pan heating on stove', 'ingredients combining', 'butter melting'],
-      probe1_correct: 2,
+      // All four are plausible kitchen-vessel activities. Must remember
+      // bowl=combining-receptacle (not pan=heating, not spatula=flipping,
+      // not plate=serving). Cross-vocabulary deduction is harder.
+      probe1_options: [
+        'ingredients being combined inside it',      // ← correct
+        'food being heated to cook',                 // distractor: pan-like activity
+        'food being flipped to cook the other side', // distractor: pan+spatula activity
+        'finished pancake being served'              // distractor: plate activity
+      ],
+      probe1_correct: 0,
       probe2_sfx_word: null,  // bowl has no SFX — Probe 2 skipped for this word
-      probe3_correct: 'ingredient',
+      probe3_q: 'What was the <b>bowl</b> placed near during training?',
+      probe3_q_jp: 'トレーニングで<b>ボウル</b>はどの近くに置かれていましたか？',
+      probe3_options: ['the flour container and ingredients', 'the heating pan', 'the serving plate', 'the empty counter'],
+      probe3_correct: 0,
     },
   ];
 
@@ -295,8 +389,23 @@
   async function validateAssets() {
     const allAudio = new Set();
     const allImages = new Set();
-    for (const s of PRODUCTION_TARGETS) allImages.add(s.image);
-    for (const s of PRODUCTION_CONTROLS) allImages.add(s.image);
+    const optionalImages = new Set();  // _01/_02 variants — silently registered if present
+    for (const s of PRODUCTION_TARGETS) {
+      allImages.add(s.image);
+      const m = s.image.match(/^(.+?)\.(jpg|jpeg|png)$/i);
+      if (m) {
+        optionalImages.add(`${m[1]}_01.${m[2]}`);
+        optionalImages.add(`${m[1]}_02.${m[2]}`);
+      }
+    }
+    for (const s of PRODUCTION_CONTROLS) {
+      allImages.add(s.image);
+      const m = s.image.match(/^(.+?)\.(jpg|jpeg|png)$/i);
+      if (m) {
+        optionalImages.add(`${m[1]}_01.${m[2]}`);
+        optionalImages.add(`${m[1]}_02.${m[2]}`);
+      }
+    }
     // SFX: enumerate every variant we might pick at trial time
     for (const s of FOLEY_RECOGNITION) {
       if (s.sfx_word === 'slice') {
@@ -321,10 +430,20 @@
       try { if (!(await checkExists(url))) MISSING_ASSETS.audio.push(url); } catch {}
     }
     for (const url of allImages) {
-      try { if (!(await checkExists(url))) MISSING_ASSETS.images.push(url); } catch {}
+      try {
+        if (!(await checkExists(url))) MISSING_ASSETS.images.push(url);
+        else PRELOAD_IMAGES.push(url);
+      } catch {}
+    }
+    // Silent probe for image variants
+    for (const url of optionalImages) {
+      try {
+        if (await checkExists(url)) PRELOAD_IMAGES.push(url);
+      } catch {}
     }
 
-    console.log(`[Validation] Missing: ${MISSING_ASSETS.images.length} images, ${MISSING_ASSETS.audio.length} audio.`);
+    const variantCount = [...optionalImages].filter(u => PRELOAD_IMAGES.includes(u)).length;
+    console.log(`[Validation] Missing: ${MISSING_ASSETS.images.length} images, ${MISSING_ASSETS.audio.length} audio. Image variants: ${variantCount}/${optionalImages.size}.`);
     if (MISSING_ASSETS.images.length || MISSING_ASSETS.audio.length) {
       console.warn('[Validation] Missing images:', MISSING_ASSETS.images);
       console.warn('[Validation] Missing audio:', MISSING_ASSETS.audio);
@@ -499,6 +618,22 @@
 
     const tl = [];
 
+    // Repetition counter for filenames. jsPsych's `repetitions: 2` does NOT
+    // auto-stamp a `repetition` field. Counter is keyed by (target_word, pass).
+    const repCounter = {};
+    const nextRep = (word, pass) => {
+      const key = `${word}_${pass}`;
+      repCounter[key] = (repCounter[key] || 0) + 1;
+      return repCounter[key];
+    };
+
+    // Image variant resolved once per trial (see pretest for rationale).
+    let _trialImgState = { path: null, variant: 0 };
+    const resolveTrialImage = () => {
+      _trialImgState = imagePath(jsPsych.timelineVariable('image'));
+      return _trialImgState;
+    };
+
     const blockTitle = (itemRole === 'control') ? 'First Set / 第1セット' : 'Second Set / 第2セット';
     tl.push({
       type: T('jsPsychHtmlButtonResponse'),
@@ -520,8 +655,9 @@
     // PHRASE PASS
     const phraseAudio = hasMicPlugins ? {
       type: T('jsPsychHtmlAudioResponse'),
+      on_start: () => { resolveTrialImage(); },
       stimulus: () => {
-        const img = imgSrc(jsPsych.timelineVariable('image'));
+        const img = imgSrc(_trialImgState.path);
         const p = phrasePrompt(jsPsych.timelineVariable('prompt_type'));
         return `<div style="text-align:center;">
           <img src="${img}" style="width:300px;border-radius:8px;" ${IMG_ONERROR}/>
@@ -541,6 +677,8 @@
         iconicity_rating: jsPsych.timelineVariable('rating'),
         iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
         target_form: jsPsych.timelineVariable('target_form'),
+        image_path: _trialImgState.path,
+        image_variant: _trialImgState.variant,
         item_role: itemRole,
         pass: 'phrase',
         phase: 'post',
@@ -549,14 +687,17 @@
         counterbalance_list: counterbalanceList
       }),
       on_finish: (d) => {
-        d.audio_filename = `post_${currentPID}_${itemRole}_${(d.target_word||'x').toLowerCase()}_phrase_rep${d.repetition||'?'}.wav`;
+        const tgt = (d.target_word||'x').toLowerCase();
+        d.repetition = nextRep(tgt, 'phrase');
+        d.audio_filename = `post_${currentPID}_${itemRole}_${tgt}_phrase_rep${d.repetition}.webm`;
       }
     } : null;
 
     const phraseText = {
       type: T('jsPsychSurveyText'),
+      on_start: () => { resolveTrialImage(); },
       preamble: () => {
-        const img = imgSrc(jsPsych.timelineVariable('image'));
+        const img = imgSrc(_trialImgState.path);
         const p = phrasePrompt(jsPsych.timelineVariable('prompt_type'));
         return `<div style="text-align:center;">
           <img src="${img}" style="width:300px;border-radius:8px;" ${IMG_ONERROR}/>
@@ -574,6 +715,8 @@
         iconicity_rating: jsPsych.timelineVariable('rating'),
         iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
         target_form: jsPsych.timelineVariable('target_form'),
+        image_path: _trialImgState.path,
+        image_variant: _trialImgState.variant,
         item_role: itemRole, pass: 'phrase', phase: 'post', modality: 'text',
         training_condition: assignedTrainingCondition,
         counterbalance_list: counterbalanceList
@@ -583,8 +726,9 @@
     // ISOLATED PASS
     const isolatedAudio = hasMicPlugins ? {
       type: T('jsPsychHtmlAudioResponse'),
+      on_start: () => { resolveTrialImage(); },
       stimulus: () => {
-        const img = imgSrc(jsPsych.timelineVariable('image'));
+        const img = imgSrc(_trialImgState.path);
         return `<div style="text-align:center;">
           <img src="${img}" style="width:300px;border-radius:8px;" ${IMG_ONERROR}/>
           <p style="margin-top:15px;font-size:18px;"><b>Say just the word.</b></p>
@@ -603,19 +747,24 @@
         iconicity_rating: jsPsych.timelineVariable('rating'),
         iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
         target_form: jsPsych.timelineVariable('target_form'),
+        image_path: _trialImgState.path,
+        image_variant: _trialImgState.variant,
         item_role: itemRole, pass: 'isolated', phase: 'post', modality: 'audio',
         training_condition: assignedTrainingCondition,
         counterbalance_list: counterbalanceList
       }),
       on_finish: (d) => {
-        d.audio_filename = `post_${currentPID}_${itemRole}_${(d.target_word||'x').toLowerCase()}_isolated_rep${d.repetition||'?'}.wav`;
+        const tgt = (d.target_word||'x').toLowerCase();
+        d.repetition = nextRep(tgt, 'isolated');
+        d.audio_filename = `post_${currentPID}_${itemRole}_${tgt}_isolated_rep${d.repetition}.webm`;
       }
     } : null;
 
     const isolatedText = {
       type: T('jsPsychSurveyText'),
+      on_start: () => { resolveTrialImage(); },
       preamble: () => {
-        const img = imgSrc(jsPsych.timelineVariable('image'));
+        const img = imgSrc(_trialImgState.path);
         return `<div style="text-align:center;">
           <img src="${img}" style="width:300px;border-radius:8px;" ${IMG_ONERROR}/>
           <p style="margin-top:15px;font-size:18px;"><b>Type just the word.</b></p>
@@ -632,6 +781,8 @@
         iconicity_rating: jsPsych.timelineVariable('rating'),
         iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
         target_form: jsPsych.timelineVariable('target_form'),
+        image_path: _trialImgState.path,
+        image_variant: _trialImgState.variant,
         item_role: itemRole, pass: 'isolated', phase: 'post', modality: 'text',
         training_condition: assignedTrainingCondition,
         counterbalance_list: counterbalanceList
@@ -722,9 +873,15 @@
 
     tl.push({
       type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `<h2>Memory Probes / 記憶のテスト</h2>
+      stimulus: `<div style="max-width:600px;margin:0 auto;line-height:1.6">
+        <h2 style="text-align:center;">Part 2: New Tasks / 第2部：新しい課題</h2>
+        <p style="color:#666;text-align:center;">The familiar production block is complete. The next sections are different.</p>
+        <p style="color:#666;text-align:center;">写真の命名は完了しました。次のパートは異なります。</p>
+        <hr style="margin:18px 0;">
+        <h3>Memory Probes / 記憶のテスト</h3>
         <p>For each word, you'll answer a few short questions about what you experienced during training.</p>
-        <p>各単語について、トレーニング中の経験に関する短い質問に答えてください。</p>`,
+        <p>各単語について、トレーニング中の経験に関する短い質問に答えてください。</p>
+      </div>`,
       choices: ['Begin / 開始'],
       data: { task: 'binding_intro', phase: 'post' }
     });
@@ -811,33 +968,189 @@
         });
       }
 
-      // Probe 3: Location — three schematic regions
+      // Probe 3: Adjacency 4-AFC — what was placed/used near the target?
+      // Works cross-condition because all three (VR/2D/Text) encode some
+      // form of adjacency, even if the encoding mode differs.
+      const opts3 = shuffle(probe.probe3_options.map((opt, i) => ({ text: opt, origIdx: i })));
+      const correct3Idx = opts3.findIndex(o => o.origIdx === probe.probe3_correct);
       tl.push({
         type: T('jsPsychHtmlButtonResponse'),
         stimulus: `<div style="text-align:center;max-width:700px;margin:0 auto;">
-          <p style="font-size:18px;"><b>Where in the kitchen did <em>${probe.word}</em> happen?</b></p>
-          <p style="color:#666;">キッチンのどこで <em>${probe.word}</em> が起こりましたか？</p>
-          <p style="color:#666;font-size:14px;margin-top:20px;">If you don't remember, choose the closest guess. / 覚えていない場合は、近いものを選んでください。</p>
+          <p style="font-size:18px;">${probe.probe3_q}</p>
+          <p style="color:#666;font-size:14px;">${probe.probe3_q_jp}</p>
+          <p style="color:#888;font-size:13px;margin-top:18px;">If you don't remember, pick the closest guess. / 覚えていない場合は、近いものを選んでください。</p>
         </div>`,
-        choices: ['Ingredient Area / 材料エリア', 'Cooking Area / 調理エリア', 'Plating Area / 盛り付けエリア'],
+        choices: opts3.map(o => o.text),
         data: {
-          task: 'binding_probe3_location',
+          task: 'binding_probe3_adjacency',
           word: probe.word,
           iconic: probe.iconic,
           produced_in_training: probe.produced,
-          correct_answer_label: probe.probe3_correct,
+          correct_answer: correct3Idx,
+          options: opts3.map(o => o.text),
           training_condition: assignedTrainingCondition,
           phase: 'post'
         },
-        on_finish: d => {
-          const labelMap = ['ingredient', 'cooking', 'plating'];
-          d.response_label = labelMap[d.response];
-          d.is_correct = (d.response_label === d.correct_answer_label);
-        }
+        on_finish: d => { d.is_correct = (d.response === d.correct_answer); }
       });
     });
 
     return tl;
+  }
+
+  /* ======================== PROBE 4: 3×3 GRID ARRANGEMENT ======================== */
+  // Coarse-grained spatial reconstruction. Participants see 5 trained
+  // items as draggable tokens and a 3×3 grid; they drag each item into
+  // the cell where they remember it being during training.
+  //
+  // Coarse 3×3 (not pixel-precise) so encoding mode differences across
+  // conditions don't unfairly penalize Text participants whose encoding
+  // is containment-based rather than Euclidean. All three conditions
+  // can plausibly recover "the bowl was on the left side, the pan was
+  // in the middle".
+  //
+  // Ground truth grid layout (assumed approximately consistent across
+  // VR/2D/Text scenes per pilot communication; analyses should report
+  // per-condition accuracy):
+  //
+  //          [bowl]   [flour]   [.....]
+  //          [pan]    [butter]  [plate]
+  //          [.....]  [.....]   [.....]
+  //
+  // Score: exact-cell match for primary; row-match-only and column-match-
+  // only as secondary (more lenient). Kendall tau on row-ordering and
+  // col-ordering as a third measure of partial spatial knowledge.
+  const ARRANGEMENT_ITEMS = [
+    { id: 'bowl',   label: 'Bowl',   correct_row: 0, correct_col: 0 },
+    { id: 'flour',  label: 'Flour',  correct_row: 0, correct_col: 1 },
+    { id: 'pan',    label: 'Pan',    correct_row: 1, correct_col: 0 },
+    { id: 'butter', label: 'Butter', correct_row: 1, correct_col: 1 },
+    { id: 'plate',  label: 'Plate',  correct_row: 1, correct_col: 2 },
+  ];
+
+  function buildArrangementTask() {
+    let placedState = {}; // { itemId: { row, col } }
+
+    return [{
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `<div style="max-width:760px;margin:0 auto;line-height:1.6">
+        <h2 style="text-align:center;">Kitchen Layout / キッチンの配置</h2>
+        <p>Drag each item to the cell where you remember it being during training.</p>
+        <p>トレーニング中に覚えている場所に各アイテムをドラッグしてください。</p>
+        <p style="color:#666;font-size:14px;">Don't worry about getting it exactly right — best guess is fine.</p>
+        <p style="color:#666;font-size:14px;">完全に正確でなくて大丈夫です。最も近い場所で結構です。</p>
+      </div>
+      <div style="display:flex;justify-content:center;gap:40px;align-items:start;margin-top:30px;">
+        <div>
+          <h4 style="text-align:center;margin:0 0 10px 0;color:#666;">Items / アイテム</h4>
+          <div id="arr-tray" style="display:flex;flex-direction:column;gap:8px;width:120px;padding:10px;border:2px dashed #aaa;border-radius:8px;min-height:280px;">
+            ${ARRANGEMENT_ITEMS.map(it => `<div class="arr-token" draggable="true" data-id="${it.id}" style="padding:10px 14px;background:#1a237e;color:white;border-radius:6px;cursor:grab;text-align:center;font-weight:600;user-select:none;">${it.label}</div>`).join('')}
+          </div>
+        </div>
+        <div>
+          <h4 style="text-align:center;margin:0 0 10px 0;color:#666;">Kitchen Area / キッチン</h4>
+          <div id="arr-grid" style="display:grid;grid-template-columns:120px 120px 120px;grid-template-rows:90px 90px 90px;gap:6px;background:#f5f5f5;padding:6px;border-radius:8px;">
+            ${[0,1,2].flatMap(r => [0,1,2].map(c => `<div class="arr-cell" data-row="${r}" data-col="${c}" style="border:2px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;background:white;"></div>`)).join('')}
+          </div>
+        </div>
+      </div>
+      <p id="arr-status" style="text-align:center;margin-top:18px;color:#666;font-size:14px;">Drag all 5 items to continue. / 5つすべてをドラッグしてください。</p>`,
+      choices: ['Submit / 送信'],
+      data: {
+        task: 'arrangement_task',
+        ground_truth: ARRANGEMENT_ITEMS.map(it => ({ id: it.id, row: it.correct_row, col: it.correct_col })),
+        training_condition: assignedTrainingCondition,
+        phase: 'post'
+      },
+      on_load: function () {
+        placedState = {};
+        const submitBtn = [...document.querySelectorAll('.jspsych-html-button-response-button button')][0];
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = '0.5'; }
+        const statusEl = document.getElementById('arr-status');
+
+        const tokens = [...document.querySelectorAll('.arr-token')];
+        const cells  = [...document.querySelectorAll('.arr-cell')];
+        const tray   = document.getElementById('arr-tray');
+
+        let dragged = null;
+        tokens.forEach(t => {
+          t.addEventListener('dragstart', e => {
+            dragged = t;
+            e.dataTransfer.effectAllowed = 'move';
+            t.style.opacity = '0.4';
+          });
+          t.addEventListener('dragend', () => {
+            if (dragged) dragged.style.opacity = '1';
+            dragged = null;
+          });
+        });
+
+        function updateState() {
+          // Re-derive placedState from DOM
+          placedState = {};
+          cells.forEach(c => {
+            const tok = c.querySelector('.arr-token');
+            if (tok) {
+              placedState[tok.dataset.id] = { row: Number(c.dataset.row), col: Number(c.dataset.col) };
+            }
+          });
+          const allPlaced = Object.keys(placedState).length === ARRANGEMENT_ITEMS.length;
+          if (submitBtn) {
+            submitBtn.disabled = !allPlaced;
+            submitBtn.style.opacity = allPlaced ? '1' : '0.5';
+          }
+          if (statusEl) {
+            statusEl.textContent = allPlaced
+              ? 'All items placed — click Submit. / 配置完了 — 送信してください。'
+              : `${Object.keys(placedState).length}/${ARRANGEMENT_ITEMS.length} placed. / 配置済み。`;
+          }
+        }
+
+        cells.forEach(c => {
+          c.addEventListener('dragover', e => { e.preventDefault(); c.style.background = '#e8f5e9'; });
+          c.addEventListener('dragleave', () => { c.style.background = 'white'; });
+          c.addEventListener('drop', e => {
+            e.preventDefault();
+            c.style.background = 'white';
+            if (!dragged) return;
+            // Allow swapping: if cell already has a token, send it back to tray
+            const existing = c.querySelector('.arr-token');
+            if (existing && existing !== dragged) {
+              tray.appendChild(existing);
+              existing.style.opacity = '1';
+            }
+            c.appendChild(dragged);
+            dragged.style.opacity = '1';
+            updateState();
+          });
+        });
+
+        // Allow dropping back to tray to reset a placement
+        tray.addEventListener('dragover', e => { e.preventDefault(); });
+        tray.addEventListener('drop', e => {
+          e.preventDefault();
+          if (!dragged) return;
+          tray.appendChild(dragged);
+          dragged.style.opacity = '1';
+          updateState();
+        });
+      },
+      on_finish: function (d) {
+        d.placements = ARRANGEMENT_ITEMS.map(it => ({
+          id: it.id,
+          placed_row: placedState[it.id]?.row ?? null,
+          placed_col: placedState[it.id]?.col ?? null,
+          correct_row: it.correct_row,
+          correct_col: it.correct_col,
+          exact_match: placedState[it.id]?.row === it.correct_row && placedState[it.id]?.col === it.correct_col,
+          row_match: placedState[it.id]?.row === it.correct_row,
+          col_match: placedState[it.id]?.col === it.correct_col,
+        }));
+        d.exact_match_count = d.placements.filter(p => p.exact_match).length;
+        d.row_match_count = d.placements.filter(p => p.row_match).length;
+        d.col_match_count = d.placements.filter(p => p.col_match).length;
+      }
+    }];
   }
 
   /* ======================== FOLEY RECOGNITION (5 trained sounds) ======================== */
@@ -1003,51 +1316,6 @@
     ];
   }
 
-  /* ======================== BLIND RETELL (45s audio) ======================== */
-  function buildBlindRetell() {
-    const hasMic = have('jsPsychInitializeMicrophone') && have('jsPsychHtmlAudioResponse');
-
-    const intro = {
-      type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `<h2>Blind Retell / 視覚なしで説明</h2>
-        <p>Without any pictures, <b>explain how to make a pancake</b> from memory.</p>
-        <p>画像なしで<b>パンケーキの作り方</b>を記憶から説明してください。</p>
-        <p>You will have up to <b>45 seconds</b>. Press "Done" when finished.</p>
-        <p>最大<b>45秒間</b>です。終わったら「完了」を押してください。</p>`,
-      choices: ['Begin / 開始'],
-      data: { task: 'blind_retell_intro', phase: 'post' }
-    };
-
-    const audioTrial = hasMic ? {
-      type: T('jsPsychHtmlAudioResponse'),
-      stimulus: `<div style="max-width:600px;margin:0 auto;text-align:center;">
-        <div style="height:180px;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;border-radius:8px;background:#fff8f8;">
-          <div><p style="color:#333;font-size:16px;margin:0;">Explain how to make a pancake / パンケーキの作り方を説明</p>
-          <p style="color:#888;font-size:14px;margin:8px 0 0 0;">Ingredients → Tools → Steps → Sounds</p></div>
-        </div>
-        <p style="margin-top:12px;color:#d32f2f;font-weight:bold;font-size:18px;">🔴 Recording… up to 45s / 録音中… 最大45秒</p></div>`,
-      recording_duration: 45000, show_done_button: true, done_button_label: 'Done / 完了', allow_playback: false,
-      data: { task: 'blind_retell', phase: 'post', modality: 'audio', training_condition: assignedTrainingCondition, needs_audio_scoring: true },
-      on_finish: d => { d.audio_filename = `post_${currentPID}_blind_retell.wav`; }
-    } : null;
-
-    const textTrial = {
-      type: T('jsPsychSurveyText'),
-      preamble: `<h3>Blind Retell (Text)</h3>
-        <p>Explain how to make a pancake step by step.<br>パンケーキの作り方を順を追って説明してください。</p>
-        <div class="mic-error-msg"><b>Note:</b> Mic unavailable; type your answer.</div>`,
-      questions: [{ prompt: '', name: 'retell', rows: 8, required: true }],
-      data: { task: 'blind_retell', phase: 'post', modality: 'text', training_condition: assignedTrainingCondition }
-    };
-
-    const tl = [intro];
-    if (hasMic) {
-      tl.push({ timeline: [audioTrial], conditional_function: () => microphoneAvailable });
-    }
-    tl.push({ timeline: [textTrial], conditional_function: () => !microphoneAvailable });
-    return tl;
-  }
-
   /* ======================== TEACH A FRIEND (60s audio) ======================== */
   function buildTeachSomeone() {
     const hasMic = have('jsPsychInitializeMicrophone') && have('jsPsychHtmlAudioResponse');
@@ -1072,7 +1340,7 @@
         <p style="margin-top:12px;color:#d32f2f;font-weight:bold;font-size:18px;">🔴 Teaching… up to 60s / 説明中… 最大60秒</p></div>`,
       recording_duration: 60000, show_done_button: true, done_button_label: 'Done / 完了', allow_playback: false,
       data: { task: 'teach_someone', phase: 'post', modality: 'audio', training_condition: assignedTrainingCondition, needs_audio_scoring: true },
-      on_finish: d => { d.audio_filename = `post_${currentPID}_teach.wav`; }
+      on_finish: d => { d.audio_filename = `post_${currentPID}_teach.webm`; }
     } : null;
 
     const textTrial = {
@@ -1256,29 +1524,48 @@
       conditional_function: () => (MISSING_ASSETS.images.length + MISSING_ASSETS.audio.length) > 0
     });
 
-    // Welcome + participant confirm
+    // Welcome + participant confirm. v8.0 (post-pilot patch): explicit
+    // framing about repeated tasks. Participants reported feeling like the
+    // posttest was "the same as pretest" because the production task IS
+    // intentionally repeated for change-score measurement. Telling them
+    // that up front + flagging what's new reduces fatigue effects.
     tl.push({
       type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `<div style="text-align:center;">
-        <h2>Post-Test / ポストテスト</h2>
-        <p>This test measures what you learned in the training session.</p>
-        <p>トレーニングセッションで学んだ内容を測定します。</p>
-        <p style="color:#666;">Duration: ~25 minutes / 所要時間：約25分</p>
+      stimulus: `<div style="text-align:left;max-width:680px;margin:0 auto;line-height:1.6">
+        <h2 style="text-align:center;">Post-Test / ポストテスト</h2>
+        <p>This test has two parts:</p>
+        <p>このテストは2つのパートで構成されています：</p>
+        <ol style="margin:12px 0;">
+          <li><b>Familiar tasks repeated from before training</b> — naming pictures, teaching a friend.
+          These are repeated on purpose so we can measure what changed.<br>
+          <span style="color:#666;">トレーニング前と同じ課題（写真の命名、友だちに教える）。変化を測定するために繰り返します。</span></li>
+          <li style="margin-top:8px;"><b>New tasks you haven't seen before</b> — sound matching, memory questions about training, recipe ordering.<br>
+          <span style="color:#666;">新しい課題（音のマッチング、トレーニングについての質問、レシピの順番）。</span></li>
+        </ol>
+        <p>Please give your best effort even on the repeated parts — they're the most important data.</p>
+        <p>繰り返しの部分でもベストを尽くしてください — 最も重要なデータです。</p>
+        <p style="color:#666;text-align:center;margin-top:18px;">Duration: ~25 minutes / 所要時間：約25分</p>
       </div>`,
-      choices: ['Begin / 開始']
+      choices: ['Begin / 開始'],
+      data: { task: 'welcome' }
     });
 
     tl.push(createParticipantConfirm());
 
-    // Mic gate + plugin init (HOISTED to right after gate to avoid the v7.4
-    // double-prompt + late-init bugs)
+    // Mic gate + plugin init. Pattern: gate establishes a working stream
+    // and sets microphoneAvailable; plugin runs only if gate succeeded
+    // (i.e. microphoneAvailable is true). The plugin then keeps the stream
+    // hot for jsPsychHtmlAudioResponse trials. Previously had the
+    // conditional flipped (plugin only ran if mic was available, but
+    // setting mic_available depended on plugin running) and an on_finish
+    // that read d.mic_allowed which the plugin doesn't set — both bugs
+    // caused mic to silently fail in posttest.
     tl.push(buildMicSetupGate());
     if (have('jsPsychInitializeMicrophone')) {
       tl.push({
         timeline: [{
           type: T('jsPsychInitializeMicrophone'),
-          data: { task: 'mic_init' },
-          on_finish: (d) => { microphoneAvailable = !!d.mic_allowed; }
+          data: { task: 'mic_init' }
         }],
         conditional_function: () => microphoneAvailable
       });
@@ -1292,24 +1579,33 @@
     // TERTIARY DV: multi-probe binding (sizzle + comparators)
     tl.push(...buildBindingTask());
 
+    // Spatial reconstruction: 3×3 grid arrangement (5 items)
+    tl.push(...buildArrangementTask());
+
     // Foley recognition
     tl.push(...buildFoleyRecognition());
 
-    // Procedural recall + sequencing (after production — these CAN
-    // re-expose targets but production is already collected)
-    tl.push(...buildProceduralRecall());
+    // Sequencing (drag-to-order recipe steps). Procedural recall (free
+    // typing) was cut as redundant with sequencing — both measure recipe-
+    // structure recall, but sequencing is cleaner data (no typos, romaji,
+    // partial sentences) and faster to score.
     tl.push(...buildSequencing());
 
-    // Spontaneous-production tasks
-    tl.push(...buildBlindRetell());
+    // Spontaneous-production task — teach-a-friend frame elicits more
+    // vocabulary and SFX-mimicry from L2 learners than neutral retell.
+    // Has a parallel pretest baseline for pre→post change-score analysis
+    // on lexical density, iconic-word use, and SFX-mimicry rate.
     tl.push(...buildTeachSomeone());
 
-    // Recognition + Likert + Exit
-    tl.push(...buildRecognition());
+    // Likert + Exit. v1.6 (post-pilot lean cut): 12-item recognition test
+    // dropped. It was at the very end when participants are exhausted,
+    // correlated highly with production accuracy (limited new variance),
+    // and Yes/No confidence ratings on word recognition produce noisy
+    // data. Function definition retained for v8.1 if needed.
     tl.push(buildLikert());
     tl.push(buildExit());
 
-    // Save
+    // Save (handled by jsPsych's experiment-level on_finish)
     tl.push({
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `<h2>All done! / 完了！</h2>
@@ -1317,7 +1613,10 @@
         <p>ポストテストを完了していただきありがとうございます。</p>
         <p>Your data is being saved. / データを保存しています。</p>`,
       choices: ['Save & Finish / 保存して終了'],
-      on_finish: () => saveData()
+      data: { task: 'session_end' }
+      // saveData() is invoked by jsPsych's experiment-level on_finish
+      // configured in __START_POSTTEST. Calling it here too produces
+      // duplicate JSON output.
     });
 
     return tl;

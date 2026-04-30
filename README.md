@@ -4,7 +4,7 @@
 **Chapter:** Dissertation Ch. 5 — Sound Meets Space
 **Defense:** July 1, 2026 (preliminary May 2026)
 **Status:** v8.0 pretest + posttest live; spatial reconstruction deferred to v8.1
-**Last update:** 2026-04-29 (v1.3 — spoon/plate replace ladle/kettle as conventional controls)
+**Last update:** 2026-04-29 (v1.6 — lean cut to 60-minute session budget)
 
 ---
 
@@ -98,22 +98,25 @@ All action verbs in v8.0 (crack, flip, slice, stir) carry `target_form: 'bare'` 
 
 ---
 
-## 5. Pretest structure (~15 min)
+## 5. Pretest structure (~13 min)
 
 ```
 1.  Asset launch-check (only if missing assets)
 2.  Welcome
 3.  Participant info → stamps counterbalance for analysis
 4.  Mic setup gate
-5.  Forward digit span (3, 4, 5)              — WM covariate
-6.  Phoneme discrimination (12 trials)        — phonological perception covariate
-7.  Foley iconicity (4 trials)                — iconicity-sensitivity moderator
-8.  Spatial span / Corsi (3, 4)               — spatial WM covariate
+5.  Phoneme discrimination (12 trials)        — phonological perception covariate
+6.  Bouba/kiki (4 trials)                     — cross-modal iconicity covariate
+7.  Foley iconicity (4 trials)                — auditory iconicity-sensitivity moderator
+8.  Receptive vocabulary breadth (12 trials)  — vocabulary-knowledge covariate
 9.  Production practice (1 trial, park scene)
 10. Production controls (4 items × phrase + isolated × 2 reps each = 32 recordings)
 11. Production targets (8 items × phrase + isolated × 2 reps each = 64 recordings)
-12. Save
+12. Teach-a-friend baseline (60s audio — pre→post comparison)
+13. Save
 ```
+
+**v1.6 cuts:** forward digit span and Corsi spatial span removed. They were generic WM covariates not specific to the iconicity hypothesis. Phoneme discrimination + foley + bouba/kiki cover the perceptual sensitivity covariates that ARE specific to the hypothesis.
 
 ### 5.1 Two-pass elicitation per production item
 
@@ -151,28 +154,28 @@ Each trial yields per-target perceptual baseline as a moderator for production g
 
 ---
 
-## 6. Posttest structure (~25 min immediate; ~20 min delayed)
+## 6. Posttest structure (~17 min immediate; ~14 min delayed)
 
 ```
 1.  Asset launch-check
-2.  Welcome
+2.  Welcome (with framing about repeated vs new tasks)
 3.  Participant confirm (pid + training condition)
 4.  Mic gate
-5.  Mic plugin init (HOISTED — fixes v7.4 double-prompt bug)
+5.  Mic plugin init
 6.  Production practice
 7.  Production controls — phrase + isolated × 2 reps (32 recordings)
 8.  Production targets — phrase + isolated × 2 reps (64 recordings)
 9.  Multi-probe binding task — sizzle, crack, bowl × 3 probes
-10. Foley recognition (5 trained sounds: crack, sizzle, flip, slice, stir)
-11. Procedural recall (free typing)
+10. Spatial reconstruction — 3×3 grid arrangement (5 items)
+11. Foley recognition (5 trained sounds)
 12. Sequencing (drag-to-order)
-13. Blind retell (45s audio)
-14. Teach a friend (60s audio)
-15. Recognition + confidence (12 items: 8 trained + 4 foils)
-16. Likert (7 items)
-17. Exit comments
-18. Save
+13. Teach a friend (60s audio — has parallel pretest baseline)
+14. Likert (7 items)
+15. Exit comments
+16. Save
 ```
+
+**v1.6 cuts:** procedural recall (free typing) removed because sequencing covers the same construct cleaner. 12-item recognition+confidence test removed because it sat at the very end when participants are fatigued, correlated highly with production accuracy, and Yes/No confidence ratings produce noisy data.
 
 ### 6.1 Cuts from v7.4
 
@@ -335,6 +338,9 @@ Winter, B., et al. (2024). Iconicity ratings for 14,000+ English words.
 
 ## Changelog
 
+- **v1.6 (2026-04-29):** Lean cut to honor the 1-hour total session budget. Pretest cuts: forward digit span (~2 min), Corsi spatial span (~3 min). Posttest cuts: procedural recall (redundant with sequencing, ~2 min), 12-item recognition+confidence test (high correlation with production accuracy, fatigue effects, ~3 min). Bouba/kiki reduced from 6 trials to canonical 4 trials with shape→word forced 2-AFC framing (matches Köhler 1929 / Ramachandran 2001). Net: pretest ~20 → ~13 min, posttest ~28 → ~17 min, total session 78 → 60 min.
+- **v1.5 (2026-04-29):** Added bouba/kiki + receptive vocab breadth at pretest. Posttest binding probe distractors rewritten with target-word-specific overlap (deduction harder). Probe 3 (3-region location) replaced with adjacency 4-AFC + new 3×3 grid arrangement task. Image variant infrastructure (`{base}_01`/`{base}_02` randomized per trial). Foley recognition options rewritten with overlap distractors.
+- **v1.4 (2026-04-29):** Post-pilot patch — fixed posttest mic init bug, added teach-a-friend baseline to pretest, dropped blind retell, improved posttest welcome screen.
 - **v1.3 (2026-04-29):** Replaced conventional controls ladle/kettle with spoon/plate. Pilot intuition predicted ladle/kettle would produce floor effects (silence) for KOSEN second-year students, making their pre→post change uninformative as a testing-effect baseline. spoon/plate are basic kitchen vocabulary, never spoken in training, giving a real production baseline. peel retained as iconic control despite likely gerund-preference — it now serves as a clean form-selection comparator (untrained iconic verb).
 - **v1.2 (2026-04-29):** Foley recognition expanded from 4 to 5 items (added stir). SFX file schema standardized to `sfx_{word}_{1|2}.mp3` with random variant selection per trial; slice uses single take. `sfx_variant` (1 or 2) stamped in trial data. Fixed pretest foley sizzle path (was pointing at spoken-word file, now points at SFX).
 - **v1.1 (2026-04-29):** Reconciled with canonical training script. Removed `sizzle` from production targets (it's an SFX consequence, not a participant utterance). Added `stir` as marginal-iconic with form-selection secondary analysis. Dropped split-half — pretest all 8 targets. Added multi-probe binding task with 3-region location probe as conservative spatial-affordance test. Deferred drag-and-place spatial reconstruction to v8.1. Posttest fully redesigned: cut 4AFC + speeded match, mic-init hoisted, word lists synced with pretest, two-pass production added.
