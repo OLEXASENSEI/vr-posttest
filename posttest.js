@@ -1,4 +1,28 @@
-// posttest.js — VR Post-Test Battery (v8.0 — REDESIGNED)
+// posttest.js — VR Post-Test Battery (v8.1 — patches over v8.0)
+//
+// ============================================================================
+// v8.1 PATCH NOTES (over v8.0)
+// ============================================================================
+//
+// 1. Production image race — port v8.0.1 idempotent-cache fix from pretest.
+//    Pre-v8.1 buildProductionBlock used a closure-scoped _trialImgState
+//    populated by on_start, with stimulus()/data() reading it directly.
+//    jsPsych can call stimulus() BEFORE on_start fires, so the first read
+//    saw {path: null} and rendered the yellow "Image missing" placeholder.
+//    The cache pattern keyed on (trial-index, base) makes resolveTrialImage()
+//    idempotent: first call within a trial resolves and stores; all later
+//    calls return the cached value. on_start is no longer needed.
+//
+// 2. SFX playback hard cap — MAX_SFX_PLAYBACK_MS guards against UI freeze
+//    on overly long audio files. Pre-v8.1 binding probe 2 and foley
+//    recognition locked the answer buttons until audio's `ended` event
+//    fired. If a file was longer than expected (or stalled mid-stream),
+//    participants saw a frozen UI with no recovery. The cap force-stops
+//    playback and unlocks answers at MAX_SFX_PLAYBACK_MS regardless. The
+//    natural `ended` event still works as a fast path for normal-length
+//    SFX. Tune MAX_SFX_PLAYBACK_MS at the top of the IIFE if needed.
+//
+// All other v8.0 design points unchanged.
 //
 // ============================================================================
 // v8.0 OVERVIEW (full redesign over v7.4)
@@ -85,6 +109,13 @@
   let assignedTrainingCondition = 'unknown';  // VR / 2D / Text — set via URL ?cond=
   let microphoneAvailable = false;
   let counterbalanceList = 0;        // hashed from pid; informational only
+
+  // v8.1: hard cap on SFX audio playback so that overly long files don't
+  // lock the answer buttons indefinitely. Tune as needed — 4000ms is
+  // long enough for any reasonable kitchen-SFX recognition cue but short
+  // enough that participants don't perceive a freeze on edge-case files.
+  // Applied in buildBindingTask probe 2 and buildFoleyRecognition.
+  const MAX_SFX_PLAYBACK_MS = 4000;
 
   // Track every asset URL that fails its HEAD check at startup, so the
   // launch-check screen can list them and every saved trial record can carry
@@ -627,11 +658,24 @@
       return repCounter[key];
     };
 
-    // Image variant resolved once per trial (see pretest for rationale).
-    let _trialImgState = { path: null, variant: 0 };
+    // v8.1 PATCH: idempotent per-trial image cache (ported from pretest
+    // v8.0.1). The previous `let _trialImgState = {path:null,...}` +
+    // `on_start: resolveTrialImage()` pattern had a race — jsPsych can
+    // call stimulus() before on_start fires, so the first read returned
+    // null and rendered the placeholder image. The cache pattern keys on
+    // (trial-index, base) so first call within a trial resolves and
+    // stores; later calls in the same trial return the cached value.
+    // Safe to call from stimulus(), data(), preamble(), or anywhere else.
+    const _imgCache = new Map();
     const resolveTrialImage = () => {
-      _trialImgState = imagePath(jsPsych.timelineVariable('image'));
-      return _trialImgState;
+      const base = jsPsych.timelineVariable('image');
+      let trialIdx = 0;
+      try { trialIdx = jsPsych.getProgress().current_trial_global; } catch {}
+      const key = `${trialIdx}_${base}`;
+      if (!_imgCache.has(key)) {
+        _imgCache.set(key, imagePath(base));
+      }
+      return _imgCache.get(key);
     };
 
     const blockTitle = (itemRole === 'control') ? 'First Set / 第1セット' : 'Second Set / 第2セット';
@@ -655,9 +699,9 @@
     // PHRASE PASS
     const phraseAudio = hasMicPlugins ? {
       type: T('jsPsychHtmlAudioResponse'),
-      on_start: () => { resolveTrialImage(); },
       stimulus: () => {
-        const img = imgSrc(_trialImgState.path);
+        const state = resolveTrialImage();
+        const img = imgSrc(state.path);
         const p = phrasePrompt(jsPsych.timelineVariable('prompt_type'));
         return `<div style="text-align:center;">
           <img src="${img}" style="width:300px;border-radius:8px;" ${IMG_ONERROR}/>
@@ -668,24 +712,27 @@
           </div></div>`;
       },
       recording_duration: 4000, show_done_button: false, allow_playback: false,
-      data: () => ({
-        task: 'production_phrase',
-        target_word: jsPsych.timelineVariable('word'),
-        display_target: jsPsych.timelineVariable('display'),
-        prompt_type: jsPsych.timelineVariable('prompt_type'),
-        iconic: jsPsych.timelineVariable('iconic'),
-        iconicity_rating: jsPsych.timelineVariable('rating'),
-        iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
-        target_form: jsPsych.timelineVariable('target_form'),
-        image_path: _trialImgState.path,
-        image_variant: _trialImgState.variant,
-        item_role: itemRole,
-        pass: 'phrase',
-        phase: 'post',
-        modality: 'audio',
-        training_condition: assignedTrainingCondition,
-        counterbalance_list: counterbalanceList
-      }),
+      data: () => {
+        const state = resolveTrialImage();
+        return {
+          task: 'production_phrase',
+          target_word: jsPsych.timelineVariable('word'),
+          display_target: jsPsych.timelineVariable('display'),
+          prompt_type: jsPsych.timelineVariable('prompt_type'),
+          iconic: jsPsych.timelineVariable('iconic'),
+          iconicity_rating: jsPsych.timelineVariable('rating'),
+          iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
+          target_form: jsPsych.timelineVariable('target_form'),
+          image_path: state.path,
+          image_variant: state.variant,
+          item_role: itemRole,
+          pass: 'phrase',
+          phase: 'post',
+          modality: 'audio',
+          training_condition: assignedTrainingCondition,
+          counterbalance_list: counterbalanceList
+        };
+      },
       on_finish: (d) => {
         const tgt = (d.target_word||'x').toLowerCase();
         d.repetition = nextRep(tgt, 'phrase');
@@ -695,9 +742,9 @@
 
     const phraseText = {
       type: T('jsPsychSurveyText'),
-      on_start: () => { resolveTrialImage(); },
       preamble: () => {
-        const img = imgSrc(_trialImgState.path);
+        const state = resolveTrialImage();
+        const img = imgSrc(state.path);
         const p = phrasePrompt(jsPsych.timelineVariable('prompt_type'));
         return `<div style="text-align:center;">
           <img src="${img}" style="width:300px;border-radius:8px;" ${IMG_ONERROR}/>
@@ -706,29 +753,32 @@
           <div class="mic-error-msg" style="margin-top:10px"><b>Note:</b> Type your answer in English. / 英語で入力してください。</div></div>`;
       },
       questions: [{ prompt: '', name: 'response', rows: 1, required: false }],
-      data: () => ({
-        task: 'production_phrase',
-        target_word: jsPsych.timelineVariable('word'),
-        display_target: jsPsych.timelineVariable('display'),
-        prompt_type: jsPsych.timelineVariable('prompt_type'),
-        iconic: jsPsych.timelineVariable('iconic'),
-        iconicity_rating: jsPsych.timelineVariable('rating'),
-        iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
-        target_form: jsPsych.timelineVariable('target_form'),
-        image_path: _trialImgState.path,
-        image_variant: _trialImgState.variant,
-        item_role: itemRole, pass: 'phrase', phase: 'post', modality: 'text',
-        training_condition: assignedTrainingCondition,
-        counterbalance_list: counterbalanceList
-      })
+      data: () => {
+        const state = resolveTrialImage();
+        return {
+          task: 'production_phrase',
+          target_word: jsPsych.timelineVariable('word'),
+          display_target: jsPsych.timelineVariable('display'),
+          prompt_type: jsPsych.timelineVariable('prompt_type'),
+          iconic: jsPsych.timelineVariable('iconic'),
+          iconicity_rating: jsPsych.timelineVariable('rating'),
+          iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
+          target_form: jsPsych.timelineVariable('target_form'),
+          image_path: state.path,
+          image_variant: state.variant,
+          item_role: itemRole, pass: 'phrase', phase: 'post', modality: 'text',
+          training_condition: assignedTrainingCondition,
+          counterbalance_list: counterbalanceList
+        };
+      }
     };
 
     // ISOLATED PASS
     const isolatedAudio = hasMicPlugins ? {
       type: T('jsPsychHtmlAudioResponse'),
-      on_start: () => { resolveTrialImage(); },
       stimulus: () => {
-        const img = imgSrc(_trialImgState.path);
+        const state = resolveTrialImage();
+        const img = imgSrc(state.path);
         return `<div style="text-align:center;">
           <img src="${img}" style="width:300px;border-radius:8px;" ${IMG_ONERROR}/>
           <p style="margin-top:15px;font-size:18px;"><b>Say just the word.</b></p>
@@ -738,21 +788,24 @@
           </div></div>`;
       },
       recording_duration: 3000, show_done_button: false, allow_playback: false,
-      data: () => ({
-        task: 'production_isolated',
-        target_word: jsPsych.timelineVariable('word'),
-        display_target: jsPsych.timelineVariable('display'),
-        prompt_type: jsPsych.timelineVariable('prompt_type'),
-        iconic: jsPsych.timelineVariable('iconic'),
-        iconicity_rating: jsPsych.timelineVariable('rating'),
-        iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
-        target_form: jsPsych.timelineVariable('target_form'),
-        image_path: _trialImgState.path,
-        image_variant: _trialImgState.variant,
-        item_role: itemRole, pass: 'isolated', phase: 'post', modality: 'audio',
-        training_condition: assignedTrainingCondition,
-        counterbalance_list: counterbalanceList
-      }),
+      data: () => {
+        const state = resolveTrialImage();
+        return {
+          task: 'production_isolated',
+          target_word: jsPsych.timelineVariable('word'),
+          display_target: jsPsych.timelineVariable('display'),
+          prompt_type: jsPsych.timelineVariable('prompt_type'),
+          iconic: jsPsych.timelineVariable('iconic'),
+          iconicity_rating: jsPsych.timelineVariable('rating'),
+          iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
+          target_form: jsPsych.timelineVariable('target_form'),
+          image_path: state.path,
+          image_variant: state.variant,
+          item_role: itemRole, pass: 'isolated', phase: 'post', modality: 'audio',
+          training_condition: assignedTrainingCondition,
+          counterbalance_list: counterbalanceList
+        };
+      },
       on_finish: (d) => {
         const tgt = (d.target_word||'x').toLowerCase();
         d.repetition = nextRep(tgt, 'isolated');
@@ -762,9 +815,9 @@
 
     const isolatedText = {
       type: T('jsPsychSurveyText'),
-      on_start: () => { resolveTrialImage(); },
       preamble: () => {
-        const img = imgSrc(_trialImgState.path);
+        const state = resolveTrialImage();
+        const img = imgSrc(state.path);
         return `<div style="text-align:center;">
           <img src="${img}" style="width:300px;border-radius:8px;" ${IMG_ONERROR}/>
           <p style="margin-top:15px;font-size:18px;"><b>Type just the word.</b></p>
@@ -772,21 +825,24 @@
           <div class="mic-error-msg" style="margin-top:10px"><b>Note:</b> One word only. / 1単語のみ。</div></div>`;
       },
       questions: [{ prompt: '', name: 'response', rows: 1, required: false }],
-      data: () => ({
-        task: 'production_isolated',
-        target_word: jsPsych.timelineVariable('word'),
-        display_target: jsPsych.timelineVariable('display'),
-        prompt_type: jsPsych.timelineVariable('prompt_type'),
-        iconic: jsPsych.timelineVariable('iconic'),
-        iconicity_rating: jsPsych.timelineVariable('rating'),
-        iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
-        target_form: jsPsych.timelineVariable('target_form'),
-        image_path: _trialImgState.path,
-        image_variant: _trialImgState.variant,
-        item_role: itemRole, pass: 'isolated', phase: 'post', modality: 'text',
-        training_condition: assignedTrainingCondition,
-        counterbalance_list: counterbalanceList
-      })
+      data: () => {
+        const state = resolveTrialImage();
+        return {
+          task: 'production_isolated',
+          target_word: jsPsych.timelineVariable('word'),
+          display_target: jsPsych.timelineVariable('display'),
+          prompt_type: jsPsych.timelineVariable('prompt_type'),
+          iconic: jsPsych.timelineVariable('iconic'),
+          iconicity_rating: jsPsych.timelineVariable('rating'),
+          iconicity_marginal: jsPsych.timelineVariable('iconicity_marginal'),
+          target_form: jsPsych.timelineVariable('target_form'),
+          image_path: state.path,
+          image_variant: state.variant,
+          item_role: itemRole, pass: 'isolated', phase: 'post', modality: 'text',
+          training_condition: assignedTrainingCondition,
+          counterbalance_list: counterbalanceList
+        };
+      }
     };
 
     if (hasMicPlugins) {
@@ -943,16 +999,45 @@
             const audio = new Audio(audioSrc(sfx.path));
             const answerBtns = [...document.querySelectorAll('.jspsych-html-button-response-button button')];
             let unlocked = false;
+
+            // v8.1 PATCH: hard cap on playback so a long file doesn't lock
+            // the answer buttons forever. Force-stops audio and unlocks
+            // answers at MAX_SFX_PLAYBACK_MS regardless of `ended` event.
+            // Natural `ended` events still work as the fast path.
+            let stopTimer = null;
+
             function lockAnswers(lock) { answerBtns.forEach(b => { b.disabled = lock; b.style.opacity = lock ? '0.5' : '1'; }); }
             function unlock() { if (!unlocked) { unlocked = true; lockAnswers(false); status.textContent = 'Choose Yes or No. / はい/いいえを選択。'; } }
+            function clearStopTimer() { if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; } }
+            function forceStop() {
+              clearStopTimer();
+              try { audio.pause(); audio.currentTime = 0; } catch {}
+              unlock();
+              if (btn) {
+                btn.disabled = false;
+                btn.textContent = '🔁 Play Again / もう一度';
+              }
+            }
+
             lockAnswers(true);
-            audio.addEventListener('ended', () => { unlock(); btn.textContent = '🔁 Play Again / もう一度'; btn.disabled = false; });
-            audio.addEventListener('error', () => { status.textContent = 'Audio missing — answer anyway'; unlock(); }, { once: true });
+            audio.addEventListener('ended', () => {
+              clearStopTimer();
+              unlock();
+              btn.textContent = '🔁 Play Again / もう一度';
+              btn.disabled = false;
+            });
+            audio.addEventListener('error', () => {
+              clearStopTimer();
+              status.textContent = 'Audio missing — answer anyway';
+              unlock();
+            }, { once: true });
             btn.addEventListener('click', () => {
               status.textContent = 'Playing… / 再生中…';
               btn.disabled = true;
               audio.currentTime = 0;
               audio.play().catch(() => { status.textContent = 'Audio failed.'; unlock(); btn.disabled = false; });
+              clearStopTimer();
+              stopTimer = setTimeout(forceStop, MAX_SFX_PLAYBACK_MS);
             });
           },
           on_finish: d => { d.is_correct = (d.response === d.correct_answer); }
@@ -1197,16 +1282,42 @@
           window.__foley_audio = audio;
           const answerBtns = [...document.querySelectorAll('.jspsych-html-button-response-button button')];
           let unlocked = false;
+
+          // v8.1 PATCH: same hard-cap pattern as binding probe 2.
+          let stopTimer = null;
+
           function lockAnswers(lock) { answerBtns.forEach(b => { b.disabled = lock; b.style.opacity = lock ? '0.5' : '1'; }); }
           function unlock() { if (!unlocked) { unlocked = true; lockAnswers(false); status.textContent = 'Choose. / 選択。'; } }
+          function clearStopTimer() { if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; } }
+          function forceStop() {
+            clearStopTimer();
+            try { audio.pause(); audio.currentTime = 0; } catch {}
+            unlock();
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = '🔁 Play Again / もう一度';
+            }
+          }
+
           lockAnswers(true);
-          audio.addEventListener('ended', () => { unlock(); btn.textContent = '🔁 Play Again / もう一度'; btn.disabled = false; });
-          audio.addEventListener('error', () => { status.textContent = 'Audio missing — answer anyway'; unlock(); }, { once: true });
+          audio.addEventListener('ended', () => {
+            clearStopTimer();
+            unlock();
+            btn.textContent = '🔁 Play Again / もう一度';
+            btn.disabled = false;
+          });
+          audio.addEventListener('error', () => {
+            clearStopTimer();
+            status.textContent = 'Audio missing — answer anyway';
+            unlock();
+          }, { once: true });
           btn.addEventListener('click', () => {
             status.textContent = 'Playing… / 再生中…';
             btn.disabled = true;
             audio.currentTime = 0;
             audio.play().catch(() => { status.textContent = 'Audio failed.'; unlock(); btn.disabled = false; });
+            clearStopTimer();
+            stopTimer = setTimeout(forceStop, MAX_SFX_PLAYBACK_MS);
           });
         },
         on_finish: d => {
