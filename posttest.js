@@ -1,4 +1,28 @@
-// posttest.js — VR Post-Test Battery (v8.1 — patches over v8.0)
+// posttest.js — VR Post-Test Battery (v8.2 — patches over v8.1)
+//
+// ============================================================================
+// v8.2 PATCH NOTES (over v8.1)
+// ============================================================================
+//
+// 1. Per-condition arrangement-task ground truth. Pre-v8.2, Probe 4 (the
+//    3x3 kitchen-layout drag task) used a single ARRANGEMENT_ITEMS const
+//    with one set of correct cells assumed to be "approximately consistent
+//    across VR/2D/Text scenes." After actually checking the scenes, the
+//    three conditions have noticeably different on-screen / in-world
+//    arrangements. Scoring all three against one ground truth would
+//    penalize whichever conditions don't match the assumed layout.
+//
+//    Replaced with ARRANGEMENT_GROUND_TRUTH_BY_CONDITION { Text, '2D', VR }
+//    plus a getArrangementItems() resolver that picks the right ground
+//    truth from the participant's ?cond= URL param at trial-construction
+//    time. Each condition's layout is documented in the block comment
+//    above the const. VR's plate is elevated to (1, 1) — directly above
+//    bowl — because plate sits between bowl and pan in 3D and there are
+//    not enough columns in a 3x3 grid to place all four front-counter
+//    items linearly. See VR comment block for full rationale.
+//
+//    Default fallback when ?cond= is missing or unrecognized is the 2D
+//    layout. Filter on data.training_condition !== 'unknown' in analysis.
 //
 // ============================================================================
 // v8.1 PATCH NOTES (over v8.0)
@@ -1094,26 +1118,102 @@
   // can plausibly recover "the bowl was on the left side, the pan was
   // in the middle".
   //
-  // Ground truth grid layout (assumed approximately consistent across
-  // VR/2D/Text scenes per pilot communication; analyses should report
-  // per-condition accuracy):
+  // Ground truth grid layout - PER CONDITION. Each training condition has
+  // a slightly different on-screen / in-world arrangement, so we score each
+  // participant against the layout they actually saw during training. The
+  // 3x3 grid is intentionally coarse so we don't penalize Text encoders
+  // (containment-based) relative to 2D/VR (Euclidean).
   //
-  //          [bowl]   [flour]   [.....]
-  //          [pan]    [butter]  [plate]
-  //          [.....]  [.....]   [.....]
+  // ----- TEXT condition ----------------------------------------------------
+  //   Two rows: ingredient/utensil labels on top, container labels below.
+  //   [Flour][Sugar][Egg][Milk][Knife][Butter][Spoon][Spatula]
+  //              [Bowl]      [Pan]      [Plate]
+  //   3x3 projection of the 5 posttest items:
+  //     [flour]  [.....]  [butter]
+  //     [.....]  [.....]  [.....]
+  //     [bowl]   [pan]    [plate]
+  //
+  // ----- 2D condition ------------------------------------------------------
+  //   Three vertical bands. Ingredients top, containers middle, knife/butter
+  //   below the containers. (See actual scene screenshot.)
+  //     [Flour][Sugar][Egg][Milk]            [Spoon][Spatula]
+  //          [Bowl]        [Pan]        [Plate]
+  //                      [Knife][Butter]
+  //   3x3 projection:
+  //     [flour]  [.....]   [.....]
+  //     [bowl]   [pan]     [plate]
+  //     [.....]  [butter]  [.....]
+  //
+  // ----- VR condition ------------------------------------------------------
+  //   Two depth bands (back shelf + front counter), 8-item front row.
+  //     Back shelf, L->R:    Flour, Sugar, Milk
+  //     Front counter, L->R: Butter, ButterKnife, Egg, Bowl, Plate,
+  //                          Spoon, Spatula, Pan
+  //   3x3 projection:
+  //     [flour]   [.....]  [.....]
+  //     [.....]   [plate]  [.....]
+  //     [butter]  [bowl]   [pan]
+  //   Plate (item 5 of 8) genuinely sits *between* bowl (item 4) and pan
+  //   (item 8) on the front counter, but a 3x3 grid only has 3 columns
+  //   for 4 front-row items. Plate is elevated to row 1 directly above
+  //   bowl because plate is much closer to bowl (1 step away) than to
+  //   pan (3 steps away) in the linear sequence. So "plate above bowl"
+  //   represents "plate is bowl's right-hand neighbor" better than
+  //   "plate above pan" would. A VR participant who places plate at
+  //   (2, 2) is also showing accurate memory of the scene at coarser
+  //   resolution — the secondary row/col-match scores will pick that up.
   //
   // Score: exact-cell match for primary; row-match-only and column-match-
   // only as secondary (more lenient). Kendall tau on row-ordering and
   // col-ordering as a third measure of partial spatial knowledge.
-  const ARRANGEMENT_ITEMS = [
-    { id: 'bowl',   label: 'Bowl',   correct_row: 0, correct_col: 0 },
-    { id: 'flour',  label: 'Flour',  correct_row: 0, correct_col: 1 },
-    { id: 'pan',    label: 'Pan',    correct_row: 1, correct_col: 0 },
-    { id: 'butter', label: 'Butter', correct_row: 1, correct_col: 1 },
-    { id: 'plate',  label: 'Plate',  correct_row: 1, correct_col: 2 },
-  ];
+  const ARRANGEMENT_GROUND_TRUTH_BY_CONDITION = {
+    Text: {
+      flour:  { row: 0, col: 0 },
+      butter: { row: 0, col: 2 },
+      bowl:   { row: 2, col: 0 },
+      pan:    { row: 2, col: 1 },
+      plate:  { row: 2, col: 2 },
+    },
+    '2D': {
+      flour:  { row: 0, col: 0 },
+      bowl:   { row: 1, col: 0 },
+      pan:    { row: 1, col: 1 },
+      plate:  { row: 1, col: 2 },
+      butter: { row: 2, col: 1 },
+    },
+    VR: {
+      // Back shelf (row 0) + front counter (row 2). Plate is elevated to
+      // row 1 above bowl because plate sits between bowl and pan in 3D
+      // and is closer to bowl in the linear sequence. See block comment
+      // above for full rationale.
+      flour:  { row: 0, col: 0 },  // back shelf, leftmost of 3 ingredients
+      butter: { row: 2, col: 0 },  // front counter, item 1 of 8
+      bowl:   { row: 2, col: 1 },  // front counter, item 4 of 8
+      plate:  { row: 1, col: 1 },  // elevated above bowl (its nearest neighbor)
+      pan:    { row: 2, col: 2 },  // front counter, item 8 of 8 (far right)
+    },
+  };
+
+  const ARRANGEMENT_LABELS = {
+    flour: 'Flour', butter: 'Butter', bowl: 'Bowl', pan: 'Pan', plate: 'Plate'
+  };
+  const ARRANGEMENT_ITEM_ORDER = ['flour', 'butter', 'bowl', 'pan', 'plate'];
+
+  // Resolve per-condition ground truth at trial time (assignedTrainingCondition
+  // is captured from the participant info form, which runs before this task).
+  function getArrangementItems() {
+    const truth = ARRANGEMENT_GROUND_TRUTH_BY_CONDITION[assignedTrainingCondition]
+               || ARRANGEMENT_GROUND_TRUTH_BY_CONDITION['2D']; // fallback for 'unknown'
+    return ARRANGEMENT_ITEM_ORDER.map(id => ({
+      id,
+      label: ARRANGEMENT_LABELS[id],
+      correct_row: truth[id].row,
+      correct_col: truth[id].col,
+    }));
+  }
 
   function buildArrangementTask() {
+    const ARRANGEMENT_ITEMS = getArrangementItems();
     let placedState = {}; // { itemId: { row, col } }
 
     return [{
