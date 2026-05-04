@@ -475,7 +475,7 @@
       probe1_correct: 0,
       probe3_q: 'Which <b>tool</b> was used to <b>mix</b> the ingredients in the bowl?',
       probe3_q_jp: 'ボウルの中の材料を<b>混ぜる</b>のに使った<b>道具</b>はどれですか？',
-      probe3_options: ['the spoon', 'the knife', 'the spatula', 'the fork'],
+      probe3_options: ['the spoon', 'the knife', 'the spatula', 'the whisk'],
       probe3_correct: 0,
     },
   ];
