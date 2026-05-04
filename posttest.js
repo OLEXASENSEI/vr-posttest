@@ -1,4 +1,55 @@
-// posttest.js — VR Post-Test Battery (v8.4 — patches over v8.3)
+// posttest.js — VR Post-Test Battery (v8.6 — patches over v8.5)
+//
+// ============================================================================
+// v8.6 PATCH NOTES (over v8.5)
+// ============================================================================
+//
+// 1. Probe 3 dropped entirely. The v8.4 reframe (spatial adjacency →
+//    procedural pairing) made the answer key condition-invariant, but a
+//    closer audit of the actual question content revealed that the
+//    answers were derivable from world knowledge plus option elimination,
+//    independent of training memory:
+//      - sizzle: "what was butter touching?" → pan is the only heated
+//        item; world knowledge says butter sizzles on hot pans.
+//      - crack: "what caught the egg?" → bowl, by universal cooking
+//        convention; the other options can't catch an egg.
+//      - bowl: "which tool mixed?" → the canonical mixing tool in
+//        English-textbook usage is whisk, but the procedural answer
+//        is spoon, so the distractor pulls *against* the correct
+//        answer via lexical frequency.
+//    With all three probes leakier than they should be and a session
+//    budget that's already over target, dropping the probe is cleaner
+//    than redesigning around items whose recipes are too prototypical.
+//
+//    Probe 1 (event association) remains, with overlap distractors that
+//    are not derivable from world knowledge. The 3×3 grid carries the
+//    spatial DV. SFX recognition carries the auditory DV. Probe 3 was
+//    not pulling its weight as a third measure.
+//
+//    Removed from BINDING_PROBES: probe3_q, probe3_q_jp, probe3_options,
+//    probe3_correct fields. Removed from buildBindingTask: the Probe 3
+//    trial generation block.
+//
+//    Saves ~1.5 minutes of session time (3 trials × ~30s).
+//
+// ============================================================================
+// v8.5 PATCH NOTES (over v8.4)
+// ============================================================================
+//
+// 1. Image variant extension fix. Pre-v8.5, the variant-probing logic in
+//    validateAssets() and imagePath() constructed variant paths using the
+//    base image's extension (e.g., cracking.jpeg → probes cracking_01.jpeg).
+//    Production assets were created with .jpg/.jpeg bases but .png variants
+//    by convention, so every variant probe 404'd and PRELOAD_IMAGES never
+//    captured any variant. Trial-time imagePath() always fell through to
+//    the base file.
+//
+//    Fix: hardcode `.png` as the variant extension regardless of base. This
+//    matches the convention used to produce the variant files. Side benefit:
+//    eliminates 24 console 404s on test launch (the variant probe set is
+//    smaller and now hits real files).
+//
+//    If you ever want a non-PNG variant, change `_VARIANT_EXT` below.
 //
 // ============================================================================
 // v8.4 PATCH NOTES (over v8.3)
@@ -254,12 +305,16 @@
   // are available for an item.
   let PRELOAD_IMAGES = [];
 
+  // v8.5: variants are always PNG by convention regardless of base extension.
+  // Change this if your variants use a different format.
+  const _VARIANT_EXT = 'png';
+
   function imagePath(base) {
     const m = base.match(/^(.+?)\.(jpg|jpeg|png)$/i);
     if (!m) return { path: base, variant: 0 };
-    const stem = m[1], ext = m[2];
-    const v01 = `${stem}_01.${ext}`;
-    const v02 = `${stem}_02.${ext}`;
+    const stem = m[1];
+    const v01 = `${stem}_01.${_VARIANT_EXT}`;
+    const v02 = `${stem}_02.${_VARIANT_EXT}`;
     if (PRELOAD_IMAGES.includes(v01) && PRELOAD_IMAGES.includes(v02)) {
       const v = (Math.random() < 0.5) ? 1 : 2;
       return { path: (v === 1) ? v01 : v02, variant: v };
@@ -398,34 +453,26 @@
     { word: 'splash', trained: false, iconic: true,  iconicity_marginal: false, produced_in_training: false },
   ];
 
-  // Multi-probe binding task — focuses on SIZZLE (the unique passive-iconic
-  // case) but tests two comparators (one produced-iconic, one conventional)
-  // to anchor the measurement.
+  // Binding task — Probe 1 (event association) only as of v8.6. Focuses on
+  // SIZZLE (the unique passive-iconic case) but tests two comparators (one
+  // produced-iconic, one conventional) to anchor the measurement.
   //
-  // PROBE DESIGN (v8.4):
+  // PROBE DESIGN:
   //   Probe 1 (Event association, 4-AFC): "When you said/heard X, what
   //     was happening?" — Distractors are plausible scenes from the SAME
-  //     training that overlap with the target item's context.
-  //   Probe 3 (Procedural pairing, 4-AFC): "Which item was [used with /
-  //     touching / catching] X in the same step?" — Tests whether the
-  //     participant encoded which items co-occurred procedurally during
-  //     training. Procedure is invariant across conditions (the recipe
-  //     doesn't change between VR/2D/Text), so a single answer key is
-  //     fair to all three.
+  //     training that overlap with the target item's context. Cannot be
+  //     answered from world knowledge alone.
   //
-  // PROBE 2 REMOVED in v8.3. Previously per-word ("Did you hear this sound
-  // during training?", correct answer always Yes) — could not separate hit
-  // rate from yes-bias. Now handled by buildSFXRecognition() as a standalone
-  // block with proper target/lure mix and d-prime as the sensitivity
-  // measure.
+  // PROBE 2 REMOVED in v8.3. Per-word SFX recognition with always-Yes
+  // ground truth could not separate hits from yes-bias. Now handled by
+  // buildSFXRecognition() as a standalone block with proper target/lure
+  // mix and d-prime as the sensitivity measure.
   //
-  // PROBE 3 REFRAMED in v8.4. Previously spatial-adjacency ("What was
-  // placed near X?") with a single answer key — this was condition-
-  // dependent because the training layouts differ across VR/2D/Text. Now
-  // procedural-pairing, which is condition-invariant.
-  //
-  // The 3×3 grid arrangement task (separate function below) carries the
-  // spatial-encoding DV with per-condition ground truth (v8.2).
+  // PROBE 3 REMOVED in v8.6. The v8.4 reframe (procedural pairing) made
+  // ground truth condition-invariant but the questions were still
+  // derivable from world knowledge plus option elimination. Spatial DV
+  // is on the 3×3 grid; auditory DV is on SFX recognition; Probe 3 was
+  // redundant. See v8.6 patch notes for full rationale.
   const BINDING_PROBES = [
     {
       word: 'sizzle',
@@ -439,10 +486,6 @@
         'flour falling into the bowl from above' // distractor: also kitchen sound event
       ],
       probe1_correct: 0,
-      probe3_q: 'When you heard <b>sizzling</b>, which item was the <b>butter</b> touching?',
-      probe3_q_jp: '<b>sizzling</b> という音を聞いたとき、<b>バター</b>はどれに触れていましたか？',
-      probe3_options: ['the pan', 'the bowl', 'the plate', 'the spoon'],
-      probe3_correct: 0,
     },
     {
       word: 'crack',
@@ -456,10 +499,6 @@
         'milk pouring out of a carton'            // distractor: also liquid-into-bowl
       ],
       probe1_correct: 0,
-      probe3_q: 'When you <b>cracked</b> the egg, which item <b>caught</b> it?',
-      probe3_q_jp: '卵を<b>割った</b>とき、それを<b>受けていた</b>のはどれですか？',
-      probe3_options: ['the bowl', 'the pan', 'the plate', 'the spoon'],
-      probe3_correct: 0,
     },
     {
       word: 'bowl',
@@ -473,10 +512,6 @@
         'finished pancake being served'              // distractor: plate activity
       ],
       probe1_correct: 0,
-      probe3_q: 'Which <b>tool</b> was used to <b>mix</b> the ingredients in the bowl?',
-      probe3_q_jp: 'ボウルの中の材料を<b>混ぜる</b>のに使った<b>道具</b>はどれですか？',
-      probe3_options: ['the spoon', 'the knife', 'the spatula', 'the whisk'],
-      probe3_correct: 0,
     },
   ];
 
@@ -545,16 +580,18 @@
       allImages.add(s.image);
       const m = s.image.match(/^(.+?)\.(jpg|jpeg|png)$/i);
       if (m) {
-        optionalImages.add(`${m[1]}_01.${m[2]}`);
-        optionalImages.add(`${m[1]}_02.${m[2]}`);
+        // v8.5: probe variants in _VARIANT_EXT (default 'png'), regardless
+        // of base extension.
+        optionalImages.add(`${m[1]}_01.${_VARIANT_EXT}`);
+        optionalImages.add(`${m[1]}_02.${_VARIANT_EXT}`);
       }
     }
     for (const s of PRODUCTION_CONTROLS) {
       allImages.add(s.image);
       const m = s.image.match(/^(.+?)\.(jpg|jpeg|png)$/i);
       if (m) {
-        optionalImages.add(`${m[1]}_01.${m[2]}`);
-        optionalImages.add(`${m[1]}_02.${m[2]}`);
+        optionalImages.add(`${m[1]}_01.${_VARIANT_EXT}`);
+        optionalImages.add(`${m[1]}_02.${_VARIANT_EXT}`);
       }
     }
 
@@ -1063,32 +1100,6 @@
           produced_in_training: probe.produced,
           correct_answer: correct1Idx,
           options: opts1.map(o => o.text),
-          training_condition: assignedTrainingCondition,
-          phase: 'post'
-        },
-        on_finish: d => { d.is_correct = (d.response === d.correct_answer); }
-      });
-
-      // Probe 3: Procedural pairing 4-AFC — what was used together with target
-      // in the same recipe step? (See BINDING_PROBES comment block for v8.4
-      // rationale.)
-      const opts3 = shuffle(probe.probe3_options.map((opt, i) => ({ text: opt, origIdx: i })));
-      const correct3Idx = opts3.findIndex(o => o.origIdx === probe.probe3_correct);
-      tl.push({
-        type: T('jsPsychHtmlButtonResponse'),
-        stimulus: `<div style="text-align:center;max-width:700px;margin:0 auto;">
-          <p style="font-size:18px;">${probe.probe3_q}</p>
-          <p style="color:#666;font-size:14px;">${probe.probe3_q_jp}</p>
-          <p style="color:#888;font-size:13px;margin-top:18px;">If you don't remember, pick the closest guess. / 覚えていない場合は、近いものを選んでください。</p>
-        </div>`,
-        choices: opts3.map(o => o.text),
-        data: {
-          task: 'binding_probe3_pairing',
-          word: probe.word,
-          iconic: probe.iconic,
-          produced_in_training: probe.produced,
-          correct_answer: correct3Idx,
-          options: opts3.map(o => o.text),
           training_condition: assignedTrainingCondition,
           phase: 'post'
         },
