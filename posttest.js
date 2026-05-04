@@ -1,4 +1,45 @@
-// posttest.js — VR Post-Test Battery (v8.2 — patches over v8.1)
+// posttest.js — VR Post-Test Battery (v8.3 — patches over v8.2)
+//
+// ============================================================================
+// v8.3 PATCH NOTES (over v8.2)
+// ============================================================================
+//
+// 1. Probe 2 redesigned for d-prime. The previous per-word Probe 2 inside
+//    buildBindingTask asked "Did you hear this sound during training?" but
+//    every SFX it played was a target — correct answer was always Yes. With
+//    no lures, hit rate alone cannot be separated from yes-bias, so VR's
+//    predicted Probe 2 advantage could be confounded by demand
+//    characteristics rather than reflecting real SFX encoding sensitivity.
+//
+//    Replaced with a standalone SFX recognition block (buildSFXRecognition)
+//    that randomizes 5 trained targets (crack, flip, slice, stir, sizzle)
+//    against 4 untrained iconic-class lures (chop, peel, glug, splash).
+//    Each trial is Yes/No + 4-point confidence. This yields hits AND false
+//    alarms per participant, enabling d-prime as the primary sensitivity
+//    measure independent of response bias.
+//
+//    Lures were selected to match targets on:
+//      - Word class (iconic kitchen-action SFX)
+//      - Source library (must be same recording set, normalized loudness)
+//      - Plausibility (any of these COULD have been in a kitchen training)
+//    Three of the four lures already exist in the experiment vocabulary as
+//    untrained items — chop, peel are PRODUCTION_CONTROLS; glug, splash are
+//    RECOGNITION_ITEMS foils. So the lure choices are grounded in design
+//    decisions already made elsewhere in the battery.
+//
+//    Block placement: runs AFTER buildBindingTask and BEFORE FOLEY_RECOGNITION
+//    (4-AFC). Order matters: 4-AFC re-exposes the participant to every
+//    target SFX, which would contaminate Y/N recognition memory if SFX
+//    recognition ran after foley.
+//
+//    Removed from BINDING_PROBES: probe2_sfx_word field. Removed from
+//    buildBindingTask: the Probe 2 trial generation block. Probe 1
+//    (event association) and Probe 3 (adjacency) are unchanged.
+//
+// 2. SINGLE_TAKE_SFX set. Replaces the hardcoded `if (word === 'slice')`
+//    branch in sfxPath with a Set-based check. Each lure can join the set
+//    if only one variant is recorded. Cleaner extension point than chained
+//    if-statements.
 //
 // ============================================================================
 // v8.2 PATCH NOTES (over v8.1)
@@ -103,25 +144,24 @@
 //   6.  Production practice (1 trial — same park scene as pretest)
 //   7.  Production controls (chop, peel, spoon, plate — phrase + isolated × 2)
 //   8.  Production targets (all 8 — phrase + isolated × 2)
-//   9.  Multi-probe binding task — sizzle and a few comparators
-//   10. Foley recognition (trained sounds: cracking, flipping, slicing, sizzling)
-//   11. Procedural recall (free-typing the recipe steps — KEEP from v7.4)
-//   12. Sequencing (drag-to-order — KEEP from v7.4)
-//   13. Blind retell (45s audio — KEEP)
+//   9.  Multi-probe binding task — sizzle and a few comparators (Probes 1+3)
+//   10. Arrangement task (3x3 grid)
+//   11. SFX recognition (v8.3) — Y/N + confidence, targets vs lures, d-prime
+//   12. Foley recognition (4-AFC identification: cracking, flipping, etc.)
+//   13. Sequencing (drag-to-order — KEEP from v7.4)
 //   14. Teach a friend (60s audio — KEEP)
-//   15. Recognition + confidence (12 items: 8 trained + 4 distractors — TRIMMED)
-//   16. Likert (KEEP)
-//   17. Exit comments (KEEP)
-//   18. Save
+//   15. Likert (KEEP)
+//   16. Exit comments (KEEP)
+//   17. Save
 //
 // CUT FROM v7.4:
 //   - 4AFC ingredients/actions block — pre-teaches Group B targets
 //   - Speeded word-picture match — pre-teaches AND tests recognition speed
-//     (not addressing the hypothesis)
 //   - Group A naming block (separate) — merged into single production block
 //   - Naming Stage 3 scene description — replaced by spatial multi-probe
 //   - Foley split into Group A + Group B — merged into single 4-item block
-//   - 19-item recognition test — trimmed to 12 (8 trained + 4 foils)
+//   - 19-item recognition test — trimmed to 12 (8 trained + 4 foils), then
+//     dropped entirely in v1.6 lean cut
 //
 // ============================================================================
 
@@ -138,7 +178,7 @@
   // lock the answer buttons indefinitely. Tune as needed — 4000ms is
   // long enough for any reasonable kitchen-SFX recognition cue but short
   // enough that participants don't perceive a freeze on edge-case files.
-  // Applied in buildBindingTask probe 2 and buildFoleyRecognition.
+  // Applied in buildSFXRecognition (v8.3) and buildFoleyRecognition.
   const MAX_SFX_PLAYBACK_MS = 4000;
 
   // Track every asset URL that fails its HEAD check at startup, so the
@@ -239,11 +279,14 @@
   ];
 
   // SFX file schema: sounds/sfx_{word}_{1|2}.mp3
-  // - crack, flip, sizzle, stir each have 2 variants → randomized per trial
-  // - slice has only 1 take (recording was harder) → always uses _1
+  // - Most SFX have 2 variants → randomized per trial
+  // - Words in SINGLE_TAKE_SFX have only 1 take → always use _1
+  //   (slice was harder to record; the v8.3 lures are recorded once each
+  //    because each lure plays only once per participant.)
   // - sfxPath() picks the file at trial time and stamps `sfx_variant` in data
+  const SINGLE_TAKE_SFX = new Set(['slice', 'chop', 'peel', 'glug', 'splash']);
   function sfxPath(word) {
-    if (word === 'slice') return { path: 'sounds/sfx_slice_1.mp3', variant: 1 };
+    if (SINGLE_TAKE_SFX.has(word)) return { path: `sounds/sfx_${word}_1.mp3`, variant: 1 };
     const v = (Math.random() < 0.5) ? 1 : 2;
     return { path: `sounds/sfx_${word}_${v}.mp3`, variant: v };
   }
@@ -276,58 +319,69 @@
     { sfx_word: 'stir',   target: 'stirring', options: ['stirring',  'whisking', 'folding',   'mixing'],     correct: 0, iconic: true, target_word: 'stir',   produced_in_training: true,  iconicity_marginal: true  },
   ];
 
+  // SFX RECOGNITION (v8.3) — Y/N + confidence with lures for d-prime.
+  //
+  // 5 targets (trained, correct answer = Yes) + 4 lures (untrained, correct
+  // answer = No), played in randomized order. Yields hits and false alarms
+  // per participant; downstream analysis computes d-prime per condition.
+  //
+  // Why these specific lures:
+  //   - chop, peel — already in PRODUCTION_CONTROLS as untrained iconic
+  //     actions; the participant has never been exposed to a chop or peel
+  //     SFX in training. Acoustically: chop is sharp/percussive (close to
+  //     crack/slice in family), peel is a quieter scraping sound.
+  //   - glug, splash — already in RECOGNITION_ITEMS as iconic foils. Both
+  //     are liquid-event SFX that fit a kitchen scene plausibly without
+  //     having been part of the pancake-making procedure.
+  //
+  // All four lures must be sourced from the SAME audio library / recording
+  // session as the targets, with matching loudness normalization and
+  // similar duration range (~1–3 sec). Otherwise systematic acoustic
+  // differences become a recognition cue independent of memory.
+  //
+  // 5:4 ratio (rather than 1:1) keeps every trained target represented
+  // while staying under 10 trials total. d-prime is valid at any ratio.
+  const SFX_RECOGNITION_STIMULI = [
+    // Targets — heard during training
+    { word: 'crack',  trained: true,  iconic: true,  iconicity_marginal: false, produced_in_training: true  },
+    { word: 'flip',   trained: true,  iconic: true,  iconicity_marginal: false, produced_in_training: true  },
+    { word: 'slice',  trained: true,  iconic: true,  iconicity_marginal: false, produced_in_training: true  },
+    { word: 'stir',   trained: true,  iconic: true,  iconicity_marginal: true,  produced_in_training: true  },
+    { word: 'sizzle', trained: true,  iconic: true,  iconicity_marginal: false, produced_in_training: false },
+    // Lures — never heard during training
+    { word: 'chop',   trained: false, iconic: true,  iconicity_marginal: false, produced_in_training: false },
+    { word: 'peel',   trained: false, iconic: true,  iconicity_marginal: false, produced_in_training: false },
+    { word: 'glug',   trained: false, iconic: true,  iconicity_marginal: false, produced_in_training: false },
+    { word: 'splash', trained: false, iconic: true,  iconicity_marginal: false, produced_in_training: false },
+  ];
+
   // Multi-probe binding task — focuses on SIZZLE (the unique passive-iconic
   // case) but tests two comparators (one produced-iconic, one conventional)
   // to anchor the measurement.
   //
-  // Three probes per word:
-  //   Probe 1 (Object association): "When you said/heard this word, what
-  //     was happening?" 4-AFC scene options.
-  //   Probe 2 (SFX recognition): "Did you hear this sound during training?"
-  //     Yes/No + confidence.
-  //   Probe 3 (Location): "Where did this happen?" — 3 schematic regions
-  //     all conditions could have encoded (Ingredient / Cooking / Plating).
-  //
-  // Predicted: VR > 2D > Text on Probe 3 specifically (location), uniform
-  // on 1 and 2. The location advantage is the spatial-affordance signal.
-  // Multi-probe binding task — focuses on SIZZLE (the unique passive-iconic
-  // case) but tests two comparators (one produced-iconic, one conventional)
-  // to anchor the measurement.
-  //
-  // PROBE DESIGN (v1.5 — post-pilot rewrite):
+  // PROBE DESIGN (v8.3):
   //   Probe 1 (Event association, 4-AFC): "When you said/heard X, what
-  //     was happening?" — Distractors are now plausible scenes from the
-  //     SAME training that overlap with the target item's context. A
-  //     participant who knows the OTHER words but not the target word
-  //     can no longer deduce the answer by elimination.
-  //   Probe 2 (SFX recognition, Yes/No + confidence): "Did you hear this
-  //     sound during training?" — Played SFX always was in training, so
-  //     correct answer is always Yes. Confidence rating differentiates
-  //     strong vs weak binding.
+  //     was happening?" — Distractors are plausible scenes from the SAME
+  //     training that overlap with the target item's context.
   //   Probe 3 (Adjacency, 4-AFC): "What item was placed/used next to X
-  //     during training?" — Tests spatial-relational binding. Works for
-  //     all three conditions: VR encoded through traversal, 2D through
-  //     fixed canvas positions, Text through container layout. Stronger
-  //     encoding is predicted in VR > 2D > Text.
+  //     during training?" — Tests spatial-relational binding, works for
+  //     all three conditions.
   //
-  // The previous 3-region location probe (Ingredient/Cooking/Plating)
-  // was dropped because Text-condition canvases use containment encoding
-  // rather than spatial regions, making the question unfair across
-  // conditions. Adjacency works because all conditions encoded SOME
-  // form of relative position even if the encoding mode differs.
+  // PROBE 2 REMOVED in v8.3. Previously per-word ("Did you hear this sound
+  // during training?", correct answer always Yes) — could not separate hit
+  // rate from yes-bias. Now handled by buildSFXRecognition() as a standalone
+  // block with proper target/lure mix and d-prime as the sensitivity
+  // measure.
   //
-  // The 3×3 grid arrangement task (Probe 4, separate function below)
-  // is a coarse-grained spatial reconstruction task that all three
-  // conditions can plausibly answer.
+  // The 3×3 grid arrangement task (separate function below) is a coarse-
+  // grained spatial reconstruction task that all three conditions can
+  // plausibly answer.
   const BINDING_PROBES = [
     {
       word: 'sizzle',
       iconic: true, produced: false,
       probe1_q: 'When you heard <b>sizzling</b> during training, what was happening?',
       probe1_q_jp: 'トレーニングで <b>sizzling</b> という音を聞いたとき、何が起こっていましたか？',
-      // All four options are plausible heat/cooking events that produce
-      // sound. Participant must remember which specific event was paired
-      // with the sizzling SFX — knowing only the other words doesn't help.
       probe1_options: [
         'butter melting in a hot pan',           // ← correct (sizzle paired with butter+pan)
         'cracking an egg into the pan',          // distractor: also pan-event, also iconic-action
@@ -335,7 +389,6 @@
         'flour falling into the bowl from above' // distractor: also kitchen sound event
       ],
       probe1_correct: 0,
-      probe2_sfx_word: 'sizzle',
       probe3_q: 'What was the <b>pan</b> placed near during training?',
       probe3_q_jp: 'トレーニングで<b>フライパン</b>はどの近くに置かれていましたか？',
       probe3_options: ['the bowl with ingredients', 'the plate', 'the spoon and spatula', 'the flour container'],
@@ -346,9 +399,6 @@
       iconic: true, produced: true,
       probe1_q: 'When you said <b>crack</b> during training, what was happening?',
       probe1_q_jp: 'トレーニングで <b>crack</b> と言ったとき、何が起こっていましたか？',
-      // All four are ingredient-action pairings the participant produced
-      // during training. Must remember which specific verb went with which
-      // event — not just "which one breaks?"
       probe1_options: [
         'eggshell breaking open into the bowl',  // ← correct
         'butter being cut with a knife',          // distractor: also a sharp-action verb
@@ -356,7 +406,6 @@
         'milk pouring out of a carton'            // distractor: also liquid-into-bowl
       ],
       probe1_correct: 0,
-      probe2_sfx_word: 'crack',
       probe3_q: 'What was <b>next to the bowl</b> when you cracked the egg?',
       probe3_q_jp: '卵を割ったとき、<b>ボウルの隣</b>にあったものは？',
       probe3_options: ['the flour container', 'the milk carton', 'the spoon for stirring', 'the empty pan'],
@@ -367,9 +416,6 @@
       iconic: false, produced: true,
       probe1_q: 'When you said <b>bowl</b> during training, what was happening?',
       probe1_q_jp: 'トレーニングで <b>bowl</b> と言ったとき、何が起こっていましたか？',
-      // All four are plausible kitchen-vessel activities. Must remember
-      // bowl=combining-receptacle (not pan=heating, not spatula=flipping,
-      // not plate=serving). Cross-vocabulary deduction is harder.
       probe1_options: [
         'ingredients being combined inside it',      // ← correct
         'food being heated to cook',                 // distractor: pan-like activity
@@ -377,7 +423,6 @@
         'finished pancake being served'              // distractor: plate activity
       ],
       probe1_correct: 0,
-      probe2_sfx_word: null,  // bowl has no SFX — Probe 2 skipped for this word
       probe3_q: 'What was the <b>bowl</b> placed near during training?',
       probe3_q_jp: 'トレーニングで<b>ボウル</b>はどの近くに置かれていましたか？',
       probe3_options: ['the flour container and ingredients', 'the heating pan', 'the serving plate', 'the empty counter'],
@@ -385,7 +430,9 @@
     },
   ];
 
-  // Recognition + confidence (TRIMMED from v7.4's 19 to 12 — 8 trained + 4 foils)
+  // Recognition + confidence (TRIMMED from v7.4's 19 to 12 — 8 trained + 4 foils).
+  // Note: This block was retired in v1.6 lean cut from the timeline but the
+  // const stays defined for reference / possible re-introduction.
   const RECOGNITION_ITEMS = [
     // Trained iconic (4)
     { word: 'crack',   trained: true,  iconic: true,  rating: 5.40, role: 'target_iconic' },
@@ -404,10 +451,9 @@
     { word: 'cup',     trained: false, iconic: false, rating: 3.83, role: 'foil_arbitrary' },
   ];
 
-  // Recipe steps — used by procedural recall (free typing) AND sequencing
-  // (drag-to-order). Note: sequencing IS pre-teaching exposure to recipe
-  // structure, but it runs AFTER all production tasks, so it doesn't
-  // contaminate primary DVs.
+  // Recipe steps — used by sequencing (drag-to-order). Note: sequencing IS
+  // pre-teaching exposure to recipe structure, but it runs AFTER all
+  // production tasks, so it doesn't contaminate primary DVs.
   const RECIPE_STEPS = [
     'Crack the eggs',
     'Mix the ingredients',
@@ -461,24 +507,22 @@
         optionalImages.add(`${m[1]}_02.${m[2]}`);
       }
     }
-    // SFX: enumerate every variant we might pick at trial time
-    for (const s of FOLEY_RECOGNITION) {
-      if (s.sfx_word === 'slice') {
-        allAudio.add('sounds/sfx_slice_1.mp3');
+
+    // SFX enumeration helper — adds every variant we might pick at trial time.
+    const addSfxVariants = (word) => {
+      if (SINGLE_TAKE_SFX.has(word)) {
+        allAudio.add(`sounds/sfx_${word}_1.mp3`);
       } else {
-        allAudio.add(`sounds/sfx_${s.sfx_word}_1.mp3`);
-        allAudio.add(`sounds/sfx_${s.sfx_word}_2.mp3`);
+        allAudio.add(`sounds/sfx_${word}_1.mp3`);
+        allAudio.add(`sounds/sfx_${word}_2.mp3`);
       }
-    }
-    for (const s of BINDING_PROBES) {
-      if (!s.probe2_sfx_word) continue;
-      if (s.probe2_sfx_word === 'slice') {
-        allAudio.add('sounds/sfx_slice_1.mp3');
-      } else {
-        allAudio.add(`sounds/sfx_${s.probe2_sfx_word}_1.mp3`);
-        allAudio.add(`sounds/sfx_${s.probe2_sfx_word}_2.mp3`);
-      }
-    }
+    };
+
+    for (const s of FOLEY_RECOGNITION) addSfxVariants(s.sfx_word);
+    // v8.3: SFX recognition stimuli (targets are also in FOLEY_RECOGNITION,
+    // but lures are unique to this block). Set semantics dedupe targets.
+    for (const s of SFX_RECOGNITION_STIMULI) addSfxVariants(s.word);
+
     allImages.add('img/park_scene.jpg');
 
     for (const url of allAudio) {
@@ -533,8 +577,6 @@
   }
 
   /* ======================== PARTICIPANT INFO (light) ======================== */
-  // Posttest is shorter than pretest on demographics — we already have them
-  // from pretest. Just confirm pid + condition.
   function createParticipantConfirm() {
     let captured = null;
     return {
@@ -664,17 +706,12 @@
   }
 
   /* ======================== PRODUCTION BLOCK (synced with pretest v8.0) ======================== */
-  // Same structure as pretest v8.0. Two-pass elicitation: phrase then
-  // isolated, both with 2 reps. Audio filenames use phase='post' prefix
-  // so analysts can pair pre/post by participant + word + pass.
   function buildProductionBlock(timelineItems, itemRole) {
     const hasMicPlugins = have('jsPsychInitializeMicrophone') && have('jsPsychHtmlAudioResponse');
     const canRecordAudio = () => hasMicPlugins && microphoneAvailable;
 
     const tl = [];
 
-    // Repetition counter for filenames. jsPsych's `repetitions: 2` does NOT
-    // auto-stamp a `repetition` field. Counter is keyed by (target_word, pass).
     const repCounter = {};
     const nextRep = (word, pass) => {
       const key = `${word}_${pass}`;
@@ -682,14 +719,6 @@
       return repCounter[key];
     };
 
-    // v8.1 PATCH: idempotent per-trial image cache (ported from pretest
-    // v8.0.1). The previous `let _trialImgState = {path:null,...}` +
-    // `on_start: resolveTrialImage()` pattern had a race — jsPsych can
-    // call stimulus() before on_start fires, so the first read returned
-    // null and rendered the placeholder image. The cache pattern keys on
-    // (trial-index, base) so first call within a trial resolves and
-    // stores; later calls in the same trial return the cached value.
-    // Safe to call from stimulus(), data(), preamble(), or anywhere else.
     const _imgCache = new Map();
     const resolveTrialImage = () => {
       const base = jsPsych.timelineVariable('image');
@@ -945,9 +974,9 @@
   }
 
   /* ======================== MULTI-PROBE BINDING TASK ======================== */
-  // Three probes per word in BINDING_PROBES. Each probe tests a different
-  // type of binding: object/event association, SFX recognition, spatial
-  // region. The location probe is the spatial-affordance signal.
+  // Two probes per word in BINDING_PROBES (v8.3): event association and
+  // adjacency. SFX recognition (formerly Probe 2) is now a standalone block,
+  // see buildSFXRecognition().
   function buildBindingTask() {
     const tl = [];
 
@@ -967,7 +996,7 @@
     });
 
     BINDING_PROBES.forEach(probe => {
-      // Probe 1: Object/event association (4-AFC)
+      // Probe 1: Event association (4-AFC)
       const opts1 = shuffle(probe.probe1_options.map((opt, i) => ({ text: opt, origIdx: i })));
       const correct1Idx = opts1.findIndex(o => o.origIdx === probe.probe1_correct);
       tl.push({
@@ -990,96 +1019,7 @@
         on_finish: d => { d.is_correct = (d.response === d.correct_answer); }
       });
 
-      // Probe 2: SFX recognition (Yes/No + confidence) — skip if no audio
-      if (probe.probe2_sfx_word) {
-        // Resolve the SFX file at TRIAL CONSTRUCTION time so the on_load
-        // closure and data field both reference the same variant. (Doing it
-        // inside the data callback would risk picking different variants
-        // for `audio` and `data.audio_file`.)
-        const sfx = sfxPath(probe.probe2_sfx_word);
-        tl.push({
-          type: T('jsPsychHtmlButtonResponse'),
-          stimulus: `<div style="text-align:center;">
-            <button class="jspsych-btn" id="binding-play" style="font-size:18px;">▶️ Play sound / 音を再生</button>
-            <p id="binding-status" style="margin-top:10px;color:#666;">Listen, then answer.</p>
-            <p style="margin-top:15px;font-size:18px;"><b>Did you hear this sound during training?</b></p>
-            <p style="color:#666;">トレーニング中にこの音を聞きましたか？</p>
-          </div>`,
-          choices: ['Yes / はい', 'No / いいえ'],
-          data: {
-            task: 'binding_probe2_sfx',
-            word: probe.word,
-            iconic: probe.iconic,
-            produced_in_training: probe.produced,
-            audio_file: sfx.path,
-            sfx_variant: sfx.variant,
-            correct_answer: 0,  // all SFX in BINDING_PROBES were heard during training
-            training_condition: assignedTrainingCondition,
-            phase: 'post'
-          },
-          on_load: function () {
-            const btn = document.getElementById('binding-play');
-            const status = document.getElementById('binding-status');
-            const audio = new Audio(audioSrc(sfx.path));
-            const answerBtns = [...document.querySelectorAll('.jspsych-html-button-response-button button')];
-            let unlocked = false;
-
-            // v8.1 PATCH: hard cap on playback so a long file doesn't lock
-            // the answer buttons forever. Force-stops audio and unlocks
-            // answers at MAX_SFX_PLAYBACK_MS regardless of `ended` event.
-            // Natural `ended` events still work as the fast path.
-            let stopTimer = null;
-
-            function lockAnswers(lock) { answerBtns.forEach(b => { b.disabled = lock; b.style.opacity = lock ? '0.5' : '1'; }); }
-            function unlock() { if (!unlocked) { unlocked = true; lockAnswers(false); status.textContent = 'Choose Yes or No. / はい/いいえを選択。'; } }
-            function clearStopTimer() { if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; } }
-            function forceStop() {
-              clearStopTimer();
-              try { audio.pause(); audio.currentTime = 0; } catch {}
-              unlock();
-              if (btn) {
-                btn.disabled = false;
-                btn.textContent = '🔁 Play Again / もう一度';
-              }
-            }
-
-            lockAnswers(true);
-            audio.addEventListener('ended', () => {
-              clearStopTimer();
-              unlock();
-              btn.textContent = '🔁 Play Again / もう一度';
-              btn.disabled = false;
-            });
-            audio.addEventListener('error', () => {
-              clearStopTimer();
-              status.textContent = 'Audio missing — answer anyway';
-              unlock();
-            }, { once: true });
-            btn.addEventListener('click', () => {
-              status.textContent = 'Playing… / 再生中…';
-              btn.disabled = true;
-              audio.currentTime = 0;
-              audio.play().catch(() => { status.textContent = 'Audio failed.'; unlock(); btn.disabled = false; });
-              clearStopTimer();
-              stopTimer = setTimeout(forceStop, MAX_SFX_PLAYBACK_MS);
-            });
-          },
-          on_finish: d => { d.is_correct = (d.response === d.correct_answer); }
-        });
-
-        // Confidence
-        tl.push({
-          type: T('jsPsychHtmlButtonResponse'),
-          stimulus: '<p>How confident are you? / どのくらい確信がありますか？</p>',
-          choices: ['1 (Guess)', '2', '3', '4 (Sure)'],
-          data: { task: 'binding_probe2_confidence', word: probe.word, phase: 'post' },
-          on_finish: d => { d.confidence = d.response !== null ? d.response + 1 : null; }
-        });
-      }
-
       // Probe 3: Adjacency 4-AFC — what was placed/used near the target?
-      // Works cross-condition because all three (VR/2D/Text) encode some
-      // form of adjacency, even if the encoding mode differs.
       const opts3 = shuffle(probe.probe3_options.map((opt, i) => ({ text: opt, origIdx: i })));
       const correct3Idx = opts3.findIndex(o => o.origIdx === probe.probe3_correct);
       tl.push({
@@ -1108,64 +1048,7 @@
   }
 
   /* ======================== PROBE 4: 3×3 GRID ARRANGEMENT ======================== */
-  // Coarse-grained spatial reconstruction. Participants see 5 trained
-  // items as draggable tokens and a 3×3 grid; they drag each item into
-  // the cell where they remember it being during training.
-  //
-  // Coarse 3×3 (not pixel-precise) so encoding mode differences across
-  // conditions don't unfairly penalize Text participants whose encoding
-  // is containment-based rather than Euclidean. All three conditions
-  // can plausibly recover "the bowl was on the left side, the pan was
-  // in the middle".
-  //
-  // Ground truth grid layout - PER CONDITION. Each training condition has
-  // a slightly different on-screen / in-world arrangement, so we score each
-  // participant against the layout they actually saw during training. The
-  // 3x3 grid is intentionally coarse so we don't penalize Text encoders
-  // (containment-based) relative to 2D/VR (Euclidean).
-  //
-  // ----- TEXT condition ----------------------------------------------------
-  //   Two rows: ingredient/utensil labels on top, container labels below.
-  //   [Flour][Sugar][Egg][Milk][Knife][Butter][Spoon][Spatula]
-  //              [Bowl]      [Pan]      [Plate]
-  //   3x3 projection of the 5 posttest items:
-  //     [flour]  [.....]  [butter]
-  //     [.....]  [.....]  [.....]
-  //     [bowl]   [pan]    [plate]
-  //
-  // ----- 2D condition ------------------------------------------------------
-  //   Three vertical bands. Ingredients top, containers middle, knife/butter
-  //   below the containers. (See actual scene screenshot.)
-  //     [Flour][Sugar][Egg][Milk]            [Spoon][Spatula]
-  //          [Bowl]        [Pan]        [Plate]
-  //                      [Knife][Butter]
-  //   3x3 projection:
-  //     [flour]  [.....]   [.....]
-  //     [bowl]   [pan]     [plate]
-  //     [.....]  [butter]  [.....]
-  //
-  // ----- VR condition ------------------------------------------------------
-  //   Two depth bands (back shelf + front counter), 8-item front row.
-  //     Back shelf, L->R:    Flour, Sugar, Milk
-  //     Front counter, L->R: Butter, ButterKnife, Egg, Bowl, Plate,
-  //                          Spoon, Spatula, Pan
-  //   3x3 projection:
-  //     [flour]   [.....]  [.....]
-  //     [.....]   [plate]  [.....]
-  //     [butter]  [bowl]   [pan]
-  //   Plate (item 5 of 8) genuinely sits *between* bowl (item 4) and pan
-  //   (item 8) on the front counter, but a 3x3 grid only has 3 columns
-  //   for 4 front-row items. Plate is elevated to row 1 directly above
-  //   bowl because plate is much closer to bowl (1 step away) than to
-  //   pan (3 steps away) in the linear sequence. So "plate above bowl"
-  //   represents "plate is bowl's right-hand neighbor" better than
-  //   "plate above pan" would. A VR participant who places plate at
-  //   (2, 2) is also showing accurate memory of the scene at coarser
-  //   resolution — the secondary row/col-match scores will pick that up.
-  //
-  // Score: exact-cell match for primary; row-match-only and column-match-
-  // only as secondary (more lenient). Kendall tau on row-ordering and
-  // col-ordering as a third measure of partial spatial knowledge.
+  // (Per-condition ground truth, see v8.2 patch notes for full rationale.)
   const ARRANGEMENT_GROUND_TRUTH_BY_CONDITION = {
     Text: {
       flour:  { row: 0, col: 0 },
@@ -1182,10 +1065,6 @@
       butter: { row: 2, col: 1 },
     },
     VR: {
-      // Back shelf (row 0) + front counter (row 2). Plate is elevated to
-      // row 1 above bowl because plate sits between bowl and pan in 3D
-      // and is closer to bowl in the linear sequence. See block comment
-      // above for full rationale.
       flour:  { row: 0, col: 0 },  // back shelf, leftmost of 3 ingredients
       butter: { row: 2, col: 0 },  // front counter, item 1 of 8
       bowl:   { row: 2, col: 1 },  // front counter, item 4 of 8
@@ -1199,8 +1078,6 @@
   };
   const ARRANGEMENT_ITEM_ORDER = ['flour', 'butter', 'bowl', 'pan', 'plate'];
 
-  // Resolve per-condition ground truth at trial time (assignedTrainingCondition
-  // is captured from the participant info form, which runs before this task).
   function getArrangementItems() {
     const truth = ARRANGEMENT_GROUND_TRUTH_BY_CONDITION[assignedTrainingCondition]
                || ARRANGEMENT_GROUND_TRUTH_BY_CONDITION['2D']; // fallback for 'unknown'
@@ -1271,7 +1148,6 @@
         });
 
         function updateState() {
-          // Re-derive placedState from DOM
           placedState = {};
           cells.forEach(c => {
             const tok = c.querySelector('.arr-token');
@@ -1298,7 +1174,6 @@
             e.preventDefault();
             c.style.background = 'white';
             if (!dragged) return;
-            // Allow swapping: if cell already has a token, send it back to tray
             const existing = c.querySelector('.arr-token');
             if (existing && existing !== dragged) {
               tray.appendChild(existing);
@@ -1310,7 +1185,6 @@
           });
         });
 
-        // Allow dropping back to tray to reset a placement
         tray.addEventListener('dragover', e => { e.preventDefault(); });
         tray.addEventListener('drop', e => {
           e.preventDefault();
@@ -1338,7 +1212,138 @@
     }];
   }
 
-  /* ======================== FOLEY RECOGNITION (5 trained sounds) ======================== */
+  /* ======================== SFX RECOGNITION (v8.3 — d-prime) ======================== */
+  // Y/N + confidence on randomized targets and lures. Yields hits and false
+  // alarms per participant; analysis script computes d-prime per condition.
+  // See SFX_RECOGNITION_STIMULI block comment for stimulus rationale.
+  //
+  // Trial structure mirrors the old Probe 2 in buildBindingTask: a play-
+  // sound button locks the Yes/No answer buttons until either `ended` fires
+  // or MAX_SFX_PLAYBACK_MS expires (force-stop fallback).
+  function buildSFXRecognition() {
+    const tl = [];
+
+    tl.push({
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `<div style="max-width:680px;margin:0 auto;line-height:1.6">
+        <h2 style="text-align:center;">Sound Memory / 音の記憶</h2>
+        <p>You will hear several sounds, one at a time. For each one, decide whether you heard it during training.</p>
+        <p>いくつかの音を一つずつ聞きます。それぞれについて、トレーニング中に聞いたかどうか答えてください。</p>
+        <p style="color:#666;">Some sounds were in the training. Some were not. Choose Yes or No.</p>
+        <p style="color:#666;">トレーニングで使われた音と、使われていない音が混ざっています。「はい」か「いいえ」を選んでください。</p>
+      </div>`,
+      choices: ['Begin / 開始'],
+      data: { task: 'sfx_recognition_intro', phase: 'post' }
+    });
+
+    shuffle(SFX_RECOGNITION_STIMULI).forEach((stim, idx) => {
+      // Resolve SFX file at trial-construction time so the on_load closure
+      // and data field reference the same variant. (Same pattern as foley.)
+      const sfx = sfxPath(stim.word);
+
+      // Y/N recognition trial
+      tl.push({
+        type: T('jsPsychHtmlButtonResponse'),
+        stimulus: `<div style="text-align:center;">
+          <button class="jspsych-btn" id="sfxrec-play-${idx}" style="font-size:18px;">▶️ Play sound / 音を再生</button>
+          <p id="sfxrec-status-${idx}" style="margin-top:10px;color:#666;">Listen, then answer.</p>
+          <p style="margin-top:15px;font-size:18px;"><b>Did you hear this sound during training?</b></p>
+          <p style="color:#666;">トレーニング中にこの音を聞きましたか？</p>
+        </div>`,
+        choices: ['Yes / はい', 'No / いいえ'],
+        data: {
+          task: 'sfx_recognition',
+          word: stim.word,
+          trained: stim.trained,
+          iconic: stim.iconic,
+          iconicity_marginal: stim.iconicity_marginal,
+          produced_in_training: stim.produced_in_training,
+          audio_file: sfx.path,
+          sfx_variant: sfx.variant,
+          // 0 = Yes (correct for targets), 1 = No (correct for lures)
+          correct_answer: stim.trained ? 0 : 1,
+          is_lure: !stim.trained,
+          training_condition: assignedTrainingCondition,
+          phase: 'post'
+        },
+        on_load: function () {
+          const btn = document.getElementById(`sfxrec-play-${idx}`);
+          const status = document.getElementById(`sfxrec-status-${idx}`);
+          const audio = new Audio(audioSrc(sfx.path));
+          window.__sfxrec_audio = audio;
+          const answerBtns = [...document.querySelectorAll('.jspsych-html-button-response-button button')];
+          let unlocked = false;
+          let stopTimer = null;
+
+          function lockAnswers(lock) { answerBtns.forEach(b => { b.disabled = lock; b.style.opacity = lock ? '0.5' : '1'; }); }
+          function unlock() { if (!unlocked) { unlocked = true; lockAnswers(false); status.textContent = 'Choose Yes or No. / はい/いいえを選択。'; } }
+          function clearStopTimer() { if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; } }
+          function forceStop() {
+            clearStopTimer();
+            try { audio.pause(); audio.currentTime = 0; } catch {}
+            unlock();
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = '🔁 Play Again / もう一度';
+            }
+          }
+
+          lockAnswers(true);
+          audio.addEventListener('ended', () => {
+            clearStopTimer();
+            unlock();
+            btn.textContent = '🔁 Play Again / もう一度';
+            btn.disabled = false;
+          });
+          audio.addEventListener('error', () => {
+            clearStopTimer();
+            status.textContent = 'Audio missing — answer anyway';
+            unlock();
+          }, { once: true });
+          btn.addEventListener('click', () => {
+            status.textContent = 'Playing… / 再生中…';
+            btn.disabled = true;
+            audio.currentTime = 0;
+            audio.play().catch(() => { status.textContent = 'Audio failed.'; unlock(); btn.disabled = false; });
+            clearStopTimer();
+            stopTimer = setTimeout(forceStop, MAX_SFX_PLAYBACK_MS);
+          });
+        },
+        on_finish: d => {
+          const a = window.__sfxrec_audio;
+          if (a) { try { a.pause(); a.src = ''; } catch {} window.__sfxrec_audio = null; }
+          d.is_correct = (d.response === d.correct_answer);
+          // Stamp signal-detection category for easier downstream analysis.
+          // hit = target + said-yes, miss = target + said-no,
+          // fa = lure + said-yes, cr = lure + said-no.
+          if (d.trained && d.response === 0) d.sdt_outcome = 'hit';
+          else if (d.trained && d.response === 1) d.sdt_outcome = 'miss';
+          else if (!d.trained && d.response === 0) d.sdt_outcome = 'false_alarm';
+          else if (!d.trained && d.response === 1) d.sdt_outcome = 'correct_rejection';
+          else d.sdt_outcome = 'unknown';
+        }
+      });
+
+      // Confidence rating
+      tl.push({
+        type: T('jsPsychHtmlButtonResponse'),
+        stimulus: '<p>How confident are you? / どのくらい確信がありますか？</p>',
+        choices: ['1 (Guess)', '2', '3', '4 (Sure)'],
+        data: {
+          task: 'sfx_recognition_confidence',
+          word: stim.word,
+          trained: stim.trained,
+          is_lure: !stim.trained,
+          phase: 'post'
+        },
+        on_finish: d => { d.confidence = d.response !== null ? d.response + 1 : null; }
+      });
+    });
+
+    return tl;
+  }
+
+  /* ======================== FOLEY RECOGNITION (5 trained sounds, 4-AFC) ======================== */
   function buildFoleyRecognition() {
     const tl = [];
     tl.push({
@@ -1350,8 +1355,6 @@
     shuffle(FOLEY_RECOGNITION).forEach((stim, idx) => {
       const opts = shuffle(stim.options.map((o, i) => ({ text: o, origIdx: i })));
       const correctIdx = opts.findIndex(o => o.origIdx === stim.correct);
-      // Resolve the SFX file (and variant) at trial-construction time so
-      // the on_load closure and data field reference the same variant.
       const sfx = sfxPath(stim.sfx_word);
 
       tl.push({
@@ -1382,8 +1385,6 @@
           window.__foley_audio = audio;
           const answerBtns = [...document.querySelectorAll('.jspsych-html-button-response-button button')];
           let unlocked = false;
-
-          // v8.1 PATCH: same hard-cap pattern as binding probe 2.
           let stopTimer = null;
 
           function lockAnswers(lock) { answerBtns.forEach(b => { b.disabled = lock; b.style.opacity = lock ? '0.5' : '1'; }); }
@@ -1429,26 +1430,6 @@
     });
 
     return tl;
-  }
-
-  /* ======================== PROCEDURAL RECALL ======================== */
-  function buildProceduralRecall() {
-    return [{
-      type: T('jsPsychSurveyText'),
-      preamble: `<h3>Recipe Recall / レシピの想起</h3>
-        <p>Explain the pancake-making steps you learned from the training.</p>
-        <p>トレーニングで学んだパンケーキ作りの手順を説明してください。</p>
-        <p style="color:#888;">Write one step per line, in order. / 1行に1つのステップを、順番に書いてください。</p>`,
-      questions: RECIPE_STEPS.map((_, i) => ({
-        prompt: `Step ${i + 1} / ステップ ${i + 1}:`,
-        name: `step_${i + 1}`,
-        rows: 2,
-        required: i < RECIPE_STEPS.length - 1
-      })),
-      button_label: 'Submit / 送信',
-      data: { task: 'procedural_recall', phase: 'post', training_condition: assignedTrainingCondition },
-      on_finish: d => { d.steps = Object.values(asObject(d.response)); }
-    }];
   }
 
   /* ======================== SEQUENCING ======================== */
@@ -1571,50 +1552,6 @@
     return tl;
   }
 
-  /* ======================== RECOGNITION + CONFIDENCE (12 items) ======================== */
-  function buildRecognition() {
-    const intro = {
-      type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `<h2>Recognition Test / 認識テスト</h2><p>Did this word appear in the training?</p><p>この単語はトレーニングに出てきましたか？</p>`,
-      choices: ['Begin / 開始'],
-      data: { task: 'recognition_intro', phase: 'post' }
-    };
-
-    const trials = shuffle(RECOGNITION_ITEMS).flatMap(item => [
-      {
-        type: T('jsPsychHtmlButtonResponse'),
-        stimulus: `<div style="text-align:center;">
-          <div style="padding:28px;background:#f8f9fa;border-radius:12px;border:1px solid #ddd;"><h2 style="margin:0;">${item.word}</h2></div>
-          <p style="margin-top:18px;">Did you encounter this word in the training?<br>トレーニングでこの単語に出会いましたか？</p></div>`,
-        choices: ['YES', 'NO'],
-        data: {
-          task: 'recognition_test',
-          word: item.word,
-          trained: item.trained,
-          iconic: item.iconic,
-          iconicity_rating: item.rating,
-          item_role: item.role,
-          training_condition: assignedTrainingCondition,
-          phase: 'post'
-        },
-        on_finish: d => {
-          const yes = (d.response === 0);
-          d.response_label = yes ? 'yes' : 'no';
-          d.correct = (yes === d.trained);
-        }
-      },
-      {
-        type: T('jsPsychHtmlButtonResponse'),
-        stimulus: '<p>How confident are you? / どのくらい確信がありますか？</p>',
-        choices: ['1 (Guess)', '2', '3', '4 (Sure)'],
-        data: { task: 'recognition_confidence', word: item.word, phase: 'post' },
-        on_finish: d => { d.confidence = d.response !== null ? d.response + 1 : null; }
-      }
-    ]);
-
-    return [intro, ...trials];
-  }
-
   /* ======================== LIKERT ======================== */
   function buildLikert() {
     return {
@@ -1688,7 +1625,6 @@
     currentPID = pid || 'unknown';
     testCondition = delayed ? 'delayed' : 'immediate';
 
-    // URL ?cond=VR/2D/Text overrides; otherwise asked in confirm screen
     if (q.cond && ['VR', '2D', 'Text'].includes(q.cond)) {
       assignedTrainingCondition = q.cond;
     }
@@ -1735,11 +1671,7 @@
       conditional_function: () => (MISSING_ASSETS.images.length + MISSING_ASSETS.audio.length) > 0
     });
 
-    // Welcome + participant confirm. v8.0 (post-pilot patch): explicit
-    // framing about repeated tasks. Participants reported feeling like the
-    // posttest was "the same as pretest" because the production task IS
-    // intentionally repeated for change-score measurement. Telling them
-    // that up front + flagging what's new reduces fatigue effects.
+    // Welcome + participant confirm
     tl.push({
       type: T('jsPsychHtmlButtonResponse'),
       stimulus: `<div style="text-align:left;max-width:680px;margin:0 auto;line-height:1.6">
@@ -1763,14 +1695,7 @@
 
     tl.push(createParticipantConfirm());
 
-    // Mic gate + plugin init. Pattern: gate establishes a working stream
-    // and sets microphoneAvailable; plugin runs only if gate succeeded
-    // (i.e. microphoneAvailable is true). The plugin then keeps the stream
-    // hot for jsPsychHtmlAudioResponse trials. Previously had the
-    // conditional flipped (plugin only ran if mic was available, but
-    // setting mic_available depended on plugin running) and an on_finish
-    // that read d.mic_allowed which the plugin doesn't set — both bugs
-    // caused mic to silently fail in posttest.
+    // Mic gate + plugin init
     tl.push(buildMicSetupGate());
     if (have('jsPsychInitializeMicrophone')) {
       tl.push({
@@ -1787,32 +1712,28 @@
     tl.push(...buildProductionBlock(PRODUCTION_CONTROLS, 'control'));
     tl.push(...buildProductionBlock(PRODUCTION_TARGETS, 'target'));
 
-    // TERTIARY DV: multi-probe binding (sizzle + comparators)
+    // TERTIARY DV: multi-probe binding (event association + adjacency).
+    // Probe 2 (SFX recognition) moved to standalone block below in v8.3.
     tl.push(...buildBindingTask());
 
     // Spatial reconstruction: 3×3 grid arrangement (5 items)
     tl.push(...buildArrangementTask());
 
-    // Foley recognition
+    // SFX recognition with lures (v8.3) — d-prime measure of SFX encoding
+    // sensitivity. Runs BEFORE foley 4-AFC because foley re-exposes the
+    // participant to every target SFX, contaminating recognition memory.
+    tl.push(...buildSFXRecognition());
+
+    // Foley recognition (4-AFC identification)
     tl.push(...buildFoleyRecognition());
 
-    // Sequencing (drag-to-order recipe steps). Procedural recall (free
-    // typing) was cut as redundant with sequencing — both measure recipe-
-    // structure recall, but sequencing is cleaner data (no typos, romaji,
-    // partial sentences) and faster to score.
+    // Sequencing (drag-to-order recipe steps)
     tl.push(...buildSequencing());
 
-    // Spontaneous-production task — teach-a-friend frame elicits more
-    // vocabulary and SFX-mimicry from L2 learners than neutral retell.
-    // Has a parallel pretest baseline for pre→post change-score analysis
-    // on lexical density, iconic-word use, and SFX-mimicry rate.
+    // Spontaneous-production task
     tl.push(...buildTeachSomeone());
 
-    // Likert + Exit. v1.6 (post-pilot lean cut): 12-item recognition test
-    // dropped. It was at the very end when participants are exhausted,
-    // correlated highly with production accuracy (limited new variance),
-    // and Yes/No confidence ratings on word recognition produce noisy
-    // data. Function definition retained for v8.1 if needed.
+    // Likert + Exit
     tl.push(buildLikert());
     tl.push(buildExit());
 
@@ -1825,9 +1746,6 @@
         <p>Your data is being saved. / データを保存しています。</p>`,
       choices: ['Save & Finish / 保存して終了'],
       data: { task: 'session_end' }
-      // saveData() is invoked by jsPsych's experiment-level on_finish
-      // configured in __START_POSTTEST. Calling it here too produces
-      // duplicate JSON output.
     });
 
     return tl;
