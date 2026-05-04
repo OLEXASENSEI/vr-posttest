@@ -1,4 +1,47 @@
-// posttest.js — VR Post-Test Battery (v8.3 — patches over v8.2)
+// posttest.js — VR Post-Test Battery (v8.4 — patches over v8.3)
+//
+// ============================================================================
+// v8.4 PATCH NOTES (over v8.3)
+// ============================================================================
+//
+// 1. Probe 3 reframed from spatial adjacency to procedural pairing. The
+//    previous Probe 3 ("What was placed/used next to X?") had condition-
+//    dependent ground truth — the "correct" neighbor depended on which
+//    training scene's layout the answer key was written for. Auditing the
+//    three layouts against the existing ground truth revealed:
+//      - bowl's neighbors differ across Text/2D/VR (pan is adjacent in
+//        2D, but the answer key said flour)
+//      - pan's neighbors are bowl in VR but bowl/plate ambiguous in 2D
+//        and Text (plate equally adjacent)
+//      - flour adjacency to bowl only holds in 2D
+//    Scoring all three conditions against a single layout systematically
+//    biased Text and VR participants downward on bowl- and crack-related
+//    probes — confounding the very condition variable Probe 3 was meant
+//    to measure.
+//
+//    Replaced with procedural-pairing 4-AFC: questions ask which item
+//    was used together with the target in the same recipe step, not
+//    which item was spatially next to it. Procedure is invariant across
+//    conditions (you crack eggs into the bowl regardless of where the
+//    bowl sits on screen), so a single answer key applies fairly to all
+//    three. New questions:
+//      - sizzle: "Which item was the butter touching?" → pan
+//      - crack:  "Which item caught the egg?" → bowl
+//      - bowl:   "Which tool was used to mix the ingredients?" → spoon
+//
+//    Spatial-encoding DV moves entirely to the 3×3 grid arrangement task
+//    (Probe 4), which already has per-condition ground truth as of v8.2.
+//    Probe 3 becomes a procedural-binding measure: did the participant
+//    encode which items co-occurred in the same step? Predicted condition
+//    effect is now smaller and less directional — VR/2D/Text all support
+//    procedural pairing — but the measure is interpretable rather than
+//    confounded.
+//
+//    Trial data field renamed from `binding_probe3_adjacency` to
+//    `binding_probe3_pairing` so analysts can distinguish pre-v8.4 and
+//    post-v8.4 records in any mixed batch. The probe3_correct field stays
+//    at 0 in BINDING_PROBES (correct answer always first option, shuffled
+//    at trial time as before).
 //
 // ============================================================================
 // v8.3 PATCH NOTES (over v8.2)
@@ -359,13 +402,16 @@
   // case) but tests two comparators (one produced-iconic, one conventional)
   // to anchor the measurement.
   //
-  // PROBE DESIGN (v8.3):
+  // PROBE DESIGN (v8.4):
   //   Probe 1 (Event association, 4-AFC): "When you said/heard X, what
   //     was happening?" — Distractors are plausible scenes from the SAME
   //     training that overlap with the target item's context.
-  //   Probe 3 (Adjacency, 4-AFC): "What item was placed/used next to X
-  //     during training?" — Tests spatial-relational binding, works for
-  //     all three conditions.
+  //   Probe 3 (Procedural pairing, 4-AFC): "Which item was [used with /
+  //     touching / catching] X in the same step?" — Tests whether the
+  //     participant encoded which items co-occurred procedurally during
+  //     training. Procedure is invariant across conditions (the recipe
+  //     doesn't change between VR/2D/Text), so a single answer key is
+  //     fair to all three.
   //
   // PROBE 2 REMOVED in v8.3. Previously per-word ("Did you hear this sound
   // during training?", correct answer always Yes) — could not separate hit
@@ -373,9 +419,13 @@
   // block with proper target/lure mix and d-prime as the sensitivity
   // measure.
   //
-  // The 3×3 grid arrangement task (separate function below) is a coarse-
-  // grained spatial reconstruction task that all three conditions can
-  // plausibly answer.
+  // PROBE 3 REFRAMED in v8.4. Previously spatial-adjacency ("What was
+  // placed near X?") with a single answer key — this was condition-
+  // dependent because the training layouts differ across VR/2D/Text. Now
+  // procedural-pairing, which is condition-invariant.
+  //
+  // The 3×3 grid arrangement task (separate function below) carries the
+  // spatial-encoding DV with per-condition ground truth (v8.2).
   const BINDING_PROBES = [
     {
       word: 'sizzle',
@@ -389,9 +439,9 @@
         'flour falling into the bowl from above' // distractor: also kitchen sound event
       ],
       probe1_correct: 0,
-      probe3_q: 'What was the <b>pan</b> placed near during training?',
-      probe3_q_jp: 'トレーニングで<b>フライパン</b>はどの近くに置かれていましたか？',
-      probe3_options: ['the bowl with ingredients', 'the plate', 'the spoon and spatula', 'the flour container'],
+      probe3_q: 'When you heard <b>sizzling</b>, which item was the <b>butter</b> touching?',
+      probe3_q_jp: '<b>sizzling</b> という音を聞いたとき、<b>バター</b>はどれに触れていましたか？',
+      probe3_options: ['the pan', 'the bowl', 'the plate', 'the spoon'],
       probe3_correct: 0,
     },
     {
@@ -406,9 +456,9 @@
         'milk pouring out of a carton'            // distractor: also liquid-into-bowl
       ],
       probe1_correct: 0,
-      probe3_q: 'What was <b>next to the bowl</b> when you cracked the egg?',
-      probe3_q_jp: '卵を割ったとき、<b>ボウルの隣</b>にあったものは？',
-      probe3_options: ['the flour container', 'the milk carton', 'the spoon for stirring', 'the empty pan'],
+      probe3_q: 'When you <b>cracked</b> the egg, which item <b>caught</b> it?',
+      probe3_q_jp: '卵を<b>割った</b>とき、それを<b>受けていた</b>のはどれですか？',
+      probe3_options: ['the bowl', 'the pan', 'the plate', 'the spoon'],
       probe3_correct: 0,
     },
     {
@@ -423,9 +473,9 @@
         'finished pancake being served'              // distractor: plate activity
       ],
       probe1_correct: 0,
-      probe3_q: 'What was the <b>bowl</b> placed near during training?',
-      probe3_q_jp: 'トレーニングで<b>ボウル</b>はどの近くに置かれていましたか？',
-      probe3_options: ['the flour container and ingredients', 'the heating pan', 'the serving plate', 'the empty counter'],
+      probe3_q: 'Which <b>tool</b> was used to <b>mix</b> the ingredients in the bowl?',
+      probe3_q_jp: 'ボウルの中の材料を<b>混ぜる</b>のに使った<b>道具</b>はどれですか？',
+      probe3_options: ['the spoon', 'the knife', 'the spatula', 'the fork'],
       probe3_correct: 0,
     },
   ];
@@ -1019,7 +1069,9 @@
         on_finish: d => { d.is_correct = (d.response === d.correct_answer); }
       });
 
-      // Probe 3: Adjacency 4-AFC — what was placed/used near the target?
+      // Probe 3: Procedural pairing 4-AFC — what was used together with target
+      // in the same recipe step? (See BINDING_PROBES comment block for v8.4
+      // rationale.)
       const opts3 = shuffle(probe.probe3_options.map((opt, i) => ({ text: opt, origIdx: i })));
       const correct3Idx = opts3.findIndex(o => o.origIdx === probe.probe3_correct);
       tl.push({
@@ -1031,7 +1083,7 @@
         </div>`,
         choices: opts3.map(o => o.text),
         data: {
-          task: 'binding_probe3_adjacency',
+          task: 'binding_probe3_pairing',
           word: probe.word,
           iconic: probe.iconic,
           produced_in_training: probe.produced,
