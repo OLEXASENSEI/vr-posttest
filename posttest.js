@@ -13,7 +13,7 @@
 //    getArrangementItems() therefore always fell back to the '2D' default
 //    regardless of actual training condition.
 //
-//    Confirmed by pid 44 (VR participant): the arrangement trial's
+//    the arrangement trial's
 //    ground_truth field in the JSON matched the 2D spec exactly, not VR.
 //    The 2D fallback is 0/5 exact-match for a VR participant by definition.
 //
@@ -537,6 +537,123 @@
   }
 
   /* ======================== BINDING TASK (Probe 1 only, v8.6) ======================== */
+  /* ======================== RECEPTIVE 4AFC ========================
+   * Picture → Word forced-choice on all 12 items (8 targets + 4 controls).
+   * Inserted AFTER production so naming responses are not influenced.
+   *
+   * Four-option structure per trial:
+   *   correct           — the trained target word
+   *   iconic_pseudo     — phonologically close pseudoword; sounds iconic
+   *   trained_foil      — different trained/control word; plausible co-occurrence
+   *   conventional_syn  — real English synonym; low iconicity; tests concept-without-form
+   *
+   * on_finish derives foil_type_selected so choice pattern is directly analysable.
+   * iconicity_class logged as string ('iconic'/'conventional') for OSF-consistent naming.
+   * ================================================================ */
+
+  const RECEPTIVE_4AFC_ITEMS = [
+    // ── ICONIC TARGETS ──────────────────────────────────────────────
+    { word: 'crack',  image: 'img/cracking.jpeg', iconic: true,  iconicity_marginal: false, rating: 5.40, item_role: 'target',
+      iconic_pseudo: 'blatch',  trained_foil: 'butter',  conventional_syn: 'break'   },
+    { word: 'flip',   image: 'img/flipping.jpg',  iconic: true,  iconicity_marginal: false, rating: 5.70, item_role: 'target',
+      iconic_pseudo: 'thrip',   trained_foil: 'pan',     conventional_syn: 'turn'    },
+    { word: 'slice',  image: 'img/slicing.jpg',   iconic: true,  iconicity_marginal: false, rating: 5.27, item_role: 'target',
+      iconic_pseudo: 'flice',   trained_foil: 'bowl',    conventional_syn: 'cut'     },
+    { word: 'stir',   image: 'img/stirring.jpg',  iconic: true,  iconicity_marginal: true,  rating: 4.30, item_role: 'target',
+      iconic_pseudo: 'swirp',   trained_foil: 'flour',   conventional_syn: 'combine' },
+    // ── CONVENTIONAL TARGETS ─────────────────────────────────────────
+    { word: 'bowl',   image: 'img/bowl.jpg',      iconic: false, iconicity_marginal: false, rating: 3.00, item_role: 'target',
+      iconic_pseudo: 'broll',   trained_foil: 'crack',   conventional_syn: 'dish'    },
+    { word: 'pan',    image: 'img/pan.jpg',        iconic: false, iconicity_marginal: false, rating: 3.45, item_role: 'target',
+      iconic_pseudo: 'glan',    trained_foil: 'flip',    conventional_syn: 'pot'     },
+    { word: 'flour',  image: 'img/flour.jpg',      iconic: false, iconicity_marginal: false, rating: 3.00, item_role: 'target',
+      iconic_pseudo: 'blour',   trained_foil: 'stir',    conventional_syn: 'powder'  },
+    { word: 'butter', image: 'img/butter.jpg',     iconic: false, iconicity_marginal: false, rating: 3.50, item_role: 'target',
+      iconic_pseudo: 'snutter', trained_foil: 'slice',   conventional_syn: 'spread'  },
+    // ── CONTROLS (untrained) ─────────────────────────────────────────
+    { word: 'chop',   image: 'img/chopping.jpg',  iconic: true,  iconicity_marginal: false, rating: 5.50, item_role: 'control',
+      iconic_pseudo: 'throp',   trained_foil: 'pan',     conventional_syn: 'mince'   },
+    { word: 'peel',   image: 'img/peeling.jpg',   iconic: true,  iconicity_marginal: false, rating: 5.60, item_role: 'control',
+      iconic_pseudo: 'freel',   trained_foil: 'flour',   conventional_syn: 'strip'   },
+    { word: 'spoon',  image: 'img/spoon.jpg',      iconic: false, iconicity_marginal: false, rating: 4.30, item_role: 'control',
+      iconic_pseudo: 'sploon',  trained_foil: 'bowl',    conventional_syn: 'scoop'   },
+    { word: 'plate',  image: 'img/plate.jpg',      iconic: false, iconicity_marginal: false, rating: 4.08, item_role: 'control',
+      iconic_pseudo: 'flate',   trained_foil: 'flip',    conventional_syn: 'tray'    },
+  ];
+
+  function buildReceptive4AFC() {
+    const tl = [];
+
+    tl.push({
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: `
+        <div style="max-width:660px;margin:0 auto;line-height:1.6">
+          <h2 style="text-align:center;">Word Recognition / 単語認識</h2>
+          <p>You will see a picture. Choose the English word that matches it.</p>
+          <p style="color:#444;">写真を見て、合う英単語を選んでください。</p>
+          <p style="color:#888;font-size:14px;">Some words may look unfamiliar — choose your best answer.
+          <br>見慣れない単語があっても、最もよいと思う答えを選んでください。</p>
+        </div>`,
+      choices: ['Begin / 開始'],
+      data: { task: 'receptive_4afc_intro', phase: 'post' }
+    });
+
+    const trial = {
+      type: T('jsPsychHtmlButtonResponse'),
+      stimulus: () => {
+        const item = jsPsych.timelineVariable('item');
+        return `
+          <div style="text-align:center;max-width:520px;margin:0 auto;">
+            <img src="${imgSrc(item.image)}" ${IMG_ONERROR}
+                 style="width:280px;height:210px;object-fit:cover;border-radius:10px;
+                        border:2px solid #ddd;margin-bottom:20px;" />
+            <p style="color:#666;font-size:14px;margin-bottom:6px;">
+              Which word matches this picture? / この写真に合う単語はどれですか？
+            </p>
+          </div>`;
+      },
+      choices: () => {
+        const item = jsPsych.timelineVariable('item');
+        const options = [
+          { label: item.word,            type: 'correct'          },
+          { label: item.iconic_pseudo,   type: 'iconic_pseudo'    },
+          { label: item.trained_foil,    type: 'trained_foil'     },
+          { label: item.conventional_syn, type: 'conventional_syn' },
+        ];
+        // Shuffle and store order for on_finish
+        const shuffled = options.sort(() => Math.random() - 0.5);
+        window.__4afc_order = shuffled;
+        return shuffled.map(o => o.label);
+      },
+      button_html: '<button class="jspsych-btn" style="min-width:110px;font-size:16px;margin:6px;">%choice%</button>',
+      on_finish: (d) => {
+        const item    = jsPsych.timelineVariable('item');
+        const order   = window.__4afc_order || [];
+        const chosen  = order[d.response] || {};
+        d.target_word         = item.word;
+        d.iconicity_class     = item.iconic ? 'iconic' : 'conventional';
+        d.iconic              = item.iconic;
+        d.iconicity_marginal  = item.iconicity_marginal;
+        d.iconicity_rating    = item.rating;
+        d.item_role           = item.item_role;
+        d.correct_answer      = item.word;
+        d.response_text       = chosen.label || null;
+        d.foil_type_selected  = chosen.type  || null;
+        d.correct             = chosen.type === 'correct';
+        d.options_order       = order.map(o => o.label);
+        d.training_condition  = assignedTrainingCondition;
+        d.phase               = 'post';
+        window.__4afc_order   = null;
+      },
+      data: { task: 'receptive_4afc' }
+    };
+
+    const tvars = RECEPTIVE_4AFC_ITEMS.map(item => ({ item }));
+    tl.push({ timeline: [trial], timeline_variables: tvars, randomize_order: true });
+
+    return tl;
+  }
+
   function buildBindingTask() {
     const tl = [];
     tl.push({ type: T('jsPsychHtmlButtonResponse'), stimulus: `<div style="max-width:600px;margin:0 auto;line-height:1.6"><h2 style="text-align:center;">Part 2: New Tasks / 第2部：新しい課題</h2><p style="color:#666;text-align:center;">The naming block is complete. The next sections are different. / 写真の命名は完了しました。</p><hr style="margin:18px 0;"><h3>Memory Probes / 記憶のテスト</h3><p>For each word, answer a short question about your training experience. / 各単語について、トレーニングについての質問に答えてください。</p></div>`, choices: ['Begin / 開始'], data: { task: 'binding_intro', phase: 'post' } });
@@ -870,6 +987,7 @@
     tl.push(...buildProductionPractice());
     tl.push(...buildProductionBlock(PRODUCTION_CONTROLS, 'control'));
     tl.push(...buildProductionBlock(PRODUCTION_TARGETS, 'target'));
+    tl.push(...buildReceptive4AFC());
     tl.push(...buildBindingTask());
     tl.push(...buildArrangementTask());
     // SFX recognition BEFORE foley — foley re-exposes every target SFX,
