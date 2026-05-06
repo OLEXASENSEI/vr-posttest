@@ -1,392 +1,303 @@
-# Sound Meets Space — v8.x Test Battery
+# Sound Meets Space — VR Pre/Post Test Battery
 
-**Author:** Robert Anthony Olexa (Hakodate KOSEN / iST Cross Lab)
-**Chapter:** Dissertation Ch. 5 — Sound Meets Space
-**Defense:** July 1, 2026 (preliminary May 2026)
-**Status:** v8.0 pretest live; posttest at v8.6 (Probe 3 dropped, image variants enabled)
-**Last update:** 2026-05-04 (v1.8 — Probe 3 dropped, variant ext fix)
+jsPsych implementation of the pre- and post-test instruments for the dissertation experiment **Sound Meets Space: Iconicity and L2 Vocabulary Acquisition in VR**.
 
----
-
-## 1. Reframe summary
-
-v7.x measured vocabulary knowledge (lexical decision, receptive 4AFC, recognition). For Japanese KOSEN students who already know basic kitchen vocabulary, those measures are floor-effect-prone and don't address the dissertation's claim. v8.0 measures **production intelligibility on iconicity-bearing phonemes**, pre→post, across three training conditions. Receptive vocabulary is gone; phoneme-level articulation is the dependent variable.
-
-The reframing also reckoned with **what training actually does**. v7.x design assumed participants passively perceive iconic words; v8.0 reflects that participants actively produce them. Each utterance ("crack the egg," "flip the pancake") is gated by Whisper intelligibility — say it intelligibly, the visual event happens with synchronized SFX. The participant is the agent of every event. This makes training **forced production with multimodal contingent feedback**, much closer to motor-learning paradigms than to receptive vocabulary studies.
-
-The chapter argues a two-step claim:
-1. **Replication:** standard psycholinguistic iconicity effects (high-iconicity words produced more accurately than low-iconicity) appear across all three conditions, validating that VR's third-space (Ch. 3, Olexa & Taquet 2026) doesn't erode learning.
-2. **Amplification:** iconicity gains are steepest in VR > 2D > Text — VR's spatial-acoustic co-location amplifies the iconicity-production loop because SFX, visual event, and articulation share a spatial frame.
-
----
-
-## 2. Primary statistical contrast
-
-```
-DV:        pre→post change in production intelligibility (per phoneme target)
-Predictors:
-  Condition (VR / 2D / Text)        — between subjects
-  Iconicity class (iconic / conv.)  — within subjects, item-level
-  Time (pre / post)                 — within subjects
-  Item role (target / control)      — within subjects
-Random effects: (1 | participant) + (1 | word)
-Covariates: phoneme discrimination, foley iconicity, English years,
-            TOEIC/EIKEN, VR experience
-```
-
-**Predicted three-way interaction:** Condition × Iconicity × Time, with the iconicity slope (post − pre) being VR > 2D > Text. Control items lane (chop, peel, spoon, plate) subtracts pure testing/familiarization gain.
-
-**Sensitivity analysis:** the same model with continuous Winter ratings instead of categorical iconic/conventional. Convergence supports the categorical operationalization.
-
----
-
-## 3. Stimulus design (locked against Winter et al. 2024 + canonical training script)
-
-### 3.1 Production targets (8 trained items)
-
-All 8 are pretested AND posttested for every participant. No split-half — pretest production with no feedback is minimal contamination.
-
-| Word | Class | Rating | Form-selection notes |
-|---|---|---:|---|
-| crack | iconic | 5.40 | Target form: bare. Gerund alternative: cracking. |
-| flip | iconic | 5.70 | Target form: bare. Gerund alternative: flipping. |
-| slice | iconic | 5.27 | Target form: bare. Gerund alternative: slicing. |
-| stir | marginal iconic | 4.30 | Target form: bare. Form-selection probe. |
-| bowl | conventional | 3.00 | — |
-| pan | conventional | 3.45 | — |
-| flour | conventional | 3.00 | — |
-| butter | conventional | 3.50 | — |
-
-**Class means:** iconic (excl. stir) 5.46, conventional 3.24, Δ = 2.22. Difference exceeds the database interquartile range.
-
-### 3.2 Parallel controls (4 untrained items)
-
-| Word | Class | Rating |
-|---|---|---:|
-| chop | iconic control | 5.50 |
-| peel | iconic control | 5.60 |
-| spoon | conventional control | 3.30 |
-| plate | conventional control | 3.00 |
-
-Iconicity gradient parallels targets'. Pre→post change on these estimates pure testing effect.
-
-**Why spoon/plate, not ladle/kettle:** earlier draft used ladle and kettle as conventional controls. Pilot intuition predicted these would produce floor effects (silence) at pretest because they're outside KOSEN second-year vocabulary, making their pre→post change uninformative as a testing-effect baseline. spoon and plate are basic kitchen vocabulary present in the training scene visually but never spoken as utterances, giving us a real production baseline to detect testing/familiarization gain on.
-
-**Note on `peel`:** retained as iconic control with `target_form: 'bare'` even though students likely produce `peeling` more readily than the bare form. This is by design — it gives the form-selection secondary analysis a clean comparator. If trained iconic verbs show gerund-substitution because of training × iconicity, untrained `peel` showing the same pattern would isolate the iconicity-driven component of form-selection from any training-specific contribution.
-
-**Dual role for chop, peel:** these four words also function as **lures in the posttest SFX recognition block** (see §6.3). They've never been heard as SFX during training, making them valid never-trained items for false-alarm measurement. Their existence as untrained iconic words in this study is the principled justification for using them as lures rather than introducing an unrelated lure pool.
-
-### 3.3 Passive/implicit iconic — `sizzle`
-
-**`sizzle` is not in the production block.** Rationale: participants never produce `sizzle` during training. They produce `butter the pan` or `heat the pan`, and `sizzle` is the SFX consequence. Eliciting production of an unproduced word measures baseline articulation with no training comparison possible.
-
-Tested instead in the posttest **multi-probe binding task** as the unique passive-iconic case. Predicted: VR's spatial-acoustic affordance produces stronger SFX-word binding for `sizzle` than 2D > Text, even without articulation.
-
-### 3.4 Why class, not continuous Winter rating
-
-Per-item rating SEs are 1.5–2.5 with n ≈ 10 raters per word. A continuous predictor with that much measurement error would swamp any condition × iconicity interaction. Class-based contrast is more robust; continuous rating is a sensitivity analysis.
-
-Some Winter ratings are intuitively suspect (e.g., `knife` 5.29, `milk` 5.09, `mix` 5.10 in the top decile alongside `sizzle`/`crack`) — likely rater drift. Items in this rating-anomaly territory are excluded from the iconic class and live in the unanalyzed filler role.
-
----
-
-## 4. Form-selection secondary analysis
-
-The marginal-iconic word `stir` (rating 4.30 bare / 4.82 gerund) carries a specific theoretical bet. The gerund form `stirring` is more iconic than the bare imperative because the /-ɪŋ/ ending phonologically lengthens the action, mapping iconically onto the continuous nature of stirring. For Japanese L2 learners (whose L1 mimetic system is rich with durational iconicity, e.g., gitaigo doubling: `guruguru` for stirring/swirling), the gerund form may be preferred over the bare imperative for iconic action verbs as a sound-meaning-driven form-selection error.
-
-All action verbs in v8.0 (crack, flip, slice, stir) carry `target_form: 'bare'` in their trial data. Post-hoc Whisper transcription on isolated-pass audio scores whether the participant produced the bare form, the gerund, or another variant. Form-selection analysis: gerund-substitution rate by iconicity × condition.
-
-**Predicted:** higher gerund-substitution rate for iconic verbs, amplified in VR > 2D > Text. Reported as a secondary finding (exploratory but theoretically grounded).
-
----
-
-## 5. Pretest structure (~13 min)
-
-```
-1.  Asset launch-check (only if missing assets)
-2.  Welcome
-3.  Participant info → stamps counterbalance for analysis
-4.  Mic setup gate
-5.  Phoneme discrimination (12 trials)        — phonological perception covariate
-6.  Bouba/kiki (4 trials)                     — cross-modal iconicity covariate
-7.  Foley iconicity (4 trials)                — auditory iconicity-sensitivity moderator
-8.  Receptive vocabulary breadth (12 trials)  — vocabulary-knowledge covariate
-9.  Production practice (1 trial, park scene)
-10. Production controls (4 items × phrase + isolated × 2 reps each = 32 recordings)
-11. Production targets (8 items × phrase + isolated × 2 reps each = 64 recordings)
-12. Teach-a-friend baseline (60s audio — pre→post comparison)
-13. Save
-```
-
-**v1.6 cuts:** forward digit span and Corsi spatial span removed. They were generic WM covariates not specific to the iconicity hypothesis. Phoneme discrimination + foley + bouba/kiki cover the perceptual sensitivity covariates that ARE specific to the hypothesis.
-
-### 5.1 Two-pass elicitation per production item
-
-**Phrase pass (4s recording):**
-- Object items: "What is this?" → expected "It's a [word]"
-- Action items: "What is happening?" → expected "She is [word]ing"
-- Matches what training does; preserves ecological validity.
-
-**Isolated pass (3s recording):**
-- Same picture: "Say just the word."
-- Forces single-word production. Primary measurement signal because there's no carrier-phrase context for Whisper or naïve listener to compensate with.
-
-Phrase block runs across all items first, then isolated, with a transition screen between. This separates passes so phrase production doesn't immediately prime isolated.
-
-### 5.2 Phoneme discrimination contrasts (12 trials)
-
-10 different-pair trials targeting phonemes in v8.0 stimuli, plus 2 identity-control trials (same audio file played twice; participants who score 0/2 on these are excluded as non-attenders).
-
-| # | Pair | Contrast | Targets |
-|---:|---|---|---|
-| 1 | slice / sris | /sl/–/sɹ/ | slice |
-| 2 | crack / clack | /kr/–/kl/ | crack |
-| 3 | flip / frip | /fl/–/fɹ/ | flip |
-| 4 | sizzle / siddle | medial /z/–/d/ | sizzle |
-| 5 | bowl / vowl | /b/–/v/ | bowl |
-| 6 | pan / pun | /æ/–/ʌ/ | pan |
-| 7 | flour / floor | /aʊə/–/ɔː/ | flour |
-| 8 | butter / batter | /ʌ/–/æ/ | butter |
-| 9 | spoon / soon | /sp/ cluster | spoon (filler) |
-| 10 | stir / star | /ɜːr/–/ɑːr/ | stir |
-| 11 | crack / crack | identity | attention check |
-| 12 | pan / pan | identity | attention check |
-
-Each trial yields per-target perceptual baseline as a moderator for production gain.
-
----
-
-## 6. Posttest structure (~18 min immediate; ~15 min delayed)
-
-```
-1.  Asset launch-check
-2.  Welcome (with framing about repeated vs new tasks)
-3.  Participant confirm (pid + training condition)
-4.  Mic gate
-5.  Mic plugin init
-6.  Production practice
-7.  Production controls — phrase + isolated × 2 reps (32 recordings)
-8.  Production targets — phrase + isolated × 2 reps (64 recordings)
-9.  Binding task — sizzle, crack, bowl × 1 probe (event association only)
-10. Spatial reconstruction — 3×3 grid arrangement (5 items, per-condition GT)
-11. SFX recognition — Y/N + confidence, 5 targets + 4 lures (d-prime)
-12. Foley recognition — 4-AFC identification (5 trained sounds)
-13. Sequencing (drag-to-order)
-14. Teach a friend (60s audio — has parallel pretest baseline)
-15. Likert (7 items)
-16. Exit comments
-17. Save
-```
-
-**v1.6 cuts:** procedural recall (free typing) removed because sequencing covers the same construct cleaner. 12-item recognition+confidence test removed because it sat at the very end when participants are fatigued, correlated highly with production accuracy, and Yes/No confidence ratings produce noisy data.
-
-**v1.8 changes (posttest v8.5 + v8.6):** Variant-extension fix lets the test pick up the existing PNG variants (was probing for `.jpg` variants when files are `.png`). Probe 3 dropped entirely from the binding task — both the spatial-adjacency original and the v8.4 procedural-pairing reframe were derivable from world knowledge or condition-dependent. Spatial DV stays on the 3×3 arrangement task; auditory DV stays on SFX recognition. Saves ~1.5 min.
-
-**v1.7 changes (posttest v8.3 + v8.4):** The multi-probe binding task dropped from 3 probes per word to 2. Probe 2 (SFX recognition) became a **standalone block with lures** to enable d-prime (§6.3). Probe 3 (previously spatial adjacency) was reframed as **procedural pairing** (§6.2) because the adjacency framing had condition-dependent ground truth. Spatial-encoding DV moves entirely to the 3×3 grid arrangement task.
-
-### 6.1 Cuts from v7.4
-
-- **4AFC ingredients/actions block** — pre-taught Group B targets before naming. Cut.
-- **Speeded word-picture match** — pre-taught targets and tested recognition speed (didn't address hypothesis). Cut.
-- **Group A naming as separate block** — merged into single production block.
-- **Naming Stage 3 scene description** — replaced by spatial multi-probe.
-- **Foley split into Group A + B** — merged into single 4-item block.
-- **19-item recognition test** — trimmed to 12, then dropped entirely in v1.6.
-
-### 6.2 Binding task (event association)
-
-For each of 3 words (`sizzle` — passive iconic; `crack` — produced iconic; `bowl` — produced conventional), one probe (v8.6):
-
-| Probe | Question | Why this works across conditions |
-|---|---|---|
-| Event association | "When you said/heard X, what was happening?" 4-AFC with overlap distractors | Event memory is condition-invariant; participants must recall which procedural event was paired with the word. Distractors are plausible scenes from the same training that overlap with the target item's context, so the answer is not derivable from world knowledge alone. |
-
-**Predicted:** primarily a sanity check on training engagement. Effects, if any, are small and roughly uniform across conditions. The spatial-affordance signal lives in the 3×3 grid arrangement task (§6.4), and the auditory-encoding signal in SFX recognition (§6.3).
-
-**v8.6 — Probe 3 dropped.** v8.0 originally had three probes per word; v8.3 dropped Probe 2 (SFX recognition) into a standalone block (§6.3); v8.4 reframed Probe 3 from spatial adjacency to procedural pairing; v8.6 dropped Probe 3 entirely. The reframed procedural-pairing version was condition-invariant on its answer key but the questions were derivable from world knowledge plus option elimination ("butter sizzles on a pan," "eggs go in bowls"). With both reframings unable to make Probe 3 measure something independent of common knowledge, and a session budget already over target, the cleanest fix was to drop it. The single-probe binding task remains a manipulation check on training engagement; spatial and auditory DVs are carried by the arrangement and SFX recognition blocks respectively.
-
-### 6.3 SFX recognition with lures (v8.3 — d-prime)
-
-Standalone Y/N + confidence block. 5 trained targets (crack, flip, slice, stir, sizzle) randomized against 4 untrained iconic-class lures (chop, peel, glug, splash). Each trial: play sound → "Did you hear this during training?" → Yes/No → confidence (1–4).
-
-| Outcome | Cell |
+| | |
 |---|---|
-| Target + said-yes | hit |
-| Target + said-no | miss |
-| Lure + said-yes | false alarm |
-| Lure + said-no | correct rejection |
-
-Per-participant d-prime = z(hit rate) − z(false alarm rate). This separates real SFX-encoding sensitivity from yes-bias.
-
-**v8.3 motivation.** The previous Probe 2 inside the binding task asked "Did you hear this sound during training?" but every SFX it played was a target — correct answer was always Yes. Without lures, hit rate alone cannot be separated from yes-bias. A participant clicking Yes on everything (out of compliance, demand characteristics, or guessing) looked identical to a participant with perfect SFX memory. If VR participants happened to be more compliant (they had a more engaging training), Probe 2 would have shown a "VR advantage" that was actually demand characteristics, not memory. Adding lures and computing d-prime fixes this.
-
-**Lure rationale.** chop and peel are already PRODUCTION_CONTROLS (untrained iconic actions); glug and splash are already iconic foils used in the discontinued recognition+confidence test. All four are kitchen-sound candidates that *could plausibly have been* in a kitchen training but weren't, matching targets on iconicity class and acoustic family.
-
-**Block placement matters.** The SFX recognition block runs **before** the foley 4-AFC identification, not after. Foley re-exposes the participant to every target SFX, which would contaminate Y/N recognition memory if the order were reversed.
-
-### 6.4 Spatial reconstruction — 3×3 grid arrangement
-
-This is now the **sole spatial-encoding DV**. Participants drag 5 trained items (flour, butter, bowl, pan, plate) into the cells of a 3×3 grid where they remember the items being during training.
-
-**Per-condition ground truth** (v8.2). Each training condition has a different on-screen / in-world layout, so the task scores each participant against the layout they actually saw:
-- **Text condition** (containment encoding): two-row layout, ingredients/utensils on top row, containers below
-- **2D condition**: three vertical bands; ingredients top, containers middle row, utility items below
-- **VR condition**: two depth bands (back shelf + front counter), 8-item front row projected to 3 columns with plate elevated above bowl (because plate sits between bowl and pan in 3D and is closer to bowl in the linear sequence)
-
-Default fallback when `?cond=` is missing or unrecognized is the 2D layout. Filter on `data.training_condition !== 'unknown'` in analysis.
-
-Scoring: exact-cell match for primary; row-match-only and column-match-only as secondary (more lenient). Kendall tau on row- and column-ordering as additional partial-match measures.
-
-**Why coarse 3×3 instead of pixel-precise.** Containment encoding (Text) is fundamentally different from Euclidean encoding (2D, VR). Pixel-precise scoring would disadvantage Text participants whose memory is "X was inside the bowl box" rather than "X was at coordinates (200, 350)". The 3×3 grid is coarse enough that all three encoding modes can plausibly map onto it. Pre-v8.2 the task scored against a single ground truth; the per-condition fix removes the bias toward whichever condition's layout the answer key was written for.
+| **Researcher** | Robert Anthony Olexa, Hakodate KOSEN / iST Cross Laboratory |
+| **Supervisor** | Dr. Jeffrey Cross |
+| **Defense** | July 1, 2026 |
+| **Current versions** | pretest v8.3 · posttest v8.7 (May 2026) |
+| **Status** | Pilot complete; data collection in progress |
 
 ---
 
-## 7. Audio measurement pipeline (downstream)
+## Study overview
 
-Audio filename schema:
+Three-condition between-subjects design (VR / 2D / Text) with within-subject pre→post measurement on Japanese KOSEN second-year English learners. Participants train on a kitchen-vocabulary recipe in one of the three modalities, then are measured on production intelligibility, form-selection patterns, and multimodal binding.
+
+**Hypothesis.** VR's spatial-acoustic affordance amplifies iconicity effects in L2 vocabulary acquisition more than 2D, which amplifies more than Text. Iconic words show steeper pre→post intelligibility gains in VR, with the iconicity gradient steepest in the order VR > 2D > Text.
+
+This repository contains only the pretest and posttest jsPsych instruments. The training conditions (Unity VR, 2D picture canvas, Text canvas) are separate codebases.
+
+---
+
+## Word inventory
+
+The same word list is used in pretest and posttest production blocks. All ratings are from Winter et al. (2024), n=14,776.
+
+### Production targets (8) — pre + post + trained
+
+|              | Iconic                             | Conventional                                    |
+|--------------|------------------------------------|-------------------------------------------------|
+| **Word**     | crack 5.40 · flip 5.70 · slice 5.27 | bowl 3.00 · pan 3.45 · flour 3.00 · butter 3.50 |
+| **Marginal** | stir 4.30 (gerund 4.82)             |                                                 |
+
+`stir` is a marginal-iconic case included for the form-selection secondary analysis.
+
+### Parallel controls (4) — pre + post + never trained
+
+|              | Iconic                  | Mid-range (testing/familiarization estimators) |
+|--------------|-------------------------|------------------------------------------------|
+| **Word**     | chop 5.50 · peel 5.60   | spoon 4.30 · plate 4.08                        |
+
+The control set mirrors the iconicity split of the targets so the iconicity × time interaction can be estimated cleanly. Pre→post change on controls estimates testing/familiarization effects. Note: spoon (4.30) and plate (4.08) fall in the mid-range of the Winter scale rather than the low-conventional range (v8.3/v8.7: corrected from earlier mis-read of 3.30/3.00). They function as testing/familiarization estimators; the primary iconicity contrast rests entirely on the trained target set (conventional-noun mean 3.24 vs iconic-target mean 5.46).
+
+### Passive iconic (1) — posttest binding probes only
+
+`sizzle` (5.30). Sizzle is retained as a passive iconic item rather than a production target. Its Winter et al. iconicity rating is high (5.30), but because participants do not produce the word during training — it is the sound-effect consequence of an action ("butter the pan", "heat the pan") rather than an utterance — it is not included in the primary production-intelligibility analysis. Instead, it is analyzed through posttest auditory/event-binding measures.
+
+### SFX recognition lures (4) — posttest only, never trained
+
+`chop · peel · glug · splash` — used as "No"-correct trials in the SFX recognition block to enable d-prime calculation. All iconic-class kitchen-action sounds, plausibly part of *some* kitchen training but not part of *this* training. Chop and peel double as production controls; glug and splash were originally retired recognition foils.
+
+---
+
+## Dependent variables
+
+**Primary — Production intelligibility on iconicity-bearing phonemes.** Measured pre→post on all 8 trained targets and 4 controls. Two-pass elicitation per item (phrase pass: "What is happening?" / "What is this?" with 4-second recording; isolated pass: "Say just the word." with 3-second recording). Each pass × item = 2 reps. Scored post-hoc via Whisper transcription, forced alignment, naïve-rater intelligibility ratings, and acoustic measures.
+
+The primary statistical contrast is **Condition × Iconicity × Time**, with the parallel-control lane providing a within-subject estimate of testing/familiarization effects.
+
+**Secondary — Form-selection (bare vs gerund) on action verbs.** Tests whether learners substitute the gerund form (`stirring`) for the bare imperative (`stir`) more often for iconic verbs and more often in VR than 2D > Text. All action verbs (crack, flip, slice, stir; chop, peel) are coded `target_form: 'bare'` so post-hoc Whisper transcription can score gerund-substitution rate uniformly.
+
+**Tertiary — Multimodal binding measures (posttest).** Three independent measures:
+
+1. **Event association (Probe 1)** — 4-AFC for sizzle, crack, bowl. Distractors are training-content overlapping; cannot be answered from world knowledge alone.
+2. **Spatial reconstruction (3×3 grid arrangement)** — coarse-grained drag-and-drop. Per-condition ground truth (VR/2D/Text scenes have different layouts).
+3. **SFX recognition with lures (d-prime)** — 5 trained targets + 4 untrained lures, Yes/No + confidence. Yields hits and false alarms per participant for d-prime as the auditory-encoding sensitivity measure independent of yes-bias.
+
+---
+
+## Task structure
+
+### Pretest (~13 min)
+
+| # | Task | Items | Purpose |
+|---|------|-------|---------|
+| 1 | Asset launch-check | (conditional) | Abort if files missing |
+| 2 | Welcome | 1 | — |
+| 3 | Participant info | 1 | pid, age, L1, English years, TOEIC/EIKEN, VR experience |
+| 4 | Mic gate + plugin init | 1 | — |
+| 5 | Phoneme discrimination | 12 | Covariate; v8.1 caps replays at 2/sound |
+| 6 | Bouba/kiki | 4 | Covariate: cross-modal iconicity |
+| 7 | Foley iconicity | 4 | Covariate: sound→meaning mapping |
+| 8 | Receptive vocabulary | 12 | Covariate: vocab breadth (v8.1 tightened distractors) |
+| 9 | Production practice | 1 | Park scene |
+| 10 | Production controls | 4 × 2 × 2 | chop, peel, spoon, plate |
+| 11 | Production targets | 8 × 2 × 2 | All 8 trained targets |
+| 12 | Teach-a-friend baseline | 1 (60s) | Pre→post Δ baseline |
+| 13 | Save | 1 | — |
+
+### Posttest (~18 min)
+
+| # | Task | Items | Purpose |
+|---|------|-------|---------|
+| 1 | Asset launch-check | (conditional) | — |
+| 2 | Welcome (with framing) | 1 | Tells participants part 1 is repeated, part 2 is new |
+| 3 | Participant confirm | 1 | pid + training condition |
+| 4 | Mic gate + plugin init | 1 | — |
+| 5 | Production practice | 1 | — |
+| 6 | Production controls | 4 × 2 × 2 | Mirror of pretest |
+| 7 | Production targets | 8 × 2 × 2 | Mirror of pretest |
+| 8 | Multi-probe binding | sizzle, crack, bowl × Probe 1 only | Event-association DV (v8.6: Probes 2/3 dropped) |
+| 9 | 3×3 grid arrangement | 5 items, per-condition ground truth | Spatial-encoding DV |
+| 10 | SFX recognition (d-prime) | 5 targets + 4 lures, Y/N + confidence | Auditory-encoding DV (v8.3: replaces old Probe 2) |
+| 11 | Foley recognition | 5 SFX, 4-AFC | Trained-sound→action verb identification |
+| 12 | Sequencing | 5 recipe steps | Kendall tau scoring |
+| 13 | Teach-a-friend | 1 (60s) | Pairs with pretest baseline |
+| 14 | Likert | 7 items | Self-reported recall / awareness / immersion |
+| 15 | Exit comments | 2 free-text | — |
+| 16 | Save | 1 | — |
+
+Within the post-production sequence, **SFX recognition runs before foley 4-AFC** because foley re-exposes participants to every target SFX, which would contaminate Y/N recognition memory.
+
+---
+
+## Repository layout
 
 ```
-pre_{pid}_{role}_{word}_{pass}_rep{N}.wav
-post_{pid}_{role}_{word}_{pass}_rep{N}.wav
+.
+├── pretest.js                # v8.3
+├── posttest.js               # v8.7
+├── pretest.html              # jsPsych shell
+├── posttest.html             # jsPsych shell
+├── img/
+│   ├── cracking.jpeg, flipping.jpg, slicing.jpg, stirring.jpg     # action targets
+│   ├── bowl.jpg, pan.jpg, flour.jpg, butter.jpg                   # object targets
+│   ├── chopping.jpg, peeling.jpg, spoon.jpg, plate.jpg            # controls
+│   ├── park_scene.jpg                                             # practice
+│   └── {item}_01.png, {item}_02.png                               # variants — PNG by convention
+├── sounds/
+│   ├── slice.mp3, crack.mp3, flip.mp3, sizzle.mp3, ...            # phoneme-discrim words
+│   ├── sris.mp3, clack.mp3, frip.mp3, ...                         # phoneme-discrim contrasts
+│   ├── high_tinkle.mp3, liquid_flow.mp3, egg_crack.mp3            # foley iconicity
+│   ├── sfx_crack_{1,2}.mp3, sfx_flip_{1,2}.mp3, ...               # trained SFX (2 variants)
+│   ├── sfx_slice_1.mp3                                            # trained SFX (single take)
+│   └── sfx_chop_1.mp3, sfx_peel_1.mp3, sfx_glug_1.mp3, sfx_splash_1.mp3   # SFX recognition lures
+└── README.md
 ```
 
-This lets analysts pair pre/post by participant + word + pass for change-score analysis.
+### Image variant convention
 
-Three measurement tracks:
+Variant filenames use `{stem}_01.png` / `{stem}_02.png` regardless of the base image's extension. Hardcoded via `_VARIANT_EXT = 'png'` in both files. If both variants exist, `imagePath()` randomizes per trial and stamps `image_variant: 1` or `2`. If only `_01` exists, that's used. If neither exists, base file with `image_variant: 0`.
 
-1. **Forced alignment + per-segment scoring** (Montreal Forced Aligner). Primary for cluster/duration features. Produces per-phoneme accuracy for each token.
-2. **Naïve L1-English raters → intelligibility Likert** on isolated-pass audio. Primary for "did this sound like the target word?" Most aligned with downstream communicative use.
-3. **Acoustic measures** (VOT for /p t k/, F1/F2 for /æ/ /ʌ/ /ɜː/, sibilant centroid for /s/ /ʃ/ /z/, duration ratios). Diagnostic where specific predictions exist.
+### SFX file convention
 
-The isolated-pass audio is the primary input. Phrase-pass audio supports a secondary analysis on naturalness/lexical-retrieval. Whisper transcripts on isolated audio also drive the form-selection (bare-vs-gerund) analysis.
+`sounds/sfx_{word}_{1|2}.mp3` for two-take words; `sounds/sfx_{word}_1.mp3` for single-take words. Single-take words listed in `SINGLE_TAKE_SFX = {slice, chop, peel, glug, splash}`. `sfxPath()` resolves at trial-construction time and stamps `sfx_variant`.
 
 ---
 
-## 8. Required assets
+## Deployment
 
-### Audio files (sounds/)
+### Dependencies
 
-**Phoneme discrimination — new for v8.0 (11):**
-slice, sris, crack, clack, sizzle, siddle, vowl, pun, floor, spoon, soon
+jsPsych 7.3.4 with: `jspsych-html-button-response`, `jspsych-html-keyboard-response`, `jspsych-survey-text`, `jspsych-survey-likert`, `jspsych-initialize-microphone`, `jspsych-html-audio-response`.
 
-**Phoneme discrimination — carry-over from v7.3 (9):**
-flip, frip, bowl, pan, flour, butter, batter, stir, star
+### Browser requirements
 
-**Foley iconicity — pretest (4):** high_tinkle, liquid_flow, egg_crack, sizzle
+Modern Chrome / Firefox / Safari. **HTTPS required** for microphone access. If embedded in an iframe, parent must include `allow="microphone *"`.
 
-**Foley recognition + binding probes — posttest targets (9 files):**
-- `sfx_crack_1.mp3`, `sfx_crack_2.mp3`
-- `sfx_flip_1.mp3`, `sfx_flip_2.mp3`
-- `sfx_sizzle_1.mp3`, `sfx_sizzle_2.mp3`
-- `sfx_stir_1.mp3`, `sfx_stir_2.mp3`
-- `sfx_slice_1.mp3` (single take, no variant)
+### URL parameters
 
-**SFX recognition lures — new for v8.3 (4 files):**
-- `sfx_chop_1.mp3` (single take)
-- `sfx_peel_1.mp3` (single take)
-- `sfx_glug_1.mp3` (single take)
-- `sfx_splash_1.mp3` (single take)
+- `?cond=VR` / `?cond=2D` / `?cond=Text` — pre-fills training condition (posttest only). Used by arrangement task to select per-condition ground truth.
+- `?post=<URL>` — POST submission endpoint (otherwise data downloads as JSON).
 
-Lures must be sourced from the **same audio library / recording session** as the targets, with matching loudness normalization and similar duration range (~1–3 sec). If lures sound systematically different, participants can recognize "this is from the trained set" on acoustic cues alone, masking yes-bias rather than measuring around it.
+### Entry points
 
-For words with two variants, the test picks `_1` or `_2` randomly per trial and records `sfx_variant` (1 or 2) in trial data. Words in the `SINGLE_TAKE_SFX` set always use `_1`.
-
-### Image files (img/)
-
-**Production targets (8):** cracking, flipping, slicing, stirring, bowl, pan, flour, butter
-
-**Production controls (4):** chopping, peeling, spoon, plate
-
-**Practice:** park_scene
+- **Pretest**: auto-runs on `DOMContentLoaded`
+- **Posttest**: invoke `window.__START_POSTTEST(pid, delayed)` — `delayed` is a boolean
 
 ---
 
-## 9. File layout
+## Data output
 
+JSON file per session:
+- Pretest: `pretest_{pid}_{timestamp}.json`
+- Posttest: `posttest_{pid}_{immediate|delayed}_{timestamp}.json`
+
+Array of trial records. Standard jsPsych fields plus task-specific fields.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `task` | string | Trial category |
+| `phase` | `'pre'` \| `'post'` | Always present on measurement trials |
+| `pid` | string | Set on every trial |
+| `training_condition` | `'VR'` \| `'2D'` \| `'Text'` | Posttest only |
+| `counterbalance_list` | `0` \| `1` | Hashed from pid; informational |
+| `target_word` / `word` | string | Production / SFX / binding trials |
+| `iconic` | bool | |
+| `iconicity_rating` | float | Winter et al. continuous |
+| `iconicity_marginal` | bool | Marks `stir` |
+| `target_form` | `'bare'` | All action verbs |
+| `pass` | `'phrase'` \| `'isolated'` | Production only |
+| `repetition` | int | 1 or 2 per (word, pass) |
+| `item_role` | `'control'` \| `'target'` | Production only |
+| `image_path` | string | Resolved path |
+| `image_variant` | `0` \| `1` \| `2` | 0 = base, 1/2 = variant |
+| `audio_filename` | string | For audio export |
+| `response` | various | Audio blob, text, or button index |
+| `correct` / `is_correct` | bool | Objective tasks |
+| `is_lure` | bool | SFX recognition trials |
+| `sdt_outcome` | string | SFX recognition: `'hit'`, `'miss'`, `'false_alarm'`, `'correct_rejection'` |
+| `playA_count` / `playB_count` | int | Phoneme discrimination replays |
+| `missing_assets` | array | URL list at session start |
+
+### d-prime calculation (SFX recognition)
+
+```r
+library(dplyr)
+sfx_rec <- data %>% filter(task == "sfx_recognition")
+
+per_pp <- sfx_rec %>%
+  group_by(pid, training_condition) %>%
+  summarize(
+    hits   = sum(sdt_outcome == "hit"),
+    misses = sum(sdt_outcome == "miss"),
+    fas    = sum(sdt_outcome == "false_alarm"),
+    crs    = sum(sdt_outcome == "correct_rejection"),
+    hit_rate = (hits + 0.5) / (hits + misses + 1),       # log-linear correction
+    fa_rate  = (fas  + 0.5) / (fas  + crs    + 1),
+    d_prime  = qnorm(hit_rate) - qnorm(fa_rate)
+  )
 ```
-/
-├── pretest.html              # entry point — loads jsPsych + pretest.js
-├── pretest.js                # v8.0
-├── posttest.html             # entry point — loads jsPsych + posttest.js
-├── posttest.js               # v8.6
-├── img/                      # all picture stimuli
-├── sounds/                   # all audio (phoneme + foley + SFX)
-└── README.md                 # this document
+
+### Audio extraction (post-hoc)
+
+```python
+import json, base64, re
+
+with open('pretest_1_2026-05-01...json') as f:
+    data = json.load(f)
+
+for trial in data:
+    if trial.get('task') in ('production_phrase', 'production_isolated'):
+        if trial.get('audio_filename') and isinstance(trial.get('response'), str):
+            b64 = re.sub(r'^data:audio/[^;]+;base64,', '', trial['response'])
+            with open(trial['audio_filename'], 'wb') as out:
+                out.write(base64.b64decode(b64))
 ```
 
 ---
 
-## 10. Counterbalance hash (pretest + posttest synced)
+## Version history
 
-Both pretest and posttest use the same hash function on participant ID:
+### Pretest v8.3 / Posttest v8.7 — Control ratings corrected; WORD_CLASSIFICATION dedup
 
-```js
-function pidToCounterbalance(pid) {
-  const s = String(pid || 'unknown');
-  let hash = 0;
-  for (let i = 0; i < s.length; i++) {
-    hash = ((hash << 5) - hash) + s.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash) % 2;
-}
-```
+`PRODUCTION_CONTROLS` rating correction in both files: spoon 3.30 → 4.30, plate 3.00 → 4.08 (Winter et al. source values). The earlier values were a mis-read of the database. Spoon and plate sit in the mid-range rather than the low-conventional range, so they are correctly described as testing/familiarization-effect estimators rather than low-iconicity comparators. The primary iconicity contrast (trained iconic targets vs conventional targets) is unaffected.
 
-In v8.0, all 8 trained targets are pretested and posttested for everyone — counterbalance is **stamped in trial data but does not gate stimuli**. This is so future analyses (or a v8.1 split-half re-introduction) can use the same field without re-architecting code.
+Pretest v8.3 also removes duplicate `'spoon'` and `'plate'` keys from `WORD_CLASSIFICATION`'s FILLER section; those entries previously overrode the CONVENTIONAL CONTROLS entries with different (and now-correct) ratings in the same object literal. Each word now appears once, in the CONVENTIONAL CONTROLS section, with `role: 'control'` and the correct Winter rating.
 
-**Lock pid format before data collection begins.** Hash distribution depends on pid format; switching from numeric to alphanumeric mid-study would shift counterbalance distribution.
+### Posttest v8.6 — Probe 3 dropped
 
----
+The v8.4 reframe (spatial adjacency → procedural pairing) made the answer key condition-invariant, but procedural-pairing answers were derivable from world knowledge plus option elimination, independent of training memory. Spatial DV moves entirely to the 3×3 grid; auditory DV to SFX recognition; Probe 1 carries event-association. Saves ~1.5 minutes.
 
-## 11. Decisions made and trade-offs accepted
+### Posttest v8.5 / Pretest v8.2 — Image variant extension fix
 
-| Decision | Trade-off accepted |
-|---|---|
-| Class-based iconicity contrast over continuous Winter rating | Lose granularity; gain robustness against per-item rating noise |
-| Drop receptive 4AFC entirely | Lose receptive baseline; gain ~3 min and remove pre-teaching |
-| Drop lexical decision | Lose word-recognition speed covariate; gain ~3 min |
-| No split-half — pretest all 8 targets for everyone | Slight pretest contamination risk, mitigated by parallel controls. Gain 8-vs-8 within-subject coverage and clean change-score analysis |
-| `sizzle` not a production target | Loss of one iconic data point in production. Gain: honest acknowledgment that participants never produce `sizzle` during training. Tested instead via multi-probe binding |
-| Stir as marginal-iconic with form-selection analysis | Adds one item that's analyzed separately. Gain: secondary publishable finding on durational iconicity in L2 |
-| Phrase + isolated two-pass elicitation | +90s per block; solves Whisper-rescue confound for phoneme-level analysis |
-| Per-condition ground truth on 3×3 grid (v8.2) | More code complexity; gain fair scoring across encoding modes. Spatial-encoding DV is now defensible |
-| SFX recognition as standalone block with lures (v8.3) | +1 minute of session time; gain d-prime as the SFX sensitivity measure. Was previously a "Probe 2" inside binding with no false-alarm rate possible — uninterpretable |
-| Probe 3 reframed from spatial adjacency to procedural pairing (v8.4), then dropped (v8.6) | Spatial DV moves to 3×3 grid; auditory DV stays on SFX recognition. Probe 3 was unable to measure binding independent of world knowledge across two reframe attempts. Cleaner to drop than salvage |
-| Pretest 13 min + Posttest 18 min in 1-hour total session | Hard ceiling, drives every cut |
+Hardcoded `_VARIANT_EXT = 'png'` constant in both files. Pre-v8.5/v8.2, variant probes used the base extension (e.g., `cracking.jpeg` → `cracking_01.jpeg`); variants were created as PNG by convention, so every probe 404'd. Side benefit: 24 fewer console 404s at launch.
 
----
+### Posttest v8.4 (superseded by v8.6)
 
-## 12. Reproducibility notes
+Probe 3 reframed from spatial adjacency to procedural pairing. Adjacency had condition-dependent ground truth and systematically biased Text and VR participants downward. Replaced with procedural-pairing 4-AFC; subsequently dropped entirely in v8.6.
 
-- Counterbalance assignment is **deterministic from participant ID** via the hash function above. Re-running with the same pid produces the same stamp.
-- All trial records carry: `pid`, `phase` (pre/post), `training_condition`, `counterbalance_list`, `target_word`, `iconic`, `iconicity_rating`, `iconicity_marginal`, `target_form`, `item_role`, `pass`, `audio_filename` (audio mode) / `response` (text mode).
-- SFX recognition trial records additionally carry: `trained` (boolean), `is_lure`, `sdt_outcome` (hit/miss/false_alarm/correct_rejection), `confidence` (1–4 on the following confidence trial).
-- Binding task records carry `task: 'binding_probe1_event'` only as of v8.6. Older batches may also contain `binding_probe3_adjacency` (pre-v8.4) or `binding_probe3_pairing` (v8.4–v8.5) records — these are dropped from the v8.6 timeline but their data, if collected earlier, is preserved as-is in saved JSON.
-- Audio files use the canonical naming schema in §7 — analysts can pair pre/post tokens without parsing trial logs.
-- The form-selection analysis requires post-hoc Whisper transcription of isolated-pass audio; the test does NOT perform this scoring during the session.
+### Posttest v8.3 — Probe 2 redesigned for d-prime
+
+Previous per-word Probe 2 had `correct_answer: 0` (Yes) on every trial because every SFX presented was a target. Without lures, hit rate could not be separated from yes-bias. Replaced with standalone `buildSFXRecognition` block: 5 targets + 4 untrained lures (chop, peel, glug, splash), Y/N + 4-point confidence, `is_lure` flag, pre-computed `sdt_outcome`. `SINGLE_TAKE_SFX` Set replaces the hardcoded `slice` branch in `sfxPath`. Block placement: SFX recognition runs *before* foley 4-AFC to avoid contamination.
+
+### Posttest v8.2 — Per-condition arrangement ground truth
+
+Pre-v8.2 used a single `ARRANGEMENT_ITEMS` const assumed "approximately consistent across VR/2D/Text scenes." After auditing the actual scenes, layouts differ noticeably. Replaced with `ARRANGEMENT_GROUND_TRUTH_BY_CONDITION { Text, '2D', VR }` plus a `getArrangementItems()` resolver. Default fallback is the 2D layout when condition is `'unknown'`.
+
+### Pretest v8.1 / Posttest v8.1
+
+- **Phoneme discrim 2-play cap (pretest).** Previous unlimited replays let participants ceiling on the perceptual covariate. Per-trial `playA_count` / `playB_count` logged.
+- **Receptive vocab distractor rewrite (pretest).** Distractors share the target's semantic frame so participants can't succeed via category-elimination.
+- **Production image race fix (posttest).** Idempotent `_imgCache` Map ports the v8.0.1 pretest fix. Eliminates "Image missing" placeholder rendering on first trial of each block.
+- **SFX playback hard cap (posttest).** `MAX_SFX_PLAYBACK_MS = 4000` guards against UI freeze on overly long audio files.
+
+### v8.0 — full redesign over v7.x
+
+- Primary DV redefined from vocabulary recall to production intelligibility on iconic phonemes.
+- Two-pass elicitation (phrase + isolated) replaces single-pass naming.
+- **Split-half counterbalance dropped.** Every participant completes pre and post on all 8 targets and 4 controls. Pretest production with no feedback is minimal contamination, and the parallel-control lane gives a cleaner within-subject estimate of testing effects than splitting target coverage.
+- Parallel controls (chop, peel, spoon, plate) added for difference-in-differences identification of training effects.
+- Marginal-iconic case (`stir`) added for form-selection secondary analysis.
+- Multi-probe binding task replaces 4AFC scene description.
+- Receptive 4AFC, speeded match, lexical decision, reverse digit span, ideophone Likert, 19-item recognition test all cut to fit a 15-minute pretest budget.
 
 ---
 
-## 13. Citation
+## Open items
 
-Olexa, R. A. (in preparation). *Sound Meets Space: Iconicity amplification through spatial affordance in immersive VR language learning* [Doctoral dissertation, Institute of Science Tokyo].
-
-Olexa, R. A., & Taquet, D. (2026). Virtual reality study abroad and language contact patterns in Japanese EFL learners. *Discover Education*.
-
-Winter, B., et al. (2024). Iconicity ratings for 14,000+ English words.
+- **Sequencing / arrangement performance watch.** Pid 23 scored Kendall tau = 0 on sequencing and 0/5 exact-match on arrangement. If the next 2–3 participants score similarly, the procedural-memory measures may be too difficult, or the arrangement ground truth may need scene-by-scene re-verification.
+- **Phoneme discrim ceiling watch.** Pid 1 was 12/12 even before the v8.1 play-cap landed. With the cap, watch whether the pattern persists. If cohort-wide ceiling holds, consider tightening to 1 play/sound (one-line `MAX_PLAYS` change).
+- **Lure SFX recording quality.** v8.3 requires `sfx_chop_1.mp3`, `sfx_peel_1.mp3`, `sfx_glug_1.mp3`, `sfx_splash_1.mp3` from the same recording session as the targets, with matching loudness normalization.
+- **Probe 1 ground truth verification.** With Probes 2 and 3 dropped, Probe 1 (event association for sizzle, crack, bowl) is the only remaining binding probe. Worth verifying that the "correct" event for each word is unambiguously the most-strongly-paired event in each of the three training scenes.
 
 ---
 
-*Document version 1.8 (2026-05-04). Update header date and changelog on every substantive revision.*
+## License & citation
 
-## Changelog
+Internal research instrument. Cite as:
 
-- **v1.8 (2026-05-04):** Posttest v8.5 + v8.6. (a) Variant-extension fix: variant-image probing now hardcodes `.png` regardless of base extension, so the existing `_01.png` / `_02.png` files actually get picked up (previously probed `.jpg` and 404'd silently). Eliminates ~24 console 404s on launch. (b) Probe 3 dropped entirely. Both the v8.0 spatial-adjacency framing and the v8.4 procedural-pairing reframe failed validity audits — the former had condition-dependent ground truth, the latter had answers derivable from world knowledge plus option elimination ("eggs go in bowls", "butter sizzles on pans"). Binding task is now event-association (Probe 1) only. Spatial DV is on the arrangement task; auditory DV is on SFX recognition. Saves ~1.5 min of session time.
-- **v1.7 (2026-05-04):** Posttest v8.3 + v8.4 — two probe-validity fixes. (a) Probe 2 in the multi-probe binding task could not separate hits from yes-bias because every trial was a target. Replaced with a standalone SFX recognition block of 5 targets + 4 untrained iconic-class lures (chop, peel, glug, splash, all from existing untrained vocabulary). Y/N + confidence per trial → d-prime as the SFX sensitivity measure. Block runs before foley 4-AFC to avoid re-exposure contamination. (b) Probe 3 was a spatial-adjacency 4-AFC with a single answer key; auditing the three training layouts revealed condition-dependent ground truth that systematically biased Text and VR participants downward. Reframed as procedural-pairing 4-AFC (which item was used together with X in the same recipe step) — invariant across conditions because the recipe procedure is identical regardless of layout. Spatial-encoding DV moves entirely to the 3×3 grid arrangement task (which already has per-condition ground truth from v8.2). Multi-probe binding task drops from 3 probes per word to 2.
-- **v1.6 (2026-04-29):** Lean cut to honor the 1-hour total session budget. Pretest cuts: forward digit span (~2 min), Corsi spatial span (~3 min). Posttest cuts: procedural recall (redundant with sequencing, ~2 min), 12-item recognition+confidence test (high correlation with production accuracy, fatigue effects, ~3 min). Bouba/kiki reduced from 6 trials to canonical 4 trials with shape→word forced 2-AFC framing (matches Köhler 1929 / Ramachandran 2001). Net: pretest ~20 → ~13 min, posttest ~28 → ~17 min, total session 78 → 60 min.
-- **v1.5 (2026-04-29):** Added bouba/kiki + receptive vocab breadth at pretest. Posttest binding probe distractors rewritten with target-word-specific overlap (deduction harder). Probe 3 (3-region location) replaced with adjacency 4-AFC + new 3×3 grid arrangement task. Image variant infrastructure (`{base}_01`/`{base}_02` randomized per trial). Foley recognition options rewritten with overlap distractors.
-- **v1.4 (2026-04-29):** Post-pilot patch — fixed posttest mic init bug, added teach-a-friend baseline to pretest, dropped blind retell, improved posttest welcome screen.
-- **v1.3 (2026-04-29):** Replaced conventional controls ladle/kettle with spoon/plate. Pilot intuition predicted ladle/kettle would produce floor effects (silence) for KOSEN second-year students, making their pre→post change uninformative as a testing-effect baseline. spoon/plate are basic kitchen vocabulary, never spoken in training, giving a real production baseline. peel retained as iconic control despite likely gerund-preference — it now serves as a clean form-selection comparator (untrained iconic verb).
-- **v1.2 (2026-04-29):** Foley recognition expanded from 4 to 5 items (added stir). SFX file schema standardized to `sfx_{word}_{1|2}.mp3` with random variant selection per trial; slice uses single take. `sfx_variant` (1 or 2) stamped in trial data. Fixed pretest foley sizzle path (was pointing at spoken-word file, now points at SFX).
-- **v1.1 (2026-04-29):** Reconciled with canonical training script. Removed `sizzle` from production targets (it's an SFX consequence, not a participant utterance). Added `stir` as marginal-iconic with form-selection secondary analysis. Dropped split-half — pretest all 8 targets. Added multi-probe binding task with 3-region location probe as conservative spatial-affordance test. Deferred drag-and-place spatial reconstruction to v8.1. Posttest fully redesigned: cut 4AFC + speeded match, mic-init hoisted, word lists synced with pretest, two-pass production added.
-- **v1.0 (2026-04-29):** Initial v8.0 documentation with split-half counterbalance, sizzle as production target, drag-and-place spatial reconstruction.
+> Olexa, R. A. (2026). *Sound Meets Space: Iconicity and L2 vocabulary acquisition in VR — pre/post test battery* (pretest v8.3, posttest v8.7) [Software]. Hakodate KOSEN / Institute of Science Tokyo.
