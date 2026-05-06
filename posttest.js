@@ -3,7 +3,71 @@
 // ============================================================================
 // v8.8 PATCH NOTES (over v8.7)
 // ============================================================================
+//// ============================================================================
+// v8.8 OVERVIEW — OSF-ALIGNED DISSERTATION VERSION
+// ============================================================================
 //
+// PRIMARY DV:
+//   Posttest-only receptive vocabulary recognition accuracy
+//   via picture-to-word 4AFC.
+//
+// WHY POSTTEST ONLY:
+//   A receptive pretest using trained target words would partially teach
+//   the word-image mappings before training. Therefore, trained-word
+//   receptive recognition is measured only at posttest.
+//
+// PRIMARY 4AFC TASK:
+//   12 picture-to-word trials:
+//     - 8 trained targets: crack, flip, slice, stir, bowl, pan, flour, butter
+//     - 4 untrained controls: chop, peel, spoon, plate
+//
+// EACH 4AFC TRIAL LOGS:
+//   correct_answer
+//   response_text
+//   foil_type_selected:
+//     - correct
+//     - iconic_pseudo
+//     - trained_foil
+//     - conventional_syn
+//
+// SECONDARY DV:
+//   Spoken production intelligibility, pre/post, pending ASR and/or
+//   blind human scoring.
+//
+// DIAGNOSTIC / SECONDARY TASKS:
+//   - SFX recognition with lures, scored by d-prime
+//   - 3×3 spatial reconstruction
+//   - Event-association binding
+//   - Foley recognition
+//   - Sequencing
+//   - Teach-a-friend
+//
+// NO SPLIT-HALF:
+//   Participants complete the same posttest recognition structure.
+//   Production blocks still collect target/control audio, but production
+//   is secondary/pending.
+//
+// TASK ORDER:
+//   1. Asset check
+//   2. Welcome
+//   3. Participant confirm
+//   4. Mic gate
+//   5. Mic init
+//   6. Production practice
+//   7. Production controls
+//   8. Production targets
+//   9. Receptive 4AFC picture-to-word recognition
+//   10. Binding / event association
+//   11. Arrangement 3×3
+//   12. SFX recognition
+//   13. Foley recognition
+//   14. Sequencing
+//   15. Teach-a-friend
+//   16. Likert
+//   17. Exit
+//   18. Save
+//
+// ============================================================================
 // 1. Arrangement task lazy ground-truth resolution.
 //    Pre-v8.8, buildArrangementTask() called getArrangementItems() at
 //    TIMELINE CONSTRUCTION TIME (inside buildTimeline(), which runs
