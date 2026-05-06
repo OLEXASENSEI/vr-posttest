@@ -1,23 +1,34 @@
-// posttest.js — VR Post-Test Battery (v8.7 — patches over v8.6)
+// posttest.js — VR Post-Test Battery (v8.8 — patches over v8.7)
+//
+// ============================================================================
+// v8.8 PATCH NOTES (over v8.7)
+// ============================================================================
+//
+// 1. Arrangement task lazy ground-truth resolution.
+//    Pre-v8.8, buildArrangementTask() called getArrangementItems() at
+//    TIMELINE CONSTRUCTION TIME (inside buildTimeline(), which runs
+//    immediately when __START_POSTTEST is invoked). At that moment,
+//    assignedTrainingCondition is still 'unknown' — the participant has
+//    not yet confirmed their condition via the participant_confirm form.
+//    getArrangementItems() therefore always fell back to the '2D' default
+//    regardless of actual training condition.
+//
+//    Confirmed by pid 44 (VR participant): the arrangement trial's
+//    ground_truth field in the JSON matched the 2D spec exactly, not VR.
+//    The 2D fallback is 0/5 exact-match for a VR participant by definition.
+//
+//    Fix: convert stimulus from a string literal to a function so it
+//    evaluates ITEMS at trial render time (after participant_confirm).
+//    Store the resolved items in a closure variable so on_load and
+//    on_finish share the same runtime-resolved set.
+//
+//    Note: if ?cond=VR (or 2D/Text) is passed as a URL param, the pre-v8.8
+//    code was also correct — __START_POSTTEST reads q.cond before calling
+//    buildTimeline(). URL param mode is unaffected. The bug only manifests
+//    when condition is entered via the participant_confirm form only.
 //
 // ============================================================================
 // v8.7 PATCH NOTES (over v8.6)
-// ============================================================================
-//
-// 1. PRODUCTION_CONTROLS rating correction: spoon 3.30 → 4.30,
-//    plate 3.00 → 4.08. Both corrected to Winter et al. source values.
-//    The earlier values (3.30/3.00) were a mis-read; the database places
-//    spoon and plate in the mid-range rather than the low-conventional range.
-//    These items therefore function as testing/familiarization-effect
-//    estimators rather than perfectly-matched low-iconicity comparators.
-//    The primary iconicity contrast (trained iconic targets vs conventional
-//    targets) is unaffected — that contrast rests on the target set
-//    (conventional-noun mean 3.24) vs the iconic-target set (mean 5.46).
-//    (Posttest has no WORD_CLASSIFICATION; only PRODUCTION_CONTROLS needed
-//    the fix here.)
-//
-// ============================================================================
-// v8.6 PATCH NOTES (over v8.5)
 // ============================================================================
 //
 // 1. Probe 3 dropped entirely. The v8.4 reframe (spatial adjacency →
@@ -558,26 +569,36 @@
   }
 
   function buildArrangementTask() {
-    const ITEMS = getArrangementItems();
+    // v8.8: ITEMS resolved lazily inside stimulus() so assignedTrainingCondition
+    // is read AFTER participant_confirm, not at timeline-construction time.
     let placedState = {};
+    let runtimeItems = null;  // set by stimulus function, shared by on_load + on_finish
+
     return [{
       type: T('jsPsychHtmlButtonResponse'),
-      stimulus: `<div style="max-width:760px;margin:0 auto;line-height:1.6"><h2 style="text-align:center;">Kitchen Layout / キッチンの配置</h2><p>Drag each item to where you remember it being during training. / トレーニング中に覚えている場所に各アイテムをドラッグしてください。</p></div>
+      stimulus: function() {
+        // Resolve now — assignedTrainingCondition is set by this point.
+        runtimeItems = getArrangementItems();
+        const tokenHtml = runtimeItems.map(it =>
+          `<div class="arr-token" draggable="true" data-id="${it.id}" style="padding:10px 14px;background:#1a237e;color:white;border-radius:6px;cursor:grab;text-align:center;font-weight:600;user-select:none;">${it.label}</div>`
+        ).join('');
+        const cellHtml = [0,1,2].flatMap(r=>[0,1,2].map(c=>
+          `<div class="arr-cell" data-row="${r}" data-col="${c}" style="border:2px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;background:white;"></div>`
+        )).join('');
+        return `<div style="max-width:760px;margin:0 auto;line-height:1.6"><h2 style="text-align:center;">Kitchen Layout / キッチンの配置</h2><p>Drag each item to where you remember it being during training. / トレーニング中に覚えている場所に各アイテムをドラッグしてください。</p></div>
       <div style="display:flex;justify-content:center;gap:40px;align-items:start;margin-top:30px;">
         <div><h4 style="text-align:center;margin:0 0 10px 0;color:#666;">Items / アイテム</h4>
-        <div id="arr-tray" style="display:flex;flex-direction:column;gap:8px;width:120px;padding:10px;border:2px dashed #aaa;border-radius:8px;min-height:280px;">
-          ${ITEMS.map(it => `<div class="arr-token" draggable="true" data-id="${it.id}" style="padding:10px 14px;background:#1a237e;color:white;border-radius:6px;cursor:grab;text-align:center;font-weight:600;user-select:none;">${it.label}</div>`).join('')}
-        </div></div>
+        <div id="arr-tray" style="display:flex;flex-direction:column;gap:8px;width:120px;padding:10px;border:2px dashed #aaa;border-radius:8px;min-height:280px;">${tokenHtml}</div></div>
         <div><h4 style="text-align:center;margin:0 0 10px 0;color:#666;">Kitchen Area / キッチン</h4>
-        <div id="arr-grid" style="display:grid;grid-template-columns:120px 120px 120px;grid-template-rows:90px 90px 90px;gap:6px;background:#f5f5f5;padding:6px;border-radius:8px;">
-          ${[0,1,2].flatMap(r=>[0,1,2].map(c=>`<div class="arr-cell" data-row="${r}" data-col="${c}" style="border:2px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;background:white;"></div>`)).join('')}
-        </div></div>
+        <div id="arr-grid" style="display:grid;grid-template-columns:120px 120px 120px;grid-template-rows:90px 90px 90px;gap:6px;background:#f5f5f5;padding:6px;border-radius:8px;">${cellHtml}</div></div>
       </div>
-      <p id="arr-status" style="text-align:center;margin-top:18px;color:#666;font-size:14px;">Drag all 5 items to continue. / 5つすべてをドラッグしてください。</p>`,
+      <p id="arr-status" style="text-align:center;margin-top:18px;color:#666;font-size:14px;">Drag all 5 items to continue. / 5つすべてをドラッグしてください。</p>`;
+      },
       choices: ['Submit / 送信'],
-      data: { task: 'arrangement_task', ground_truth: ITEMS.map(it=>({id:it.id,row:it.correct_row,col:it.correct_col})), training_condition: assignedTrainingCondition, phase: 'post' },
+      data: { task: 'arrangement_task', training_condition: assignedTrainingCondition, phase: 'post' },
       on_load: function () {
         placedState = {};
+        const ITEMS = runtimeItems;  // guaranteed set by stimulus()
         const submitBtn = [...document.querySelectorAll('.jspsych-html-button-response-button button')][0];
         if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = '0.5'; }
         const statusEl = document.getElementById('arr-status');
@@ -605,6 +626,8 @@
         tray.addEventListener('drop', e => { e.preventDefault(); if (!dragged) return; tray.appendChild(dragged); dragged.style.opacity = '1'; updateState(); });
       },
       on_finish: function (d) {
+        const ITEMS = runtimeItems;
+        d.ground_truth = ITEMS.map(it=>({id:it.id,row:it.correct_row,col:it.correct_col}));
         d.placements = ITEMS.map(it => ({ id: it.id, placed_row: placedState[it.id]?.row ?? null, placed_col: placedState[it.id]?.col ?? null, correct_row: it.correct_row, correct_col: it.correct_col, exact_match: placedState[it.id]?.row === it.correct_row && placedState[it.id]?.col === it.correct_col, row_match: placedState[it.id]?.row === it.correct_row, col_match: placedState[it.id]?.col === it.correct_col }));
         d.exact_match_count = d.placements.filter(p => p.exact_match).length;
         d.row_match_count   = d.placements.filter(p => p.row_match).length;
